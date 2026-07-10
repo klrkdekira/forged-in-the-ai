@@ -129,6 +129,11 @@ def test_create_clock_then_tick_clock():
     assert result.state.log.events[-1].event_type == "clock_ticked"
 
 
+def test_tick_clock_refuses_an_unknown_clock_id():
+    with pytest.raises(EngineError, match="no clock"):
+        _executor().tick_clock(_state(), TickClockArgs(clock_id="nope", amount=1))
+
+
 def test_apply_harm_updates_the_character_and_reports_catastrophe():
     result = _executor().apply_harm(_state(), ApplyHarmArgs(level=4, name="Stabbed in the Heart"))
 
@@ -232,9 +237,10 @@ def test_sheet_operations_are_never_exposed_to_the_llm():
     assert "adjust_coin" not in tool_names
     assert "set_item_carried" not in tool_names
     assert "heal_character" not in tool_names
-    # mark_stress/apply_harm are shared with TOOL_SPECS.
+    # mark_stress/apply_harm/tick_clock are shared with TOOL_SPECS.
     assert SHEET_OPERATIONS["mark_stress"] is MarkStressArgs
     assert SHEET_OPERATIONS["apply_harm"] is ApplyHarmArgs
+    assert SHEET_OPERATIONS["tick_clock"] is TickClockArgs
 
 
 def test_heal_character_heals_one_level_and_logs_it():

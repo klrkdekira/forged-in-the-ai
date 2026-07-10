@@ -7,6 +7,7 @@ import { useSessionSocket } from '@/hooks/use-session-socket'
 import { CharacterSheetPanel } from './character-sheet-panel'
 import { ChatMessageView } from './chat-message-view'
 import { RollNegotiationDialog } from './roll-negotiation-dialog'
+import { TableViewPanel } from './table-view-panel'
 
 export function PlayPage() {
   const {
@@ -20,6 +21,7 @@ export function PlayPage() {
     sendSheetOperation,
   } = useSessionSocket()
   const [draft, setDraft] = useState('')
+  const [sidePanel, setSidePanel] = useState<'sheet' | 'table'>('sheet')
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -77,8 +79,38 @@ export function PlayPage() {
         </div>
 
         {state && (
-          <div className="hidden w-72 shrink-0 lg:block">
-            <CharacterSheetPanel character={state.character} onOperate={sendSheetOperation} />
+          <div className="hidden w-72 shrink-0 flex-col gap-2 lg:flex">
+            <div className="flex gap-1 rounded-lg border border-border/50 bg-background/50 p-1">
+              <Button
+                type="button"
+                size="sm"
+                variant={sidePanel === 'sheet' ? 'default' : 'ghost'}
+                className="flex-1"
+                onClick={() => setSidePanel('sheet')}
+              >
+                Sheet
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={sidePanel === 'table' ? 'default' : 'ghost'}
+                className="flex-1"
+                onClick={() => setSidePanel('table')}
+              >
+                Table
+              </Button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              {sidePanel === 'sheet' ? (
+                <CharacterSheetPanel character={state.character} onOperate={sendSheetOperation} />
+              ) : (
+                <TableViewPanel
+                  clocks={state.clocks}
+                  crew={state.crew}
+                  onOperate={sendSheetOperation}
+                />
+              )}
+            </div>
           </div>
         )}
       </div>

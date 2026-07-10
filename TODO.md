@@ -203,7 +203,24 @@ refer to that document. Each phase should end in something playable/testable.
       the real WS connection with no console errors. Crew-sheet
       interactivity (heat/rep/coin) isn't wired in - left for Table view
       v1, which owns crew claims/clocks already.
-- [ ] Table view v1: active clocks and crew claim map (FR-29)
+- [x] Table view v1: active clocks and crew claim map (FR-29) (`TableViewPanel`,
+      a Sheet/Table tab alongside the character sheet in `/play`'s side
+      panel, same reasoning as FR-28 for not being a separate route).
+      Clocks are clickable tick boxes (shares `TickBoxes` with the sheet
+      panel's stress/XP), reusing `tick_clock` - added to `SHEET_OPERATIONS`
+      alongside `mark_stress`/`apply_harm` since it was already a
+      `TOOL_SPECS` entry the GM agent calls. Fixed a latent gap this
+      exposed: `tick_clock` indexed `state.clocks` directly, so ticking an
+      unknown clock id raised a raw `KeyError` instead of a typed
+      `EngineError` the WS handler's error path catches; now refuses
+      explicitly, matching `set_item_carried`'s pattern. Claims are a
+      plain read-only list for v1 - nothing mutates them at runtime yet
+      (set at crew creation/guided entry), so there's no operation to
+      wire up. The crew's claim map imagery itself (district/score maps)
+      is v2 (TODO.md already scopes that separately, canvas library
+      still to be picked). Verified live: creating a clock via chat then
+      ticking it from the table view round-tripped correctly with no
+      console errors.
 - [ ] Journal view v1: chronological turn log with expandable roll audit
       records (FR-31, FR-32)
 - [x] Dev CLI harness for headless engine sessions (kept from Phases 1–3)

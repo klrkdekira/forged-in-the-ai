@@ -5,35 +5,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import type { CharacterSnapshot, SheetOperation } from '@/hooks/use-session-socket'
 
-function TickBoxes({
-  segments,
-  marked,
-  onSetMarked,
-}: {
-  segments: number
-  marked: number
-  onSetMarked: (marked: number) => void
-}) {
-  return (
-    <div className="flex flex-wrap gap-1">
-      {Array.from({ length: segments }, (_, index) => {
-        const filled = index < marked
-        return (
-          <button
-            key={index}
-            type="button"
-            aria-label={`box ${index + 1}${filled ? ' (marked)' : ''}`}
-            aria-pressed={filled}
-            onClick={() => onSetMarked(index + 1 === marked ? index : index + 1)}
-            className={`size-4 rounded-sm border transition-colors ${
-              filled ? 'border-primary bg-primary' : 'border-input bg-transparent'
-            }`}
-          />
-        )
-      })}
-    </div>
-  )
-}
+import { TickBoxes } from './tick-boxes'
 
 const ATTRIBUTES = ['insight', 'prowess', 'resolve'] as const
 

@@ -38,14 +38,46 @@ export interface CharacterSnapshot {
   [key: string]: unknown
 }
 
+// FR-29: a crew's claim, shown read-only in the table view v1 - claiming
+// territory isn't wired to any engine operation yet (it's set at crew
+// creation/guided entry), so there's nothing for the panel to call.
+export interface ClaimSnapshot {
+  id: string
+  name: string
+  controlled: boolean
+  is_turf: boolean
+}
+
+export interface CrewSnapshot {
+  name: string
+  crew_type: string
+  claims: ClaimSnapshot[]
+  [key: string]: unknown
+}
+
+export interface ClockSnapshot {
+  name: string
+  kind: string
+  segments: number
+  filled: number
+}
+
 export interface GameStateSnapshot {
   character: CharacterSnapshot
-  crew: { name: string; crew_type: string; [key: string]: unknown }
+  crew: CrewSnapshot
+  clocks: Record<string, ClockSnapshot>
   [key: string]: unknown
 }
 
 export interface SheetOperation {
-  name: 'mark_stress' | 'apply_harm' | 'heal_character' | 'mark_xp' | 'adjust_coin' | 'set_item_carried'
+  name:
+    | 'mark_stress'
+    | 'apply_harm'
+    | 'heal_character'
+    | 'mark_xp'
+    | 'adjust_coin'
+    | 'set_item_carried'
+    | 'tick_clock'
   args: Record<string, unknown>
 }
 

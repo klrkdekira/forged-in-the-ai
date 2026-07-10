@@ -186,6 +186,63 @@ def test_session_ws_reports_an_error_for_an_illegal_sheet_operation():
         assert "cannot spend" in error["message"]
 
 
+def test_session_ws_ticks_a_clock_the_gm_created_via_a_sheet_operation():
+    # FR-29: the table view ticks a clock the GM created, no LLM call.
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        calls.append(body)
+        if body.get("stream"):
+            return httpx.Response(
+                200, text='data: {"choices":[{"delta":{"content":"Noted."}}]}\n\ndata: [DONE]\n\n'
+            )
+        if len(calls) == 1:
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [
+                        {
+                            "message": _tool_call_message(
+                                "create_clock",
+                                {
+                                    "clock_id": "alert",
+                                    "name": "Alert",
+                                    "kind": "danger",
+                                    "segments": 4,
+                                },
+                            )
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(
+            200, json={"choices": [{"message": {"role": "assistant", "content": "placeholder"}}]}
+        )
+
+    app.dependency_overrides[get_llm_client] = lambda: _mock_client(handler)
+
+    with TestClient(app) as test_client, test_client.websocket_connect("/ws/session") as ws:
+        ws.receive_json()  # initial state
+        ws.send_json({"type": "player_message", "text": "We case the joint."})
+
+        ws.receive_json()  # tool_call: create_clock
+        ws.receive_json()  # narration_chunk
+        ws.receive_json()  # narration_done
+
+        ws.send_json(
+            {
+                "type": "sheet_operation",
+                "name": "tick_clock",
+                "args": {"clock_id": "alert", "amount": 2},
+            }
+        )
+        state_update = ws.receive_json()
+
+        assert state_update["type"] == "state"
+        assert state_update["state"]["clocks"]["alert"]["filled"] == 2
+
+
 def test_session_ws_closes_when_the_llm_is_not_configured(monkeypatch):
     monkeypatch.setenv("LLM_BASE_URL", "")
     monkeypatch.setenv("LLM_MODEL", "")

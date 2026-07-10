@@ -10,6 +10,7 @@ from engine.character import Action, Attribute, Character
 from engine.clocks import Clock, ClockKind
 from engine.crew import Crew
 from engine.entities import Npc
+from engine.errors import EngineError
 from engine.events import EventLog
 from engine.operations import (
     adjust_coin,
@@ -240,6 +241,8 @@ class ToolExecutor:
         )
 
     def tick_clock(self, state: GameState, args: TickClockArgs) -> ToolCallResult:
+        if args.clock_id not in state.clocks:
+            raise EngineError(f"no clock {args.clock_id!r} in this session")
         clock = state.clocks[args.clock_id].tick(args.amount)
         log = state.log.append(
             "clock", args.clock_id, "clock_ticked", {"amount": args.amount}, self._clock()
@@ -449,13 +452,14 @@ def tool_definitions() -> list[dict]:
     ]
 
 
-# FR-28: engine operations the web sheet panel calls directly - stress,
-# harm, XP, coin, and load ticks. Deliberately separate from TOOL_SPECS:
-# CLAUDE.md's "the engine adjudicates, the model narrates" splits the AI's
-# tool surface from the UI's own engine-operation calls, so none of this
-# is in tool_definitions() for the LLM to invoke on the player's behalf.
-# mark_stress/mark_harm are shared with TOOL_SPECS - the same ToolExecutor
-# method, reachable from either surface.
+# FR-28/FR-29: engine operations the web UI (sheet panel, table view)
+# calls directly - stress, harm, XP, coin, load, and clock ticks.
+# Deliberately separate from TOOL_SPECS: CLAUDE.md's "the engine
+# adjudicates, the model narrates" splits the AI's tool surface from the
+# UI's own engine-operation calls, so none of this is in tool_definitions()
+# for the LLM to invoke on the player's behalf. mark_stress/apply_harm/
+# tick_clock are shared with TOOL_SPECS - the same ToolExecutor method,
+# reachable from either surface.
 SHEET_OPERATIONS: dict[str, type[BaseModel]] = {
     "mark_stress": MarkStressArgs,
     "apply_harm": ApplyHarmArgs,
@@ -463,4 +467,5 @@ SHEET_OPERATIONS: dict[str, type[BaseModel]] = {
     "mark_xp": MarkXpArgs,
     "adjust_coin": AdjustCoinArgs,
     "set_item_carried": SetItemCarriedArgs,
+    "tick_clock": TickClockArgs,
 }
