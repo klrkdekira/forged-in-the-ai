@@ -147,9 +147,12 @@ refer to that document. Each phase should end in something playable/testable.
       an Alembic migration since it's app.db schema, even though it isn't
       a normal SQLAlchemy-mapped table; `make index-srd` builds it from
       the local SRD copy)
-- [ ] Canon injection: structured world-state context assembly under the
+- [x] Canon injection: structured world-state context assembly under the
       explicit per-turn budget sized for the 64k floor; procedures, canon,
       retrieval, and summarised transcript sections (FR-15, NFR-4)
+      (`ai/context.py` assemble_turn_context, budget from ADR-0003;
+      `ai/canon.py` render_canon builds sections from a GameState, reusing
+      Phase 2's markdown renderers)
 - [ ] Session zero flow: lines and veils, tone; X-card command; original
       setting generation interview persisted as campaign canon (FR-17, FR-36)
 - [ ] Controller model: one human seat controls any number of PCs/cohorts;
