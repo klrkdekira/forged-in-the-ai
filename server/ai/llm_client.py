@@ -16,6 +16,14 @@ class ChatResponse(BaseModel):
     tool_calls: list[ToolCall] = []
 
 
+# httpx's default (5s connect/read/write/pool) is fine for the capability
+# probe but far too short for an actual completion: a real model can
+# reasonably take tens of seconds, especially with tool schemas and a
+# long context attached. Discovered live against a real backend - the
+# mocked test suite's instant responses never exercise this.
+DEFAULT_TIMEOUT_SECONDS = 120.0
+
+
 class LLMClient:
     """Any OpenAI-compatible chat-completions endpoint (ADR-0001): Ollama,
     vLLM, and hosted APIs are interchangeable via base_url/model/api_key.
@@ -27,11 +35,12 @@ class LLMClient:
         model: str,
         api_key: str | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
+        timeout: float = DEFAULT_TIMEOUT_SECONDS,
     ) -> None:
         self._model = model
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         self._http = httpx.AsyncClient(
-            base_url=base_url.rstrip("/"), headers=headers, transport=transport
+            base_url=base_url.rstrip("/"), headers=headers, transport=transport, timeout=timeout
         )
 
     async def aclose(self) -> None:

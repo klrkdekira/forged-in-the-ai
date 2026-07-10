@@ -3,7 +3,22 @@ import json
 import httpx2 as httpx
 import pytest
 
-from ai.llm_client import LLMClient
+from ai.llm_client import DEFAULT_TIMEOUT_SECONDS, LLMClient
+
+
+def test_default_timeout_is_generous_enough_for_a_real_completion() -> None:
+    # httpx's own default (5s) is far too short for LLM inference; this
+    # was discovered live against a real backend, not by the mocked tests.
+    client = LLMClient(base_url="http://fake-llm/v1", model="test-model")
+
+    assert client._http.timeout.read == DEFAULT_TIMEOUT_SECONDS
+    assert DEFAULT_TIMEOUT_SECONDS >= 60
+
+
+def test_timeout_is_configurable() -> None:
+    client = LLMClient(base_url="http://fake-llm/v1", model="test-model", timeout=5.0)
+
+    assert client._http.timeout.read == 5.0
 
 
 async def _make_client(handler) -> LLMClient:

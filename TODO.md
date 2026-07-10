@@ -167,11 +167,20 @@ refer to that document. Each phase should end in something playable/testable.
       Controller/solo_controller; ai/tools.py's single-`character` GameState
       is still the MVP simplification - wiring multiple PCs through the
       tool surface is additive follow-up work, not done here)
-- [ ] Session WebSocket channel: server-authoritative state deltas from the
-      event log, single-player first (FR-30)
+- [x] Session WebSocket channel: server-authoritative state deltas from the
+      event log, single-player first (FR-30) (`app/session_ws.py`,
+      `/ws/session`; verified end to end against the user's real vLLM
+      backend, not just mocked)
 - [ ] Web play UI: chat with streaming narration (NFR-3) and a roll
       negotiation dialog; pool/position/effect shown, push/assist/devil's
-      bargain/trade-off offered before rolling (FR-16)
+      bargain/trade-off offered before rolling (FR-16). Chat with real
+      streaming narration is done (`/play`, `ai/agent.py`'s GmAgent) and
+      playtest-verified live. Not done: a pre-roll negotiation dialog -
+      right now the GM agent calls `roll_action` directly, the player
+      never sees/adjusts pool/position/effect or gets offered push/
+      assist/Devil's Bargain/trade-off before the roll happens. Also not
+      done: markdown rendering of narration (the model's `**bold**` etc.
+      shows as raw text).
 - [ ] Interactive sheet panel: stress/harm/XP/load/coin ticks via engine
       operations only (FR-28)
 - [ ] Table view v1: active clocks and crew claim map (FR-29)

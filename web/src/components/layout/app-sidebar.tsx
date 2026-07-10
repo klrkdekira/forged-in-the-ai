@@ -11,7 +11,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar"
-import { ScrollText, Dice5, User, Swords } from "lucide-react"
+import { ScrollText, Dice5, User, Swords, MessageSquare } from "lucide-react"
 
 // Core navigation items
 const items = [
@@ -19,6 +19,11 @@ const items = [
     title: "Campaign",
     url: "/",
     icon: Swords,
+  },
+  {
+    title: "Play",
+    url: "/play",
+    icon: MessageSquare,
   },
   {
     title: "Character Sheet",

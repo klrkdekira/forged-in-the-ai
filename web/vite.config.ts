@@ -21,6 +21,10 @@ export default defineConfig({
     // host) and `docker compose --profile dev up` (container hostname).
     proxy: {
       '/api': process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:8000',
+      '/ws': {
+        target: process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:8000',
+        ws: true,
+      },
     },
   },
   test: {
