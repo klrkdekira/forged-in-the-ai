@@ -50,17 +50,27 @@ refer to that document. Each phase should end in something playable/testable.
 
 ## Phase 1: Rules engine core (no AI)
 
-- [ ] Dice: d6 pools, take-highest, crits, 0d, seeded RNG (FR-2, NFR-1)
-- [ ] Action roll with position/effect matrix and outcome bands (FR-1)
-- [ ] Resistance and armor, stress, trauma, harm levels, healing clock
-      (FR-1, FR-2)
-- [ ] Fortune roll and its uses (quality, magnitude, NPC toughness) (FR-1)
-- [ ] Progress clocks: all SRD flavours, tick-by-consequence (FR-3)
-- [ ] Event log: append-only, entity-tagged structured events, replay to
-      state (FR-19, FR-31, NFR-1)
-- [ ] JSONL export/import round-trip with test; this is the NFR-5 portability
-      contract (ADR-0005)
-- [ ] Engine test suite where each test cites the SRD passage it encodes (NFR-2)
+- [x] Dice: d6 pools, take-highest, crits, 0d, seeded RNG (FR-2, NFR-1)
+      (`engine/dice.py`)
+- [x] Action roll with position/effect matrix and outcome bands (FR-1)
+      (`engine/rolls.py`; position/effect are GM-supplied inputs, a
+      critical bumps effect per the SRD's position tables)
+- [x] Resistance and armor, stress, trauma, harm levels, healing clock
+      (FR-1, FR-2) (`engine/rolls.py` resistance roll; `engine/consequences.py`
+      for stress/trauma/harm/armor tracks)
+- [x] Fortune roll and its uses (quality, magnitude, NPC toughness) (FR-1)
+      (`engine/rolls.py`; the mechanic is trait-agnostic, so quality/
+      magnitude/toughness are just whatever pool size the caller supplies)
+- [x] Progress clocks: all SRD flavours, tick-by-consequence (FR-3)
+      (`engine/clocks.py`; flavours are a `ClockKind` label on one generic
+      tickable Clock, consequence severity maps to the tick amount)
+- [x] Event log: append-only, entity-tagged structured events, replay to
+      state (FR-19, FR-31, NFR-1) (`engine/events.py`; `engine/replay.py`
+      demonstrates replay-to-state for clocks - the concrete entity this
+      phase has; later phases add their own replay functions)
+- [x] JSONL export/import round-trip with test; this is the NFR-5 portability
+      contract (ADR-0005) (`EventLog.to_jsonl`/`from_jsonl`)
+- [x] Engine test suite where each test cites the SRD passage it encodes (NFR-2)
 
 ## Phase 2: Characters, crew, and world state
 
