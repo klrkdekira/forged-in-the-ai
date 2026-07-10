@@ -18,6 +18,6 @@ describe('router', () => {
       </QueryClientProvider>,
     )
 
-    expect(await screen.findByRole('heading', { name: 'Get started' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Forged AI' })).toBeInTheDocument()
   })
 })

@@ -27,7 +27,7 @@ drift-check:
 check: lint test licensing-grep drift-check
 
 build:
-	docker build -t forged-in-the-ai .
+	docker compose build
 
 check-all: check build
 

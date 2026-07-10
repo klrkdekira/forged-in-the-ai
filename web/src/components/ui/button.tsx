@@ -1,10 +1,10 @@
 import * as React from "react"
 import { type VariantProps } from "class-variance-authority"
-import { buttonVariants } from "./button-variants"
 import { Slot } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 
+import { buttonVariants } from "./button-variants"
 
 function Button({
   className,
