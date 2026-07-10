@@ -102,13 +102,16 @@ class HarmTrack(BaseModel):
 
 
 class ArmorTrack(BaseModel):
-    """SRD: "Armor" - mark a box to reduce or avoid a consequence instead of
-    rolling to resist; restored when choosing load for the next score."""
+    """SRD: "Armor" / "Special Armor" - three boxes (standard, heavy,
+    special); mark one to reduce or avoid a consequence instead of rolling
+    to resist. Restored when choosing load for the next score."""
 
     has_armor: bool = False
     has_heavy_armor: bool = False
+    has_special_armor: bool = False
     armor_used: bool = False
     heavy_armor_used: bool = False
+    special_armor_used: bool = False
 
     def use_armor(self) -> "ArmorTrack":
         if not self.has_armor or self.armor_used:
@@ -120,5 +123,12 @@ class ArmorTrack(BaseModel):
             raise ArmorAlreadyUsedError("heavy armor is unavailable or already used")
         return self.model_copy(update={"heavy_armor_used": True})
 
+    def use_special_armor(self) -> "ArmorTrack":
+        if not self.has_special_armor or self.special_armor_used:
+            raise ArmorAlreadyUsedError("special armor is unavailable or already used")
+        return self.model_copy(update={"special_armor_used": True})
+
     def restored(self) -> "ArmorTrack":
-        return self.model_copy(update={"armor_used": False, "heavy_armor_used": False})
+        return self.model_copy(
+            update={"armor_used": False, "heavy_armor_used": False, "special_armor_used": False}
+        )
