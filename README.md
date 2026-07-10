@@ -19,10 +19,15 @@ with server and built web assets, run with `docker compose up`.
 ## Running
 
 ```
-docker compose up                                    # build and run, http://127.0.0.1:8000
-docker compose --profile dev up server-dev web-dev   # hot reload: http://127.0.0.1:5173
-docker compose --profile ollama up                   # adds a local Ollama backend
+docker compose up   # build and run, http://127.0.0.1:8000
+make dev             # local hot reload, no Docker: uvicorn --reload + Vite dev server
 ```
+
+`make dev` is the day-to-day development path (reads `.env` for the LLM
+config if your shell loads it, or export the vars directly). A Docker-based
+`dev` profile with hot reload and an optional local-Ollama profile are
+described in ADR-0004 but not yet built; `compose.yml` currently has one
+plain `app` service.
 
 Copy [.env.example](.env.example) to `.env` to set `LLM_BASE_URL`/`LLM_MODEL`/
 `LLM_API_KEY`. Campaign data lives on the `user-data` volume, so it survives

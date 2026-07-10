@@ -16,9 +16,11 @@ refer to that document. Each phase should end in something playable/testable.
       Makefile targets)
 - [x] Multi-stage `Dockerfile` at root: web build stage, then Python runtime
       stage; FastAPI serves the built SPA from a single image (NFR-7, ADR-0004)
-- [x] `compose.yml` at root: one-command run with user-data volume; `dev`
-      profile with uvicorn --reload and the Vite dev server; optional Ollama
-      profile (NFR-7, ADR-0004)
+- [x] `compose.yml` at root: one-command run with user-data volume (NFR-7,
+      ADR-0004). Hot-reload dev is `make dev` (uvicorn --reload plus the
+      Vite dev server, no Docker) rather than a compose `dev` profile;
+      ADR-0004 describes a Docker-based option too, not yet built. No
+      Ollama profile yet either.
 - [x] Schema contract: generate TS types from server OpenAPI/JSON Schema
       (openapi-typescript plus openapi-fetch client); the drift-check script
       and the image build fail on drift
