@@ -6,21 +6,22 @@ __pycache__/
 # C extensions
 *.so
 
-# Distribution / packaging
+# Distribution / packaging (anchored to root: unanchored `lib/` etc. would
+# also match web/src/lib/, since uv has no build backend that produces these)
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
+/build/
+/develop-eggs/
+/dist/
+/downloads/
+/eggs/
+/.eggs/
+/lib/
+/lib64/
+/parts/
+/sdist/
+/var/
+/wheels/
+/share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
@@ -219,3 +220,11 @@ __marimo__/
 
 # Ignore the SRD
 Blades-in-the-Dark-SRD.md
+
+# Generated OpenAPI export (schema contract: web/src/api/schema.d.ts is the
+# committed artefact; this JSON is the ephemeral intermediate)
+server/openapi.json
+
+# Local dev user-data dir (ADR-0005); Docker uses the user-data volume at
+# /data instead (compose.yml sets DATA_DIR).
+server/data/

@@ -12,6 +12,13 @@ dist
 dist-ssr
 *.local
 
+# drift-check scratch file (scripts/check-drift.mjs)
+src/api/.schema.check.d.ts
+
+# TanStack Router: regenerated from src/routes/ by the Vite plugin (dev/test)
+# and by `tsr generate` (build script), so it never needs to be committed.
+src/routeTree.gen.ts
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

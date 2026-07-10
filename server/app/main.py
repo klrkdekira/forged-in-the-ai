@@ -1,9 +1,22 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 
-app = FastAPI(title="forged-in-the-ai")
+from app.settings import get_settings
+from state.db import app_db_path
+from state.migrations import run_migrations
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    run_migrations(app_db_path(get_settings().data_dir))
+    yield
+
+
+app = FastAPI(title="forged-in-the-ai", lifespan=lifespan)
 
 
 @app.get("/api/health")
@@ -25,7 +38,7 @@ def resolve_static_path(full_path: str, static_dir: Path) -> Path:
 def mount_spa(app: FastAPI, static_dir: Path) -> None:
     """Routed last so it never shadows /api or (later) the WebSocket path."""
 
-    @app.get("/{full_path:path}")
+    @app.get("/{full_path:path}", include_in_schema=False)
     def spa(full_path: str) -> FileResponse:
         return FileResponse(resolve_static_path(full_path, static_dir))
 

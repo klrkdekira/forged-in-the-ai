@@ -16,16 +16,16 @@ refer to that document. Each phase should end in something playable/testable.
       Makefile targets)
 - [x] Multi-stage `Dockerfile` at root: web build stage, then Python runtime
       stage; FastAPI serves the built SPA from a single image (NFR-7, ADR-0004)
-- [ ] `compose.yml` at root: one-command run with user-data volume; `dev`
+- [x] `compose.yml` at root: one-command run with user-data volume; `dev`
       profile with uvicorn --reload and the Vite dev server; optional Ollama
       profile (NFR-7, ADR-0004)
-- [ ] Schema contract: generate TS types from server OpenAPI/JSON Schema
+- [x] Schema contract: generate TS types from server OpenAPI/JSON Schema
       (openapi-typescript plus openapi-fetch client); the drift-check script
       and the image build fail on drift
-- [ ] Server foundations: FastAPI and pydantic-settings; SQLite via
+- [x] Server foundations: FastAPI and pydantic-settings; SQLite via
       SQLAlchemy 2 async and Alembic, WAL mode, on the user-data volume
       (ADR-0005)
-- [ ] Web foundations: TanStack Router (file-based) and Query, React Hook Form
+- [x] Web foundations: TanStack Router (file-based) and Query, React Hook Form
       with Zod resolvers, Tailwind v4 and shadcn/ui init (ADR-0006)
 - [ ] LLM client abstraction: base URL and model config, streaming,
       tool-calling capability probe, structured-output fallback for weak

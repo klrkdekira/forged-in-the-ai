@@ -1,0 +1,26 @@
+# ADR-0004: one command to build and run everything, bound to loopback only
+# (no auth before multiplayer). ADR-0005: SQLite is in-process.
+#
+# Usage:
+#   docker compose up
+
+services:
+  app:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - user-data:/data
+    environment:
+      DATA_DIR: /data
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+
+volumes:
+  user-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${HOST_DATA_DIR:-/absolute/path/to/data}
