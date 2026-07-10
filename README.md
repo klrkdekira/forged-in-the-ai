@@ -1,2 +1,54 @@
 # forged-in-the-ai
-Forged in the Dark AI Referee
+
+An AI referee (GM) for Forged in the Dark tabletop games, starting with
+Blades in the Dark. Play your scoundrel with your existing character sheet;
+the AI runs the fiction, NPCs, and factions while a deterministic rules
+engine rolls the dice and keeps an auditable record of the world state.
+Single-player first, multiplayer later.
+
+**Status: pre-implementation.** Specification and planning only; no code yet.
+
+**Stack** (ADR-0002): Python/FastAPI and Pydantic server, React and TypeScript
+(Vite) web client with interactive sheets and maps, monorepo, LLM via any
+OpenAI-compatible endpoint (ADR-0001). Container-first (ADR-0004): one image
+with server and built web assets, run with `docker compose up`.
+
+## Documents
+
+| Document | Purpose |
+|---|---|
+| [SPECIFICATION.md](SPECIFICATION.md) | Scope, requirements, architecture principles, open decisions |
+| [TODO.md](TODO.md) | Phased implementation plan |
+| [NOTICE.md](NOTICE.md) | SRD attribution and content policy (what may never be committed) |
+
+## The SRD
+
+The Blades in the Dark System Reference Document (CC-BY 3.0, One Seven
+Design) is not committed to this repository. Development expects a local copy
+at the repo root as `Blades-in-the-Dark-SRD.md` (gitignored). Obtain it via
+<https://bladesinthedark.com/downloads>, which links the SRD source files; a
+fetch script (TODO Phase 0) will automate this for dev and CI. Only data
+derived from the SRD ships in `packs/`, with attribution per NOTICE.md.
+
+## Core design ideas
+
+- **The engine adjudicates, the model narrates.** The LLM never rolls or
+  fabricates mechanical outcomes; it drives a rules engine through tools.
+- **Content as data.** Playbooks, crews, and settings load from content packs.
+  The repo ships only SRD mechanics and original example content; core-book
+  material stays with people who own the book.
+- **Event-sourced campaigns.** An append-only log makes every session
+  replayable, auditable, and resumable.
+- **Bring your own model.** Any OpenAI-compatible endpoint (Ollama, vLLM,
+  hosted) works; configure a base URL and model name.
+- **Bring your own book.** Upload rulebooks you own and they are parsed into
+  private local modules; nothing derived from them ever leaves your machine.
+
+## License
+
+Original software in this repository: [BSD 2-Clause](LICENSE).
+
+This work is based on Blades in the Dark (found at
+<http://www.bladesinthedark.com/>), product of One Seven Design, developed and
+authored by John Harper, and licensed for our use under the Creative Commons
+Attribution 3.0 Unported license. See [NOTICE.md](NOTICE.md).
