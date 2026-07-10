@@ -55,3 +55,17 @@ per ADR-0004.
 - LLM access only through the client abstraction (ADR-0001): base URL and
   model from settings, never hardcoded; streaming; tool-calling with a
   structured-output fallback (NFR-6).
+- OOP for code that shares context across several functions (a parser
+  holding parsed state and exposing multiple extraction methods, and
+  similar); plain functions for atomic, stateless logic. Do not force a
+  class onto a single self-contained helper.
+- Never suppress a lint finding (`# noqa` and equivalents) to make it go
+  away; fix the structural cause. If a rule is genuinely wrong for the
+  situation, narrow the lint config and say so, rather than silencing it
+  inline.
+- Standalone CLI tooling (multi-command scripts, not one-off shell
+  snippets) lives under `server/cli/`: a root command group plus one
+  module per subcommand, built with Click and run via `uv run python -m
+  cli <command>` (see the Makefile), not `scripts/*.sh` plus `sys.path`
+  hacks. (Not named `cmd/`: that shadows the stdlib `cmd` module used by
+  `pdb`, since server/ root is already on `sys.path`.)

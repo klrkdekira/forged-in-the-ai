@@ -38,10 +38,11 @@ container replacement.
 
 The Blades in the Dark System Reference Document (CC-BY 3.0, One Seven
 Design) is not committed to this repository. Development expects a local copy
-at the repo root as `Blades-in-the-Dark-SRD.md` (gitignored). Obtain it via
-<https://bladesinthedark.com/downloads>, which links the SRD source files; a
-fetch script (TODO Phase 0) will automate this for dev and CI. Only data
-derived from the SRD ships in `packs/`, with attribution per NOTICE.md.
+at the repo root as `Blades-in-the-Dark-SRD.md` (gitignored). Run
+`make fetch-srd` to download it (source: the SRD content repo linked from
+<https://bladesinthedark.com/downloads>). Only data derived from the SRD
+ships in `packs/`, with attribution per NOTICE.md; `make extract-srd`
+regenerates `packs/srd_base.json` from the local copy.
 
 ## Core design ideas
 

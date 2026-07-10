@@ -27,14 +27,17 @@ refer to that document. Each phase should end in something playable/testable.
       (ADR-0005)
 - [x] Web foundations: TanStack Router (file-based) and Query, React Hook Form
       with Zod resolvers, Tailwind v4 and shadcn/ui init (ADR-0006)
-- [ ] LLM client abstraction: base URL and model config, streaming,
+- [x] LLM client abstraction: base URL and model config, streaming,
       tool-calling capability probe, structured-output fallback for weak
       tool-callers (NFR-6)
-- [ ] SRD fetch script: download the SRD from its official source to the
+- [x] SRD fetch script: download the SRD from its official source to the
       repo root (gitignored), for dev setup; document in README (C1)
 - [ ] Extract a machine-usable rules reference from the SRD: section index
       plus the key tables (position/effect, heat, entanglements, magnitude,
-      downtime activities) as structured data (D3 groundwork)
+      downtime activities) as structured data (D3 groundwork). Position/
+      effect, heat, and entanglement tables plus special abilities are done
+      (`packs/srd_base.json`, `make extract-srd`); magnitude and downtime
+      activity tables and a section index are still outstanding.
 - [ ] Define content-pack format and licensing firewall (C3/C4): schema and
       loader contract, documented "what may never be committed" policy
 - [ ] CONTRIBUTING.md note on the content policy; verify NOTICE.md attribution
