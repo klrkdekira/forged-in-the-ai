@@ -33,6 +33,7 @@ container replacement.
 | [SPECIFICATION.md](SPECIFICATION.md) | Scope, requirements, architecture principles, open decisions |
 | [TODO.md](TODO.md) | Phased implementation plan |
 | [NOTICE.md](NOTICE.md) | SRD attribution and content policy (what may never be committed) |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute; content policy for PRs |
 
 ## The SRD
 

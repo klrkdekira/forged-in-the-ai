@@ -38,10 +38,14 @@ refer to that document. Each phase should end in something playable/testable.
       effect, heat, and entanglement tables plus special abilities are done
       (`packs/srd_base.json`, `make extract-srd`); magnitude and downtime
       activity tables and a section index are still outstanding.
-- [ ] Define content-pack format and licensing firewall (C3/C4): schema and
+- [x] Define content-pack format and licensing firewall (C3/C4): schema and
       loader contract, documented "what may never be committed" policy
-- [ ] CONTRIBUTING.md note on the content policy; verify NOTICE.md attribution
-      appears in any UI credits path (C1)
+      (`ContentPack` in `server/engine/packs.py`; `load_pack`/`load_packs_dir`
+      in `server/engine/pack_loader.py`, which also refuses forbidden content
+      at runtime; documented in `packs/README.md`)
+- [x] CONTRIBUTING.md note on the content policy. UI credits path (C1) is
+      deferred: no distributed UI exists yet to carry NOTICE.md attribution
+      (Phase 4 web play UI); re-check this once one does
 
 ## Phase 1: Rules engine core (no AI)
 
