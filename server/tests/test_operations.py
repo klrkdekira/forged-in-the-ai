@@ -8,6 +8,7 @@ from engine.operations import (
     InvalidTraumaConditionError,
     add_heat,
     develop_crew,
+    flashback,
     heal_character,
     mark_harm,
     mark_stress,
@@ -42,6 +43,14 @@ def test_mark_stress_reports_when_trauma_triggers():
 def test_mark_trauma_rejects_an_unknown_condition():
     with pytest.raises(InvalidTraumaConditionError):
         mark_trauma(_character(), "brave")
+
+
+def test_flashback_spends_the_gm_set_stress_cost():
+    # SRD: "Flashbacks" - "The GM sets a stress cost when you activate a
+    # flashback action."
+    result = flashback(_character(), 2)
+
+    assert result.character.stress.marked == 2
 
 
 def test_mark_trauma_records_a_known_condition():

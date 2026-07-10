@@ -101,14 +101,30 @@ refer to that document. Each phase should end in something playable/testable.
 
 ## Phase 3: Score & campaign loop (still no AI)
 
-- [ ] Engagement roll and score phase state machine (FR-4)
-- [ ] Flashbacks with stress costs (FR-4)
-- [ ] Payoff, heat, wanted level, entanglement tables (FR-4)
-- [ ] Downtime activities: recover, reduce heat, long-term project, acquire
+- [x] Engagement roll and score phase state machine (FR-4) (`engine/score.py`
+      engagement_roll; `engine/session.py` Session/CampaignPhase, the
+      free_play -> score -> downtime -> free_play cycle)
+- [x] Flashbacks with stress costs (FR-4) (`engine/operations.py` flashback,
+      a thin documented wrapper over mark_stress; the coin/rep downtime
+      variant spends those directly, no separate operation needed)
+- [x] Payoff, heat, wanted level, entanglement tables (FR-4) (`engine/score.py`
+      payoff_rep, entanglement_roll; heat/wanted level from Phase 2's
+      `engine/crew_mechanics.py` HeatTrack)
+- [x] Downtime activities: recover, reduce heat, long-term project, acquire
       asset, train, indulge vice with overindulgence (FR-1, FR-4)
-- [ ] XP triggers and advancement, character and crew (FR-5)
-- [ ] Faction clocks and NPC downtime progression (FR-14 engine side)
-- [ ] Scriptable "headless session" test: run a full score loop from a fixture
+      (`engine/downtime.py` acquire_asset_roll/indulge_vice_roll;
+      `engine/score.py` downtime_ticks shared by recover/reduce-heat/
+      long-term-project; train is XpTrack.mark from Phase 2)
+- [x] XP triggers and advancement, character and crew (FR-5)
+      (`engine/advancement.py`; trigger *detection* from play is Phase 4/AI
+      judgement, this is the advance mechanic itself plus the desperate-roll
+      xp rule)
+- [x] Faction clocks and NPC downtime progression (FR-14 engine side)
+      (ordinary `Clock`s referenced by `Faction.clock_ids`, ticked and
+      replayed like any other clock; see test_faction_clocks.py)
+- [x] Scriptable "headless session" test: run a full score loop from a fixture
+      (test_headless_session.py: plan/engagement/action/consequence/payoff/
+      heat/entanglement/downtime, logged and replayed deterministically)
 
 ## Phase 4: AI referee MVP (single player, web client)
 

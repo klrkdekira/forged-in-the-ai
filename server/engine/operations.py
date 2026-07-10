@@ -48,6 +48,14 @@ def heal_character(character: Character) -> Character:
     return character.model_copy(update={"harm": character.harm.heal_one_level()})
 
 
+def flashback(character: Character, stress_cost: int) -> CharacterMutation:
+    """SRD: "Flashbacks" - the GM sets a stress cost (0, 1, 2, or more)
+    for a flashback action; paying it is the same operation as any other
+    stress mark. A downtime-flavoured flashback pays 1 coin or 1 rep
+    instead - spend those directly, there's no separate operation for it."""
+    return mark_stress(character, stress_cost)
+
+
 class CrewMutation(BaseModel):
     crew: Crew
     wanted_level_increased: bool = False
