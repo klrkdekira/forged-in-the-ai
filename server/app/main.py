@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 
+from app.session_ws import router as session_ws_router
 from app.settings import get_settings
 from state.db import app_db_path
 from state.migrations import run_migrations
@@ -17,6 +18,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="forged-in-the-ai", lifespan=lifespan)
+app.include_router(session_ws_router)
 
 
 @app.get("/api/health")
