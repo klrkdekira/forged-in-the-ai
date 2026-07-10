@@ -142,8 +142,11 @@ refer to that document. Each phase should end in something playable/testable.
       they compress (FR-13, ADR-0003, NFR-2) (`ai/procedures.py`; citations
       are checked against the committed SRD section index in tests, so
       drift is caught, not just asserted)
-- [ ] SRD retrieval index: SQLite FTS5 (BM25) over SRD chunks (FR-13,
-      ADR-0003, ADR-0005)
+- [x] SRD retrieval index: SQLite FTS5 (BM25) over SRD chunks (FR-13,
+      ADR-0003, ADR-0005) (`state/srd_index.py`; the FTS5 virtual table is
+      an Alembic migration since it's app.db schema, even though it isn't
+      a normal SQLAlchemy-mapped table; `make index-srd` builds it from
+      the local SRD copy)
 - [ ] Canon injection: structured world-state context assembly under the
       explicit per-turn budget sized for the 64k floor; procedures, canon,
       retrieval, and summarised transcript sections (FR-15, NFR-4)

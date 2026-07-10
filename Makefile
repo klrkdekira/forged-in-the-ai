@@ -1,4 +1,4 @@
-.PHONY: lint test licensing-grep generate drift-check check check-all build dev fetch-srd extract-srd build-example-pack guided-entry
+.PHONY: lint test licensing-grep generate drift-check check check-all build dev fetch-srd extract-srd build-example-pack guided-entry index-srd
 
 # Single entry point for the whole repo (CLAUDE.md); no hosted CI, so this
 # is what the owner runs by hand and what any future CI would call.
@@ -31,6 +31,10 @@ build-example-pack:
 # your own copy of the book (FR-8, D6, C6).
 guided-entry:
 	cd server && uv run python -m cli guided-entry
+
+# (Re)builds the SRD retrieval index (FTS5, app.db) from the local SRD copy.
+index-srd:
+	cd server && uv run python -m cli index-srd
 
 # Regenerates web/src/api/schema.d.ts from the server's OpenAPI spec; run
 # after changing server routes/models and commit the result.
