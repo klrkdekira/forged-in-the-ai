@@ -128,11 +128,20 @@ refer to that document. Each phase should end in something playable/testable.
 
 ## Phase 4: AI referee MVP (single player, web client)
 
-- [ ] GM agent system prompt from SRD GM guidance: goals, actions, principles (FR-11)
-- [ ] Tool surface for the agent: rolls, clocks, harm, entities,
-      relationships, phase transitions (FR-12, FR-33)
-- [ ] Distilled GM procedure docs (always in-prompt), citing the SRD sections
-      they compress (FR-13, ADR-0003, NFR-2)
+- [x] GM agent system prompt from SRD GM guidance: goals, actions, principles
+      (FR-11) (`ai/system_prompt.py`; the SRD has no "Running the Game"
+      chapter of its own to draw from, C3a - the role framing compresses
+      the actual sections it does have, "The Game Master"/"Judgment calls")
+- [x] Tool surface for the agent: rolls, clocks, harm, entities,
+      relationships, phase transitions (FR-12, FR-33) (`ai/tools.py`
+      ToolExecutor: roll_action/fortune/resistance, create/tick_clock,
+      apply_harm, mark_stress, transition_phase, create_npc,
+      update_faction_status - a representative set, not the final
+      exhaustive surface)
+- [x] Distilled GM procedure docs (always in-prompt), citing the SRD sections
+      they compress (FR-13, ADR-0003, NFR-2) (`ai/procedures.py`; citations
+      are checked against the committed SRD section index in tests, so
+      drift is caught, not just asserted)
 - [ ] SRD retrieval index: SQLite FTS5 (BM25) over SRD chunks (FR-13,
       ADR-0003, ADR-0005)
 - [ ] Canon injection: structured world-state context assembly under the
