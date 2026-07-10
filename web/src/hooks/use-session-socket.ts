@@ -6,10 +6,47 @@ export type ChatMessage =
   | { kind: 'tool'; name: string; result: unknown }
   | { kind: 'error'; message: string }
 
+export interface XpTrackSnapshot {
+  marked: number
+  segments: number
+}
+
+export interface HarmEntrySnapshot {
+  level: number
+  name: string
+}
+
+export interface CharacterItemSnapshot {
+  item_id: string
+  carried: boolean
+}
+
+// FR-28: the character-sheet fields the interactive panel renders. Not
+// generated from the server's OpenAPI spec - GameState/Character are only
+// ever exchanged over the WS channel, which has no OpenAPI representation
+// (ADR-0002's generated-types contract covers REST endpoints).
+export interface CharacterSnapshot {
+  name: string
+  playbook: string
+  stress: { marked: number }
+  harm: { entries: HarmEntrySnapshot[] }
+  coin: number
+  load: number
+  items: CharacterItemSnapshot[]
+  playbook_xp: XpTrackSnapshot
+  attribute_xp: Record<'insight' | 'prowess' | 'resolve', XpTrackSnapshot>
+  [key: string]: unknown
+}
+
 export interface GameStateSnapshot {
-  character: { name: string; playbook: string; [key: string]: unknown }
+  character: CharacterSnapshot
   crew: { name: string; crew_type: string; [key: string]: unknown }
   [key: string]: unknown
+}
+
+export interface SheetOperation {
+  name: 'mark_stress' | 'apply_harm' | 'heal_character' | 'mark_xp' | 'adjust_coin' | 'set_item_carried'
+  args: Record<string, unknown>
 }
 
 // FR-16: the GM-proposed roll (Action Roll steps 1-4) the player negotiates
@@ -103,5 +140,18 @@ export function useSessionSocket() {
     socketRef.current?.send(JSON.stringify({ type: 'roll_decision', decision }))
   }, [])
 
-  return { connected, busy, messages, state, pendingRoll, sendMessage, sendRollDecision }
+  const sendSheetOperation = useCallback((operation: SheetOperation) => {
+    socketRef.current?.send(JSON.stringify({ type: 'sheet_operation', ...operation }))
+  }, [])
+
+  return {
+    connected,
+    busy,
+    messages,
+    state,
+    pendingRoll,
+    sendMessage,
+    sendRollDecision,
+    sendSheetOperation,
+  }
 }

@@ -57,7 +57,7 @@ class XpTrack(BaseModel):
         return self.marked >= self.segments
 
     def mark(self, amount: int = 1) -> "XpTrack":
-        return self.model_copy(update={"marked": min(self.segments, self.marked + amount)})
+        return self.model_copy(update={"marked": max(0, min(self.segments, self.marked + amount))})
 
     def advanced(self) -> "XpTrack":
         return self.model_copy(update={"marked": 0})

@@ -11,7 +11,15 @@ from engine.clocks import Clock, ClockKind
 from engine.crew import Crew
 from engine.entities import Npc
 from engine.events import EventLog
-from engine.operations import mark_harm, mark_stress
+from engine.operations import (
+    adjust_coin,
+    heal_character,
+    mark_attribute_xp,
+    mark_harm,
+    mark_playbook_xp,
+    mark_stress,
+    set_item_carried,
+)
 from engine.relationships import FactionStatus
 from engine.rolls import Effect, Position, action_roll, fortune_roll, resistance_roll
 from engine.session import CampaignPhase, Session
@@ -125,6 +133,25 @@ class AddCanonFactArgs(BaseModel):
 
 class InvokeXCardArgs(BaseModel):
     note: str | None = Field(None, description="Optional context for the campaign log")
+
+
+class HealCharacterArgs(BaseModel):
+    """SRD: "Recover" - no fields; healing one level of harm needs no
+    further input from whoever clicks it."""
+
+
+class MarkXpArgs(BaseModel):
+    track: Literal["playbook", "insight", "prowess", "resolve"]
+    amount: int = Field(..., description="Positive to mark, negative to clear")
+
+
+class AdjustCoinArgs(BaseModel):
+    amount: int = Field(..., description="Positive to gain, negative to spend")
+
+
+class SetItemCarriedArgs(BaseModel):
+    item_id: str
+    carried: bool
 
 
 class ToolExecutor:
@@ -248,6 +275,66 @@ class ToolExecutor:
         state = state.model_copy(update={"character": mutation.character, "log": log})
         return ToolCallResult(state=state, result={"triggered_trauma": mutation.triggered_trauma})
 
+    def heal_character(self, state: GameState, args: HealCharacterArgs) -> ToolCallResult:
+        """SRD: "Recover". Part of `SHEET_OPERATIONS` (FR-28), not
+        `TOOL_SPECS`: the player heals directly, the GM/model doesn't call
+        this on their behalf."""
+        character = heal_character(state.character)
+        log = state.log.append("character", state.character.name, "harm_healed", {}, self._clock())
+        return ToolCallResult(
+            state=state.model_copy(update={"character": character, "log": log}), result={}
+        )
+
+    def mark_xp(self, state: GameState, args: MarkXpArgs) -> ToolCallResult:
+        """SRD: "PC Advancement". `SHEET_OPERATIONS` only (FR-28) - marking
+        xp is the player's own bookkeeping, not a GM/model tool call."""
+        if args.track == "playbook":
+            character = mark_playbook_xp(state.character, args.amount)
+        else:
+            character = mark_attribute_xp(state.character, Attribute(args.track), args.amount)
+        log = state.log.append(
+            "character",
+            state.character.name,
+            "xp_marked",
+            {"track": args.track, "amount": args.amount},
+            self._clock(),
+        )
+        return ToolCallResult(
+            state=state.model_copy(update={"character": character, "log": log}),
+            result={"track": args.track},
+        )
+
+    def adjust_coin(self, state: GameState, args: AdjustCoinArgs) -> ToolCallResult:
+        """SRD: "Coin and Stash". `SHEET_OPERATIONS` only (FR-28)."""
+        character = adjust_coin(state.character, args.amount)
+        log = state.log.append(
+            "character",
+            state.character.name,
+            "coin_adjusted",
+            {"amount": args.amount},
+            self._clock(),
+        )
+        return ToolCallResult(
+            state=state.model_copy(update={"character": character, "log": log}),
+            result={"coin": character.coin},
+        )
+
+    def set_item_carried(self, state: GameState, args: SetItemCarriedArgs) -> ToolCallResult:
+        """SRD: "Loadout". `SHEET_OPERATIONS` only (FR-28) - toggling
+        carried items is the player choosing their loadout, not a GM call."""
+        character = set_item_carried(state.character, args.item_id, args.carried)
+        log = state.log.append(
+            "character",
+            state.character.name,
+            "item_carried_set",
+            {"item_id": args.item_id, "carried": args.carried},
+            self._clock(),
+        )
+        return ToolCallResult(
+            state=state.model_copy(update={"character": character, "log": log}),
+            result={"load": character.load},
+        )
+
     def transition_phase(self, state: GameState, args: TransitionPhaseArgs) -> ToolCallResult:
         """SRD: "The Game Structure"."""
         session = state.session.transition_to(args.phase)
@@ -360,3 +447,20 @@ def tool_definitions() -> list[dict]:
         }
         for name, (args_model, description) in TOOL_SPECS.items()
     ]
+
+
+# FR-28: engine operations the web sheet panel calls directly - stress,
+# harm, XP, coin, and load ticks. Deliberately separate from TOOL_SPECS:
+# CLAUDE.md's "the engine adjudicates, the model narrates" splits the AI's
+# tool surface from the UI's own engine-operation calls, so none of this
+# is in tool_definitions() for the LLM to invoke on the player's behalf.
+# mark_stress/mark_harm are shared with TOOL_SPECS - the same ToolExecutor
+# method, reachable from either surface.
+SHEET_OPERATIONS: dict[str, type[BaseModel]] = {
+    "mark_stress": MarkStressArgs,
+    "apply_harm": ApplyHarmArgs,
+    "heal_character": HealCharacterArgs,
+    "mark_xp": MarkXpArgs,
+    "adjust_coin": AdjustCoinArgs,
+    "set_item_carried": SetItemCarriedArgs,
+}

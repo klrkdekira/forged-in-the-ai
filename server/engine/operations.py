@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from engine.character import Character
+from engine.character import Attribute, Character
 from engine.consequences import TRAUMA_CONDITIONS
 from engine.crew import Crew
 from engine.crew_mechanics import Hold
@@ -54,6 +54,43 @@ def flashback(character: Character, stress_cost: int) -> CharacterMutation:
     stress mark. A downtime-flavoured flashback pays 1 coin or 1 rep
     instead - spend those directly, there's no separate operation for it."""
     return mark_stress(character, stress_cost)
+
+
+def mark_playbook_xp(character: Character, amount: int) -> Character:
+    """SRD: "PC Advancement" - marking the playbook xp track (FR-28's
+    clickable sheet boxes); `XpTrack.mark` clamps to [0, segments]."""
+    return character.model_copy(update={"playbook_xp": character.playbook_xp.mark(amount)})
+
+
+def mark_attribute_xp(character: Character, attribute: Attribute, amount: int) -> Character:
+    """SRD: "PC Advancement" - marking one of the three attribute xp tracks."""
+    tracks = {**character.attribute_xp, attribute: character.attribute_xp[attribute].mark(amount)}
+    return character.model_copy(update={"attribute_xp": tracks})
+
+
+def adjust_coin(character: Character, amount: int) -> Character:
+    """SRD: "Coin and Stash" - spend (negative) or gain (positive) coin;
+    refuses rather than letting a character spend coin they don't have."""
+    new_coin = character.coin + amount
+    if new_coin < 0:
+        raise EngineError(
+            f"character {character.name!r} has {character.coin} coin, cannot spend {-amount}"
+        )
+    return character.model_copy(update={"coin": new_coin})
+
+
+def set_item_carried(character: Character, item_id: str, carried: bool) -> Character:
+    """SRD: "Loadout" - checking an item's box selects it for the current
+    load; load is the count of currently carried items. Refuses an
+    unknown item id rather than silently ignoring it."""
+    if not any(item.item_id == item_id for item in character.items):
+        raise EngineError(f"character {character.name!r} has no item {item_id!r}")
+    items = [
+        item.model_copy(update={"carried": carried}) if item.item_id == item_id else item
+        for item in character.items
+    ]
+    load = sum(1 for item in items if item.carried)
+    return character.model_copy(update={"items": items, "load": load})
 
 
 class CrewMutation(BaseModel):

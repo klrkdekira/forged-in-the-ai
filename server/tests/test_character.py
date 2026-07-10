@@ -1,4 +1,24 @@
-from engine.character import Action, Attribute, Character, attribute_rating, render_markdown
+from engine.character import (
+    Action,
+    Attribute,
+    Character,
+    XpTrack,
+    attribute_rating,
+    render_markdown,
+)
+
+
+def test_xp_track_mark_clamps_to_segments():
+    # SRD: "Advancement" - xp boxes don't overflow their track.
+    track = XpTrack(marked=7, segments=8)
+
+    assert track.mark(3).marked == 8
+
+
+def test_xp_track_mark_floors_at_zero():
+    track = XpTrack(marked=1, segments=8)
+
+    assert track.mark(-5).marked == 0
 
 
 def test_attribute_rating_counts_actions_with_at_least_one_dot():

@@ -4,12 +4,21 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useSessionSocket } from '@/hooks/use-session-socket'
 
+import { CharacterSheetPanel } from './character-sheet-panel'
 import { ChatMessageView } from './chat-message-view'
 import { RollNegotiationDialog } from './roll-negotiation-dialog'
 
 export function PlayPage() {
-  const { connected, busy, messages, state, pendingRoll, sendMessage, sendRollDecision } =
-    useSessionSocket()
+  const {
+    connected,
+    busy,
+    messages,
+    state,
+    pendingRoll,
+    sendMessage,
+    sendRollDecision,
+    sendSheetOperation,
+  } = useSessionSocket()
   const [draft, setDraft] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -45,24 +54,34 @@ export function PlayPage() {
         </span>
       </div>
 
-      <div className="flex-1 overflow-auto rounded-lg border border-border/50 bg-background/50 p-4 flex flex-col gap-3">
-        {messages.map((message, index) => (
-          <ChatMessageView key={index} message={message} />
-        ))}
-        <div ref={bottomRef} />
-      </div>
+      <div className="flex flex-1 gap-4 overflow-hidden">
+        <div className="flex flex-1 flex-col gap-4 overflow-hidden">
+          <div className="flex-1 overflow-auto rounded-lg border border-border/50 bg-background/50 p-4 flex flex-col gap-3">
+            {messages.map((message, index) => (
+              <ChatMessageView key={index} message={message} />
+            ))}
+            <div ref={bottomRef} />
+          </div>
 
-      <form onSubmit={handleSubmit} className="flex gap-2">
-        <Input
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          placeholder="What do you do?"
-          disabled={!connected || busy}
-        />
-        <Button type="submit" disabled={!connected || busy || !draft.trim()}>
-          Send
-        </Button>
-      </form>
+          <form onSubmit={handleSubmit} className="flex gap-2">
+            <Input
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder="What do you do?"
+              disabled={!connected || busy}
+            />
+            <Button type="submit" disabled={!connected || busy || !draft.trim()}>
+              Send
+            </Button>
+          </form>
+        </div>
+
+        {state && (
+          <div className="hidden w-72 shrink-0 lg:block">
+            <CharacterSheetPanel character={state.character} onOperate={sendSheetOperation} />
+          </div>
+        )}
+      </div>
 
       {pendingRoll && <RollNegotiationDialog proposal={pendingRoll} onDecide={sendRollDecision} />}
     </div>

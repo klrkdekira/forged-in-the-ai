@@ -1,18 +1,22 @@
 import pytest
 
-from engine.character import Character
+from engine.character import Attribute, Character, CharacterItem, XpTrack
 from engine.crew import Crew
 from engine.crew_mechanics import Hold, RepTrack
 from engine.errors import EngineError
 from engine.operations import (
     InvalidTraumaConditionError,
     add_heat,
+    adjust_coin,
     develop_crew,
     flashback,
     heal_character,
+    mark_attribute_xp,
     mark_harm,
+    mark_playbook_xp,
     mark_stress,
     mark_trauma,
+    set_item_carried,
 )
 
 
@@ -118,3 +122,75 @@ def test_develop_crew_refuses_without_enough_coin():
 
     with pytest.raises(EngineError):
         develop_crew(crew)
+
+
+def test_mark_playbook_xp_clamps_to_the_track_segments():
+    # SRD: "PC Advancement" - marking xp boxes (FR-28 sheet interaction).
+    character = _character(playbook_xp=XpTrack(marked=7, segments=8))
+
+    marked = mark_playbook_xp(character, 3)
+
+    assert marked.playbook_xp.marked == 8
+
+
+def test_mark_playbook_xp_floors_at_zero():
+    character = _character(playbook_xp=XpTrack(marked=1, segments=8))
+
+    cleared = mark_playbook_xp(character, -3)
+
+    assert cleared.playbook_xp.marked == 0
+
+
+def test_mark_attribute_xp_only_touches_the_named_attribute():
+    character = _character()
+
+    marked = mark_attribute_xp(character, Attribute.PROWESS, 2)
+
+    assert marked.attribute_xp[Attribute.PROWESS].marked == 2
+    assert marked.attribute_xp[Attribute.INSIGHT].marked == 0
+
+
+def test_adjust_coin_gains_and_spends():
+    # SRD: "Coin and Stash".
+    character = _character(coin=2)
+
+    gained = adjust_coin(character, 2)
+    spent = adjust_coin(gained, -3)
+
+    assert gained.coin == 4
+    assert spent.coin == 1
+
+
+def test_adjust_coin_refuses_to_go_negative():
+    character = _character(coin=1)
+
+    with pytest.raises(EngineError):
+        adjust_coin(character, -2)
+
+
+def test_set_item_carried_toggles_and_recomputes_load():
+    # SRD: "Loadout" - "checking the box for the item you want to use...
+    # your load also determines your movement speed".
+    character = _character(
+        items=[
+            CharacterItem(item_id="lockpicks"),
+            CharacterItem(item_id="pistol"),
+        ]
+    )
+
+    with_lockpicks = set_item_carried(character, "lockpicks", True)
+    assert with_lockpicks.load == 1
+    assert next(i for i in with_lockpicks.items if i.item_id == "lockpicks").carried
+
+    with_both = set_item_carried(with_lockpicks, "pistol", True)
+    assert with_both.load == 2
+
+    dropped = set_item_carried(with_both, "lockpicks", False)
+    assert dropped.load == 1
+
+
+def test_set_item_carried_refuses_an_unknown_item():
+    character = _character()
+
+    with pytest.raises(EngineError):
+        set_item_carried(character, "not-an-item", True)

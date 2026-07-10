@@ -2,13 +2,15 @@ import random
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, WebSocketException, status
+from pydantic import ValidationError
 
 from ai.agent import GmAgent
 from ai.llm_client import LLMClient
-from ai.tools import GameState, ToolExecutor
+from ai.tools import SHEET_OPERATIONS, GameState, ToolExecutor
 from app.settings import Settings, get_settings
 from engine.character import Character
 from engine.crew import Crew
+from engine.errors import EngineError
 from engine.session import Session
 
 router = APIRouter()
@@ -39,6 +41,31 @@ def _new_game_state() -> GameState:
     )
 
 
+async def _apply_sheet_operation(
+    websocket: WebSocket, executor: ToolExecutor, state: GameState, message: dict
+) -> GameState:
+    """FR-28: the sheet panel's own engine-operation calls - stress, harm,
+    XP, coin, and load ticks - bypass the GM agent entirely (CLAUDE.md:
+    "the UI acts through engine-operation endpoints"). Replies with a
+    `state` message (the same one used for the initial snapshot) rather
+    than a `tool_call`, since there's no LLM turn around this."""
+    name = message.get("name")
+    args_model = SHEET_OPERATIONS.get(name)
+    if args_model is None:
+        await websocket.send_json({"type": "error", "message": f"unknown sheet operation {name!r}"})
+        return state
+
+    try:
+        args = args_model.model_validate(message.get("args", {}))
+        result = getattr(executor, name)(state, args)
+    except (ValidationError, EngineError) as error:
+        await websocket.send_json({"type": "error", "message": str(error)})
+        return state
+
+    await websocket.send_json({"type": "state", "state": result.state.model_dump(mode="json")})
+    return result.state
+
+
 @router.websocket("/ws/session")
 async def session_ws(websocket: WebSocket, client: LLMClient = Depends(get_llm_client)) -> None:
     """FR-30: server-authoritative state deltas from the event log,
@@ -53,6 +80,9 @@ async def session_ws(websocket: WebSocket, client: LLMClient = Depends(get_llm_c
         await websocket.send_json({"type": "state", "state": state.model_dump(mode="json")})
         while True:
             message = await websocket.receive_json()
+            if message.get("type") == "sheet_operation":
+                state = await _apply_sheet_operation(websocket, executor, state, message)
+                continue
             if message.get("type") != "player_message":
                 continue
 

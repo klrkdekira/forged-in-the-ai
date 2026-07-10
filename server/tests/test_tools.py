@@ -4,16 +4,21 @@ from datetime import UTC, datetime
 import pytest
 
 from ai.tools import (
+    SHEET_OPERATIONS,
     AddCanonFactArgs,
+    AdjustCoinArgs,
     ApplyHarmArgs,
     CreateClockArgs,
     CreateNpcArgs,
     GameState,
+    HealCharacterArgs,
     InvokeXCardArgs,
     MarkStressArgs,
+    MarkXpArgs,
     RollActionArgs,
     RollFortuneArgs,
     RollResistanceArgs,
+    SetItemCarriedArgs,
     TickClockArgs,
     ToolExecutor,
     TransitionPhaseArgs,
@@ -21,18 +26,20 @@ from ai.tools import (
     tool_definitions,
 )
 from engine.campaign import CampaignCanon
-from engine.character import Action, Attribute, Character
+from engine.character import Action, Attribute, Character, CharacterItem
 from engine.clocks import ClockKind
 from engine.crew import Crew
+from engine.errors import EngineError
 from engine.rolls import Effect, Position
 from engine.session import CampaignPhase, Session
 
 AT = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def _state() -> GameState:
+def _state(character: Character | None = None) -> GameState:
     return GameState(
-        character=Character(
+        character=character
+        or Character(
             name="Test",
             playbook="Test Playbook",
             action_ratings={Action.PROWL: 2},
@@ -213,3 +220,71 @@ def test_tool_calls_are_deterministic_for_the_same_seed():
     second = _executor(seed=9).roll_action(_state(), args)
 
     assert first.result == second.result
+
+
+def test_sheet_operations_are_never_exposed_to_the_llm():
+    # FR-28/FR-16: the sheet panel's own engine-operation surface is
+    # distinct from the LLM's tool surface (CLAUDE.md: "the engine
+    # adjudicates, the model narrates").
+    tool_names = {d["function"]["name"] for d in tool_definitions()}
+
+    assert "mark_xp" not in tool_names
+    assert "adjust_coin" not in tool_names
+    assert "set_item_carried" not in tool_names
+    assert "heal_character" not in tool_names
+    # mark_stress/apply_harm are shared with TOOL_SPECS.
+    assert SHEET_OPERATIONS["mark_stress"] is MarkStressArgs
+    assert SHEET_OPERATIONS["apply_harm"] is ApplyHarmArgs
+
+
+def test_heal_character_heals_one_level_and_logs_it():
+    # SRD: "Recover" - every harm entry is reduced by one level.
+    character = Character(
+        name="Test",
+        playbook="Test Playbook",
+        harm={"entries": [{"level": 2, "name": "Twisted Ankle"}]},
+    )
+    result = _executor().heal_character(_state(character), HealCharacterArgs())
+
+    assert result.state.log.events[-1].event_type == "harm_healed"
+    assert result.state.character.harm.entries[0].level == 1
+
+
+def test_mark_xp_marks_the_playbook_track():
+    result = _executor().mark_xp(_state(), MarkXpArgs(track="playbook", amount=2))
+
+    assert result.state.character.playbook_xp.marked == 2
+    assert result.state.log.events[-1].event_type == "xp_marked"
+
+
+def test_mark_xp_marks_an_attribute_track():
+    result = _executor().mark_xp(_state(), MarkXpArgs(track="prowess", amount=1))
+
+    assert result.state.character.attribute_xp[Attribute.PROWESS].marked == 1
+
+
+def test_adjust_coin_updates_the_character_and_logs_it():
+    character = Character(name="Test", playbook="Test Playbook", coin=2)
+
+    result = _executor().adjust_coin(_state(character), AdjustCoinArgs(amount=-2))
+
+    assert result.result["coin"] == 0
+    assert result.state.log.events[-1].event_type == "coin_adjusted"
+
+
+def test_adjust_coin_refuses_to_go_negative():
+    with pytest.raises(EngineError, match="cannot spend"):
+        _executor().adjust_coin(_state(), AdjustCoinArgs(amount=-1))
+
+
+def test_set_item_carried_toggles_and_recomputes_load():
+    character = Character(
+        name="Test", playbook="Test Playbook", items=[CharacterItem(item_id="lockpicks")]
+    )
+
+    result = _executor().set_item_carried(
+        _state(character), SetItemCarriedArgs(item_id="lockpicks", carried=True)
+    )
+
+    assert result.result["load"] == 1
+    assert result.state.log.events[-1].event_type == "item_carried_set"

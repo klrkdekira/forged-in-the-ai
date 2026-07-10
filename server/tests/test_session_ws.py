@@ -154,6 +154,38 @@ def test_session_ws_pauses_for_a_roll_decision_then_resolves_it():
         assert tool_event["result"]["effect"] == 3  # standard, pushed +1
 
 
+def test_session_ws_applies_a_sheet_operation_without_the_llm():
+    # FR-28: the sheet panel calls engine operations directly - no chat
+    # turn, no LLM call at all.
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("the LLM should never be called for a sheet operation")
+
+    app.dependency_overrides[get_llm_client] = lambda: _mock_client(handler)
+
+    with TestClient(app) as test_client, test_client.websocket_connect("/ws/session") as ws:
+        ws.receive_json()  # initial state
+        ws.send_json({"type": "sheet_operation", "name": "mark_stress", "args": {"amount": 3}})
+
+        state_update = ws.receive_json()
+        assert state_update["type"] == "state"
+        assert state_update["state"]["character"]["stress"]["marked"] == 3
+
+
+def test_session_ws_reports_an_error_for_an_illegal_sheet_operation():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("the LLM should never be called for a sheet operation")
+
+    app.dependency_overrides[get_llm_client] = lambda: _mock_client(handler)
+
+    with TestClient(app) as test_client, test_client.websocket_connect("/ws/session") as ws:
+        ws.receive_json()  # initial state
+        ws.send_json({"type": "sheet_operation", "name": "adjust_coin", "args": {"amount": -1}})
+
+        error = ws.receive_json()
+        assert error["type"] == "error"
+        assert "cannot spend" in error["message"]
+
+
 def test_session_ws_closes_when_the_llm_is_not_configured(monkeypatch):
     monkeypatch.setenv("LLM_BASE_URL", "")
     monkeypatch.setenv("LLM_MODEL", "")

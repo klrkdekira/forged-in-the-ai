@@ -187,8 +187,22 @@ refer to that document. Each phase should end in something playable/testable.
       effect). Assistance is not wired in: the tool surface's GameState is
       still single-PC (FR-25's MVP simplification), so there's no second
       character to take the stress and grant it.
-- [ ] Interactive sheet panel: stress/harm/XP/load/coin ticks via engine
-      operations only (FR-28)
+- [x] Interactive sheet panel: stress/harm/XP/load/coin ticks via engine
+      operations only (FR-28) (`CharacterSheetPanel`, shown as a side panel
+      inside `/play` rather than a separate route - the GameState it
+      reflects only exists for the active WS connection's lifetime, no
+      persisted/addressable session to share across pages yet, Phase 5's
+      job; `/sheet` now links there instead of a placeholder). Adds
+      `mark_xp`/`adjust_coin`/`set_item_carried`/`heal_character` engine
+      operations (`engine/operations.py`) plus a `SHEET_OPERATIONS`
+      registry in `ai/tools.py`, deliberately separate from `TOOL_SPECS`:
+      the UI calls these directly over a new `sheet_operation` WS message
+      (`app/session_ws.py`), bypassing the GM agent/LLM entirely per
+      CLAUDE.md's "the UI acts through engine-operation endpoints".
+      Verified live: stress/harm/coin/XP clicks all round-tripped through
+      the real WS connection with no console errors. Crew-sheet
+      interactivity (heat/rep/coin) isn't wired in - left for Table view
+      v1, which owns crew claims/clocks already.
 - [ ] Table view v1: active clocks and crew claim map (FR-29)
 - [ ] Journal view v1: chronological turn log with expandable roll audit
       records (FR-31, FR-32)
