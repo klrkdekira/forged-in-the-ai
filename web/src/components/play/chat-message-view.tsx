@@ -1,3 +1,5 @@
+import Markdown from 'react-markdown'
+
 import type { useSessionSocket } from '@/hooks/use-session-socket'
 
 export function ChatMessageView({
@@ -14,8 +16,8 @@ export function ChatMessageView({
   }
   if (message.kind === 'narration') {
     return (
-      <div className="self-start max-w-[80%] rounded-lg bg-accent/40 px-3 py-2 text-sm whitespace-pre-wrap">
-        {message.text}
+      <div className="self-start max-w-[80%] rounded-lg bg-accent/40 px-3 py-2 text-sm [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-5 [&_ol]:pl-5 [&_strong]:font-semibold [&_em]:italic">
+        <Markdown>{message.text}</Markdown>
         {!message.done && <span className="animate-pulse">▍</span>}
       </div>
     )

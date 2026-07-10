@@ -175,12 +175,12 @@ refer to that document. Each phase should end in something playable/testable.
       negotiation dialog; pool/position/effect shown, push/assist/devil's
       bargain/trade-off offered before rolling (FR-16). Chat with real
       streaming narration is done (`/play`, `ai/agent.py`'s GmAgent) and
-      playtest-verified live. Not done: a pre-roll negotiation dialog -
-      right now the GM agent calls `roll_action` directly, the player
-      never sees/adjusts pool/position/effect or gets offered push/
-      assist/Devil's Bargain/trade-off before the roll happens. Also not
-      done: markdown rendering of narration (the model's `**bold**` etc.
-      shows as raw text).
+      playtest-verified live, with markdown rendering of narration
+      (`react-markdown` in `chat-message-view.tsx`). Not done: a pre-roll
+      negotiation dialog - right now the GM agent calls `roll_action`
+      directly, the player never sees/adjusts pool/position/effect or gets
+      offered push/assist/Devil's Bargain/trade-off before the roll
+      happens.
 - [ ] Interactive sheet panel: stress/harm/XP/load/coin ticks via engine
       operations only (FR-28)
 - [ ] Table view v1: active clocks and crew claim map (FR-29)
