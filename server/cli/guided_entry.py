@@ -1,11 +1,12 @@
+from pathlib import Path
+
 import click
 
-from cli.paths import PACK_PATH, REPO_ROOT
-from engine.character import Action, Character
+from app.settings import get_settings
+from cli.paths import PACK_PATH
+from engine.character import Action, Character, CharacterItem
 from engine.errors import EngineError
 from engine.pack_loader import load_pack
-
-DEFAULT_OUTPUT_DIR = REPO_ROOT / "server" / "data" / "characters"
 
 # SRD: "Assign four action dots" - 3 dots come pre-placed on a real
 # playbook (which we don't have; it's the book owner's own), so this flow
@@ -64,7 +65,7 @@ def _prompt_vice(vice_ids: list[str]) -> str:
     "--output-dir",
     type=click.Path(),
     default=None,
-    help="Where to save the character (default: server/data/characters, gitignored).",
+    help="Where to save the character (default: DATA_DIR/characters; see ADR-0004/0005).",
 )
 def guided_entry(output_dir: str | None) -> None:
     """FR-8/D6: build a private playbook assembly for an owner of the book.
@@ -109,6 +110,20 @@ def guided_entry(output_dir: str | None) -> None:
         click.prompt("Vice purveyor (name and location)", default="", show_default=False) or None
     )
 
+    # SRD: "Loadout" - you have access to all items on your sheet, but
+    # don't pick specific ones until a score, so this just records the
+    # names (from the owner's own playbook), not a load selection.
+    items_input = click.prompt(
+        "Items your character has access to (comma-separated, from your own book)",
+        default="",
+        show_default=False,
+    )
+    items = [
+        CharacterItem(item_id=item_name.strip())
+        for item_name in items_input.split(",")
+        if item_name.strip()
+    ]
+
     character = Character(
         name=name,
         alias=alias,
@@ -125,9 +140,10 @@ def guided_entry(output_dir: str | None) -> None:
         vice=vice,
         vice_detail=vice_detail,
         vice_purveyor=vice_purveyor,
+        items=items,
     )
 
-    out_dir = REPO_ROOT / output_dir if output_dir else DEFAULT_OUTPUT_DIR
+    out_dir = Path(output_dir) if output_dir else get_settings().data_dir / "characters"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{name.lower().replace(' ', '_')}.json"
     out_path.write_text(character.model_dump_json(indent=2), encoding="utf-8")

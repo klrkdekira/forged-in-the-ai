@@ -33,6 +33,7 @@ _HAPPY_PATH_INPUT = "\n".join(
         "faith",  # vice
         "A forgotten god of the tides",  # vice detail
         "The Tideworn Shrine",  # vice purveyor
+        "Traveler's Cloak, Worn Map",  # items
         "",
     ]
 )
@@ -52,6 +53,7 @@ def test_guided_entry_saves_a_completed_character(tmp_path: Path):
     assert saved["vice"] == "faith"
     assert saved["friend"] == "Old Rowan"
     assert sum(saved["action_ratings"].values()) == 7
+    assert [item["item_id"] for item in saved["items"]] == ["Traveler's Cloak", "Worn Map"]
 
 
 def test_guided_entry_rejects_dots_that_do_not_total_seven(tmp_path: Path):

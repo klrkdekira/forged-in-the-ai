@@ -8,9 +8,12 @@ class AppBase(DeclarativeBase):
     """Metadata for app.db (ADR-0005): capability cache, and later settings,
     SRD/FTS retrieval index, and installed content-pack state.
 
-    Campaign files (campaign-<id>.db) have no models yet (Phase 1's event
-    log is the first); give them their own base and Alembic lineage under
-    state/ once they do, rather than sharing this one.
+    Campaign files (campaign-<id>.db) have no models yet. Phase 1 built the
+    event log itself as a pure engine construct (engine.events.EventLog,
+    JSONL import/export) rather than a DB model, per "engine before
+    interface"; SQLite-backed persistence of it is Phase 5 ("Campaign
+    save/load from event log and snapshots"). Give campaign files their own
+    base and Alembic lineage under state/ then, rather than sharing this one.
     """
 
 
