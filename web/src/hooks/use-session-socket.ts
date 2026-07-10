@@ -62,10 +62,23 @@ export interface ClockSnapshot {
   filled: number
 }
 
+// FR-31/FR-32: one entity-tagged event from the append-only log - the
+// journal view's entire data source, already broadcast in every `state`
+// message (FR-19: the journal is fully reconstructible from the event log).
+export interface JournalEntry {
+  sequence: number
+  entity_type: string
+  entity_id: string
+  event_type: string
+  payload: Record<string, unknown>
+  occurred_at: string
+}
+
 export interface GameStateSnapshot {
   character: CharacterSnapshot
   crew: CrewSnapshot
   clocks: Record<string, ClockSnapshot>
+  log: { events: JournalEntry[] }
   [key: string]: unknown
 }
 

@@ -6,6 +6,7 @@ import { useSessionSocket } from '@/hooks/use-session-socket'
 
 import { CharacterSheetPanel } from './character-sheet-panel'
 import { ChatMessageView } from './chat-message-view'
+import { JournalPanel } from './journal-panel'
 import { RollNegotiationDialog } from './roll-negotiation-dialog'
 import { TableViewPanel } from './table-view-panel'
 
@@ -21,7 +22,7 @@ export function PlayPage() {
     sendSheetOperation,
   } = useSessionSocket()
   const [draft, setDraft] = useState('')
-  const [sidePanel, setSidePanel] = useState<'sheet' | 'table'>('sheet')
+  const [sidePanel, setSidePanel] = useState<'sheet' | 'table' | 'journal'>('sheet')
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -99,17 +100,28 @@ export function PlayPage() {
               >
                 Table
               </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={sidePanel === 'journal' ? 'default' : 'ghost'}
+                className="flex-1"
+                onClick={() => setSidePanel('journal')}
+              >
+                Journal
+              </Button>
             </div>
             <div className="flex-1 overflow-hidden">
-              {sidePanel === 'sheet' ? (
+              {sidePanel === 'sheet' && (
                 <CharacterSheetPanel character={state.character} onOperate={sendSheetOperation} />
-              ) : (
+              )}
+              {sidePanel === 'table' && (
                 <TableViewPanel
                   clocks={state.clocks}
                   crew={state.crew}
                   onOperate={sendSheetOperation}
                 />
               )}
+              {sidePanel === 'journal' && <JournalPanel entries={state.log.events} />}
             </div>
           </div>
         )}

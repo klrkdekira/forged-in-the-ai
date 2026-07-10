@@ -221,8 +221,19 @@ refer to that document. Each phase should end in something playable/testable.
       still to be picked). Verified live: creating a clock via chat then
       ticking it from the table view round-tripped correctly with no
       console errors.
-- [ ] Journal view v1: chronological turn log with expandable roll audit
-      records (FR-31, FR-32)
+- [x] Journal view v1: chronological turn log with expandable roll audit
+      records (FR-31, FR-32) (`JournalPanel`, a third Journal tab alongside
+      Sheet/Table in `/play`'s side panel; same reasoning as FR-28/FR-29
+      for not being a separate route). No server changes needed - the
+      event log was already broadcast in full on every `state` message
+      (FR-19's "fully reconstructible from the event log" already made
+      this a client-only feature). Each entry gets a one-line
+      human-readable summary (`summarize()`'s per-event-type lookup, with
+      a generic fallback) and expands via a native `<details>` to its full
+      payload - dice/position/effect for rolls, whatever fields any other
+      event carries. Filtering by type/phase/entity is v2. Verified live:
+      marking stress from the sheet panel produced a correctly summarized,
+      expandable journal entry with no console errors.
 - [x] Dev CLI harness for headless engine sessions (kept from Phases 1–3)
       (`make dev-session`, `server/cli/session.py`: an interactive loop
       over the same ToolExecutor the GM agent uses, `<tool> <json args>`;
