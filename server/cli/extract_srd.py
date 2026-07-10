@@ -4,13 +4,16 @@ from cli.paths import PACK_PATH, SRD_PATH
 from engine.packs import (
     ContentPack,
     CrewUpgrade,
+    DowntimeActivity,
     EntanglementEntry,
     HeatPenalty,
     Item,
+    MagnitudeLevel,
     PositionRoll,
     Reputation,
     RollResult,
     SpecialAbility,
+    SrdSection,
     Trauma,
     Vice,
 )
@@ -30,6 +33,16 @@ def _heading_text(line):
 
 def _slugify(name):
     return name.lower().replace(" ", "_").replace("'", "")
+
+
+def _section_index(lines):
+    """Every markdown heading in the SRD, in document order (D3 groundwork
+    for retrieval/chunking; not a substitute for the Phase 4 FTS5 index)."""
+    return [
+        SrdSection(heading=_heading_text(line), level=_heading_level(line), line=lineno)
+        for lineno, line in enumerate(lines, start=1)
+        if _heading_level(line) is not None
+    ]
 
 
 class SrdAbilityParser:
@@ -443,6 +456,185 @@ def _crew_upgrades():
     ]
 
 
+_MAGNITUDE_COLUMNS = (
+    "level",
+    "area",
+    "scale",
+    "duration",
+    "range",
+    "quality_tier",
+    "force",
+    "quality_example",
+    "force_example",
+)
+
+
+def _magnitude_levels():
+    # SRD: "Magnitude" - AREA/SCALE, DURATION/RANGE, and TIER & QUALITY/FORCE
+    # tables, plus the QUALITY EXAMPLES and FORCE EXAMPLES tables, combined
+    # one row per level (see _MAGNITUDE_COLUMNS for column order). The
+    # source table's level-6 "area" cell is blank.
+    rows = [
+        (
+            0,
+            "A closet",
+            "1 or 2 people",
+            "A few moments",
+            "Within reach",
+            "Poor",
+            "Weak",
+            "A rusty knife, worn & tattered clothing, rickety shack on the street",
+            "A firm shove, a candle flame, breeze, tiny spark",
+        ),
+        (
+            1,
+            "A small room",
+            "A small gang (3-6)",
+            "A few minutes",
+            "A dozen paces",
+            "Adequate",
+            "Moderate",
+            "A fighting blade, ordinary clothing, shared apartment, cheap food or drugs",
+            "A solid punch, steady wind, torch flame, electrical shock",
+        ),
+        (
+            2,
+            "A large room& Several rooms",
+            "A medium gang (12)",
+            "An hour",
+            "A stone's throw",
+            "Good",
+            "Strong",
+            "A pistol, respectable clothing, private rented room, typical ghost",
+            "A powerful blow, howling wind, burning brand",
+        ),
+        (
+            3,
+            "A small building",
+            "A large gang (20)",
+            "A few hours",
+            "Down the road",
+            "Excellent",
+            "Serious",
+            "A coach, boat, military rifle, fashionable clothing, small home",
+            "A crushing blow, staggering wind, grenade, searing fire, electrical surge",
+        ),
+        (
+            4,
+            "A large building",
+            "A huge gang (40)",
+            "A day",
+            "Several blocks away",
+            "Superior",
+            "Powerful",
+            "A luxury vehicle, townhouse, typical demon or powerful ghost",
+            "A charging horse, burning forge, bomb, whirlwind, electrocution",
+        ),
+        (
+            5,
+            "A city block",
+            "A massive gang (80)",
+            "Several days",
+            "Across the district",
+            "Impeccable",
+            "Overwhelming",
+            "A large townhouse, small ship, custom-tailored clothing, lightning barrier",
+            "A ship's cannon, raging thunder-storm, massive fire, lightning strike",
+        ),
+        (
+            6,
+            "",
+            "A colossal gang (160)",
+            "A week",
+            "Across the city",
+            "Legendary",
+            "Devastating",
+            "A mansion, large ship, rare essences or arcane artifacts, powerful demon",
+            "Hurricane wind, molten lava, tidal wave, electrical maelstrom",
+        ),
+    ]
+    return [MagnitudeLevel(**dict(zip(_MAGNITUDE_COLUMNS, row, strict=True))) for row in rows]
+
+
+def _downtime_activities():
+    # SRD: "Downtime activities" > "DOWNTIME ACTIVITIES SUMMARY"
+    return [
+        DowntimeActivity(
+            id="acquire_asset",
+            name="Acquire Asset",
+            summary=(
+                "Roll the crew's Tier. The result indicates the quality of the "
+                "asset. Some items require a minimum quality result to acquire; "
+                "to raise the result beyond critical, you may spend 2 coin per "
+                "+1 Tier bonus."
+            ),
+            results=[
+                RollResult(level="critical", description="Tier +2."),
+                RollResult(level="6", description="Tier +1."),
+                RollResult(level="4/5", description="Tier."),
+                RollResult(level="1-3", description="Tier -1."),
+            ],
+        ),
+        DowntimeActivity(
+            id="long_term_project",
+            name="Long-Term Project",
+            summary=(
+                "Work on a long-term project, if you have the means. Mark "
+                "segments on the clock according to your result."
+            ),
+            results=[
+                RollResult(level="critical", description="Five ticks."),
+                RollResult(level="6", description="Three ticks."),
+                RollResult(level="4/5", description="Two ticks."),
+                RollResult(level="1-3", description="One tick."),
+            ],
+        ),
+        DowntimeActivity(
+            id="recover",
+            name="Recover",
+            summary=(
+                "Get treatment to tick your healing clock (like a long-term "
+                "project). When you fill a clock, each harm is reduced by one "
+                "level."
+            ),
+        ),
+        DowntimeActivity(
+            id="reduce_heat",
+            name="Reduce Heat",
+            summary=(
+                "Say how you reduce heat on the crew and roll your action. "
+                "Reduce heat according to the result level."
+            ),
+            results=[
+                RollResult(level="critical", description="Clear five heat."),
+                RollResult(level="6", description="Clear three heat."),
+                RollResult(level="4/5", description="Clear two heat."),
+                RollResult(level="1-3", description="Clear one heat."),
+            ],
+        ),
+        DowntimeActivity(
+            id="train",
+            name="Train",
+            summary=(
+                "Mark 1 xp (in an attribute or your playbook). Add +1 xp if "
+                "you have the appropriate crew upgrade. You may train a given "
+                "xp track once per downtime."
+            ),
+        ),
+        DowntimeActivity(
+            id="indulge_vice",
+            name="Indulge Vice",
+            summary=(
+                "Visit your vice purveyor to relieve stress. Roll dice equal "
+                "to your lowest attribute. Clear stress equal to your highest "
+                "die result. If you clear more stress levels than you had "
+                "marked, you overindulge. If you do not or cannot indulge your "
+                "vice during downtime, you take stress equal to your trauma."
+            ),
+        ),
+    ]
+
+
 def build_pack(srd_text):
     outcomes, heat, entanglements = _tables()
     return ContentPack(
@@ -459,6 +651,9 @@ def build_pack(srd_text):
         action_outcomes=outcomes,
         heat_penalties=heat,
         entanglements=entanglements,
+        magnitude_levels=_magnitude_levels(),
+        downtime_activities=_downtime_activities(),
+        srd_sections=_section_index(srd_text.splitlines()),
     )
 
 

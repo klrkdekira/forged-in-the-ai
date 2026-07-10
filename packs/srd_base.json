@@ -792,5 +792,1615 @@
       "roll_result": "6",
       "entanglement": "Arrest"
     }
+  ],
+  "magnitude_levels": [
+    {
+      "level": 0,
+      "area": "A closet",
+      "scale": "1 or 2 people",
+      "duration": "A few moments",
+      "range": "Within reach",
+      "quality_tier": "Poor",
+      "force": "Weak",
+      "quality_example": "A rusty knife, worn & tattered clothing, rickety shack on the street",
+      "force_example": "A firm shove, a candle flame, breeze, tiny spark"
+    },
+    {
+      "level": 1,
+      "area": "A small room",
+      "scale": "A small gang (3-6)",
+      "duration": "A few minutes",
+      "range": "A dozen paces",
+      "quality_tier": "Adequate",
+      "force": "Moderate",
+      "quality_example": "A fighting blade, ordinary clothing, shared apartment, cheap food or drugs",
+      "force_example": "A solid punch, steady wind, torch flame, electrical shock"
+    },
+    {
+      "level": 2,
+      "area": "A large room& Several rooms",
+      "scale": "A medium gang (12)",
+      "duration": "An hour",
+      "range": "A stone's throw",
+      "quality_tier": "Good",
+      "force": "Strong",
+      "quality_example": "A pistol, respectable clothing, private rented room, typical ghost",
+      "force_example": "A powerful blow, howling wind, burning brand"
+    },
+    {
+      "level": 3,
+      "area": "A small building",
+      "scale": "A large gang (20)",
+      "duration": "A few hours",
+      "range": "Down the road",
+      "quality_tier": "Excellent",
+      "force": "Serious",
+      "quality_example": "A coach, boat, military rifle, fashionable clothing, small home",
+      "force_example": "A crushing blow, staggering wind, grenade, searing fire, electrical surge"
+    },
+    {
+      "level": 4,
+      "area": "A large building",
+      "scale": "A huge gang (40)",
+      "duration": "A day",
+      "range": "Several blocks away",
+      "quality_tier": "Superior",
+      "force": "Powerful",
+      "quality_example": "A luxury vehicle, townhouse, typical demon or powerful ghost",
+      "force_example": "A charging horse, burning forge, bomb, whirlwind, electrocution"
+    },
+    {
+      "level": 5,
+      "area": "A city block",
+      "scale": "A massive gang (80)",
+      "duration": "Several days",
+      "range": "Across the district",
+      "quality_tier": "Impeccable",
+      "force": "Overwhelming",
+      "quality_example": "A large townhouse, small ship, custom-tailored clothing, lightning barrier",
+      "force_example": "A ship's cannon, raging thunder-storm, massive fire, lightning strike"
+    },
+    {
+      "level": 6,
+      "area": "",
+      "scale": "A colossal gang (160)",
+      "duration": "A week",
+      "range": "Across the city",
+      "quality_tier": "Legendary",
+      "force": "Devastating",
+      "quality_example": "A mansion, large ship, rare essences or arcane artifacts, powerful demon",
+      "force_example": "Hurricane wind, molten lava, tidal wave, electrical maelstrom"
+    }
+  ],
+  "downtime_activities": [
+    {
+      "id": "acquire_asset",
+      "name": "Acquire Asset",
+      "summary": "Roll the crew's Tier. The result indicates the quality of the asset. Some items require a minimum quality result to acquire; to raise the result beyond critical, you may spend 2 coin per +1 Tier bonus.",
+      "results": [
+        {
+          "level": "critical",
+          "description": "Tier +2."
+        },
+        {
+          "level": "6",
+          "description": "Tier +1."
+        },
+        {
+          "level": "4/5",
+          "description": "Tier."
+        },
+        {
+          "level": "1-3",
+          "description": "Tier -1."
+        }
+      ]
+    },
+    {
+      "id": "long_term_project",
+      "name": "Long-Term Project",
+      "summary": "Work on a long-term project, if you have the means. Mark segments on the clock according to your result.",
+      "results": [
+        {
+          "level": "critical",
+          "description": "Five ticks."
+        },
+        {
+          "level": "6",
+          "description": "Three ticks."
+        },
+        {
+          "level": "4/5",
+          "description": "Two ticks."
+        },
+        {
+          "level": "1-3",
+          "description": "One tick."
+        }
+      ]
+    },
+    {
+      "id": "recover",
+      "name": "Recover",
+      "summary": "Get treatment to tick your healing clock (like a long-term project). When you fill a clock, each harm is reduced by one level.",
+      "results": []
+    },
+    {
+      "id": "reduce_heat",
+      "name": "Reduce Heat",
+      "summary": "Say how you reduce heat on the crew and roll your action. Reduce heat according to the result level.",
+      "results": [
+        {
+          "level": "critical",
+          "description": "Clear five heat."
+        },
+        {
+          "level": "6",
+          "description": "Clear three heat."
+        },
+        {
+          "level": "4/5",
+          "description": "Clear two heat."
+        },
+        {
+          "level": "1-3",
+          "description": "Clear one heat."
+        }
+      ]
+    },
+    {
+      "id": "train",
+      "name": "Train",
+      "summary": "Mark 1 xp (in an attribute or your playbook). Add +1 xp if you have the appropriate crew upgrade. You may train a given xp track once per downtime.",
+      "results": []
+    },
+    {
+      "id": "indulge_vice",
+      "name": "Indulge Vice",
+      "summary": "Visit your vice purveyor to relieve stress. Roll dice equal to your lowest attribute. Clear stress equal to your highest die result. If you clear more stress levels than you had marked, you overindulge. If you do not or cannot indulge your vice during downtime, you take stress equal to your trauma.",
+      "results": []
+    }
+  ],
+  "srd_sections": [
+    {
+      "heading": "The Basics",
+      "level": 1,
+      "line": 1
+    },
+    {
+      "heading": "The Game",
+      "level": 2,
+      "line": 3
+    },
+    {
+      "heading": "The Players",
+      "level": 2,
+      "line": 7
+    },
+    {
+      "heading": "The Characters",
+      "level": 2,
+      "line": 13
+    },
+    {
+      "heading": "The Crew",
+      "level": 2,
+      "line": 17
+    },
+    {
+      "heading": "The Game Master",
+      "level": 2,
+      "line": 21
+    },
+    {
+      "heading": "Playing A Session",
+      "level": 2,
+      "line": 27
+    },
+    {
+      "heading": "The Core System",
+      "level": 1,
+      "line": 33
+    },
+    {
+      "heading": "Judgment calls",
+      "level": 2,
+      "line": 35
+    },
+    {
+      "heading": "Rolling the Dice",
+      "level": 2,
+      "line": 45
+    },
+    {
+      "heading": "The Game Structure",
+      "level": 2,
+      "line": 66
+    },
+    {
+      "heading": "Actions & Attributes",
+      "level": 1,
+      "line": 78
+    },
+    {
+      "heading": "Action Ratings",
+      "level": 2,
+      "line": 80
+    },
+    {
+      "heading": "Action Roll",
+      "level": 2,
+      "line": 101
+    },
+    {
+      "heading": "Attribute Ratings",
+      "level": 2,
+      "line": 107
+    },
+    {
+      "heading": "Resistance Roll",
+      "level": 2,
+      "line": 113
+    },
+    {
+      "heading": "EXAMPLE ACTION & ATTRIBUTE RATINGS",
+      "level": 3,
+      "line": 123
+    },
+    {
+      "heading": "**Insight**",
+      "level": 4,
+      "line": 125
+    },
+    {
+      "heading": "**Prowess**",
+      "level": 4,
+      "line": 136
+    },
+    {
+      "heading": "**Resolve**",
+      "level": 4,
+      "line": 147
+    },
+    {
+      "heading": "Actions",
+      "level": 2,
+      "line": 158
+    },
+    {
+      "heading": "Stress & Trauma",
+      "level": 1,
+      "line": 210
+    },
+    {
+      "heading": "Stress",
+      "level": 2,
+      "line": 212
+    },
+    {
+      "heading": "Pushing Yourself",
+      "level": 2,
+      "line": 220
+    },
+    {
+      "heading": "Trauma",
+      "level": 2,
+      "line": 228
+    },
+    {
+      "heading": "Trauma Conditions",
+      "level": 3,
+      "line": 236
+    },
+    {
+      "heading": "Progress clocks",
+      "level": 1,
+      "line": 247
+    },
+    {
+      "heading": "Simple Obstacles",
+      "level": 2,
+      "line": 265
+    },
+    {
+      "heading": "Danger Clocks",
+      "level": 2,
+      "line": 271
+    },
+    {
+      "heading": "Racing Clocks",
+      "level": 2,
+      "line": 275
+    },
+    {
+      "heading": "Linked Clocks",
+      "level": 2,
+      "line": 281
+    },
+    {
+      "heading": "Mission Clocks",
+      "level": 2,
+      "line": 285
+    },
+    {
+      "heading": "Tug-of-war Clocks",
+      "level": 2,
+      "line": 289
+    },
+    {
+      "heading": "Long-term Project",
+      "level": 2,
+      "line": 293
+    },
+    {
+      "heading": "Faction Clocks",
+      "level": 2,
+      "line": 299
+    },
+    {
+      "heading": "Action Roll",
+      "level": 1,
+      "line": 305
+    },
+    {
+      "heading": "1. The Player States Their Goal",
+      "level": 2,
+      "line": 320
+    },
+    {
+      "heading": "2. The Player Chooses the Action Rating",
+      "level": 2,
+      "line": 326
+    },
+    {
+      "heading": "3. The GM Sets the Position",
+      "level": 2,
+      "line": 330
+    },
+    {
+      "heading": "4. The GM Sets the Effect Level",
+      "level": 2,
+      "line": 336
+    },
+    {
+      "heading": "5. Add Bonus Dice",
+      "level": 2,
+      "line": 342
+    },
+    {
+      "heading": "The Devil's Bargain",
+      "level": 3,
+      "line": 350
+    },
+    {
+      "heading": "6. Roll the Dice and Judge the Result",
+      "level": 2,
+      "line": 368
+    },
+    {
+      "heading": "Action Roll Summary",
+      "level": 2,
+      "line": 380
+    },
+    {
+      "heading": "ACTION ROLL",
+      "level": 3,
+      "line": 390
+    },
+    {
+      "heading": "CONTROLLED",
+      "level": 4,
+      "line": 398
+    },
+    {
+      "heading": "RISKY",
+      "level": 4,
+      "line": 411
+    },
+    {
+      "heading": "DESPERATE",
+      "level": 4,
+      "line": 420
+    },
+    {
+      "heading": "Double-duty Rolls",
+      "level": 2,
+      "line": 432
+    },
+    {
+      "heading": "Effect",
+      "level": 1,
+      "line": 436
+    },
+    {
+      "heading": "Assessing Factors",
+      "level": 2,
+      "line": 446
+    },
+    {
+      "heading": "Potency",
+      "level": 3,
+      "line": 450
+    },
+    {
+      "heading": "Quality/Tier",
+      "level": 3,
+      "line": 454
+    },
+    {
+      "heading": "Scale",
+      "level": 3,
+      "line": 460
+    },
+    {
+      "heading": "Trading Position for Effect",
+      "level": 2,
+      "line": 472
+    },
+    {
+      "heading": "Consequences",
+      "level": 2,
+      "line": 486
+    },
+    {
+      "heading": "Setting Position & Effect",
+      "level": 1,
+      "line": 490
+    },
+    {
+      "heading": "Consequences and Harm",
+      "level": 1,
+      "line": 503
+    },
+    {
+      "heading": "Reduced Effect",
+      "level": 2,
+      "line": 509
+    },
+    {
+      "heading": "Complication",
+      "level": 2,
+      "line": 513
+    },
+    {
+      "heading": "Lost Opportunity",
+      "level": 2,
+      "line": 523
+    },
+    {
+      "heading": "Worse Position",
+      "level": 2,
+      "line": 527
+    },
+    {
+      "heading": "Harm",
+      "level": 2,
+      "line": 531
+    },
+    {
+      "heading": "HARM",
+      "level": 4,
+      "line": 541
+    },
+    {
+      "heading": "Harm examples",
+      "level": 3,
+      "line": 553
+    },
+    {
+      "heading": "Resistance and Armor",
+      "level": 1,
+      "line": 565
+    },
+    {
+      "heading": "RESISTANCE ROLL",
+      "level": 3,
+      "line": 597
+    },
+    {
+      "heading": "Armor",
+      "level": 2,
+      "line": 609
+    },
+    {
+      "heading": "Death",
+      "level": 2,
+      "line": 617
+    },
+    {
+      "heading": "Fortune Roll",
+      "level": 1,
+      "line": 628
+    },
+    {
+      "heading": "FORTUNE ROLL",
+      "level": 3,
+      "line": 661
+    },
+    {
+      "heading": "Gathering Information",
+      "level": 1,
+      "line": 676
+    },
+    {
+      "heading": "Investigation",
+      "level": 2,
+      "line": 692
+    },
+    {
+      "heading": "Examples & Questions",
+      "level": 2,
+      "line": 698
+    },
+    {
+      "heading": "GATHER INFORMATION",
+      "level": 3,
+      "line": 713
+    },
+    {
+      "heading": "Coin and Stash",
+      "level": 1,
+      "line": 725
+    },
+    {
+      "heading": "Coin",
+      "level": 2,
+      "line": 727
+    },
+    {
+      "heading": "Monetary values",
+      "level": 2,
+      "line": 733
+    },
+    {
+      "heading": "Coin Use",
+      "level": 3,
+      "line": 746
+    },
+    {
+      "heading": "Stash & Retirement",
+      "level": 2,
+      "line": 754
+    },
+    {
+      "heading": "Removing coin from your stash",
+      "level": 3,
+      "line": 767
+    },
+    {
+      "heading": "The Faction Game",
+      "level": 1,
+      "line": 771
+    },
+    {
+      "heading": "Tier",
+      "level": 2,
+      "line": 773
+    },
+    {
+      "heading": "Gang scale by tier",
+      "level": 3,
+      "line": 779
+    },
+    {
+      "heading": "Hold",
+      "level": 2,
+      "line": 788
+    },
+    {
+      "heading": "Development",
+      "level": 2,
+      "line": 792
+    },
+    {
+      "heading": "Turf",
+      "level": 2,
+      "line": 803
+    },
+    {
+      "heading": "Reducing hold",
+      "level": 3,
+      "line": 823
+    },
+    {
+      "heading": "Faction Status",
+      "level": 2,
+      "line": 831
+    },
+    {
+      "heading": "Faction status changes",
+      "level": 3,
+      "line": 837
+    },
+    {
+      "heading": "Faction status levels",
+      "level": 3,
+      "line": 841
+    },
+    {
+      "heading": "Claims",
+      "level": 2,
+      "line": 853
+    },
+    {
+      "heading": "Seizing a claim",
+      "level": 3,
+      "line": 859
+    },
+    {
+      "heading": "Losing a claim",
+      "level": 3,
+      "line": 871
+    },
+    {
+      "heading": "Advancement",
+      "level": 1,
+      "line": 875
+    },
+    {
+      "heading": "PC Advancement",
+      "level": 2,
+      "line": 877
+    },
+    {
+      "heading": "Crew Advancement",
+      "level": 2,
+      "line": 899
+    },
+    {
+      "heading": "Profits",
+      "level": 3,
+      "line": 914
+    },
+    {
+      "heading": "Characters",
+      "level": 1,
+      "line": 918
+    },
+    {
+      "heading": "Characters",
+      "level": 2,
+      "line": 920
+    },
+    {
+      "heading": "Character creation",
+      "level": 1,
+      "line": 926
+    },
+    {
+      "heading": "Create playbooks",
+      "level": 2,
+      "line": 928
+    },
+    {
+      "heading": "Choose a heritage",
+      "level": 2,
+      "line": 938
+    },
+    {
+      "heading": "Choose a background",
+      "level": 2,
+      "line": 942
+    },
+    {
+      "heading": "Assign four action dots",
+      "level": 2,
+      "line": 946
+    },
+    {
+      "heading": "Choose a special ability",
+      "level": 2,
+      "line": 954
+    },
+    {
+      "heading": "Special Armor",
+      "level": 3,
+      "line": 958
+    },
+    {
+      "heading": "Choose one close friend and one rival",
+      "level": 2,
+      "line": 962
+    },
+    {
+      "heading": "Choose your vice",
+      "level": 2,
+      "line": 966
+    },
+    {
+      "heading": "Record your name, alias, & look",
+      "level": 2,
+      "line": 978
+    },
+    {
+      "heading": "Review your details",
+      "level": 2,
+      "line": 982
+    },
+    {
+      "heading": "Character creation summary",
+      "level": 2,
+      "line": 988
+    },
+    {
+      "heading": "Loadout",
+      "level": 2,
+      "line": 1008
+    },
+    {
+      "heading": "Character playbook",
+      "level": 1,
+      "line": 1023
+    },
+    {
+      "heading": "Short Descriptor of Character",
+      "level": 2,
+      "line": 1025
+    },
+    {
+      "heading": "STARTING ACTIONS",
+      "level": 3,
+      "line": 1033
+    },
+    {
+      "heading": "Starting builds",
+      "level": 2,
+      "line": 1042
+    },
+    {
+      "heading": "Friends, rivals",
+      "level": 2,
+      "line": 1054
+    },
+    {
+      "heading": "Special abilities",
+      "level": 2,
+      "line": 1060
+    },
+    {
+      "heading": "Battleborn",
+      "level": 3,
+      "line": 1064
+    },
+    {
+      "heading": "Bodyguard",
+      "level": 3,
+      "line": 1070
+    },
+    {
+      "heading": "Arcane fighter",
+      "level": 3,
+      "line": 1076
+    },
+    {
+      "heading": "Leader",
+      "level": 3,
+      "line": 1082
+    },
+    {
+      "heading": "Mule",
+      "level": 3,
+      "line": 1088
+    },
+    {
+      "heading": "Not to be trifled with",
+      "level": 3,
+      "line": 1094
+    },
+    {
+      "heading": "Savage",
+      "level": 3,
+      "line": 1102
+    },
+    {
+      "heading": "Vigorous",
+      "level": 3,
+      "line": 1110
+    },
+    {
+      "heading": "Sharpshooter",
+      "level": 3,
+      "line": 1116
+    },
+    {
+      "heading": "Focused",
+      "level": 3,
+      "line": 1124
+    },
+    {
+      "heading": "Scout",
+      "level": 3,
+      "line": 1130
+    },
+    {
+      "heading": "Tough as nails",
+      "level": 3,
+      "line": 1136
+    },
+    {
+      "heading": "Vengeful",
+      "level": 3,
+      "line": 1142
+    },
+    {
+      "heading": "Alchemist",
+      "level": 3,
+      "line": 1146
+    },
+    {
+      "heading": "Analyst",
+      "level": 3,
+      "line": 1152
+    },
+    {
+      "heading": "Artificer",
+      "level": 3,
+      "line": 1156
+    },
+    {
+      "heading": "Fortitude",
+      "level": 2,
+      "line": 1162
+    },
+    {
+      "heading": "Supernatural ward",
+      "level": 3,
+      "line": 1168
+    },
+    {
+      "heading": "Saboteur",
+      "level": 3,
+      "line": 1174
+    },
+    {
+      "heading": "Infiltrator",
+      "level": 3,
+      "line": 1180
+    },
+    {
+      "heading": "Ambush",
+      "level": 3,
+      "line": 1188
+    },
+    {
+      "heading": "Daredevil",
+      "level": 3,
+      "line": 1194
+    },
+    {
+      "heading": "The devil's footsteps",
+      "level": 3,
+      "line": 1200
+    },
+    {
+      "heading": "Expertise",
+      "level": 3,
+      "line": 1210
+    },
+    {
+      "heading": "Reflexes",
+      "level": 3,
+      "line": 1216
+    },
+    {
+      "heading": "Shadow",
+      "level": 3,
+      "line": 1222
+    },
+    {
+      "heading": "Rook's gambit",
+      "level": 3,
+      "line": 1228
+    },
+    {
+      "heading": "Like looking into a mirror",
+      "level": 3,
+      "line": 1234
+    },
+    {
+      "heading": "A little something on the side",
+      "level": 3,
+      "line": 1240
+    },
+    {
+      "heading": "Mesmerism",
+      "level": 3,
+      "line": 1246
+    },
+    {
+      "heading": "Subterfuge",
+      "level": 3,
+      "line": 1252
+    },
+    {
+      "heading": "Trust in me",
+      "level": 3,
+      "line": 1258
+    },
+    {
+      "heading": "Foresight",
+      "level": 3,
+      "line": 1264
+    },
+    {
+      "heading": "Calculating",
+      "level": 3,
+      "line": 1270
+    },
+    {
+      "heading": "Connected",
+      "level": 3,
+      "line": 1276
+    },
+    {
+      "heading": "Mastermind",
+      "level": 3,
+      "line": 1282
+    },
+    {
+      "heading": "Weaving the web",
+      "level": 3,
+      "line": 1288
+    },
+    {
+      "heading": "Arcane mind",
+      "level": 3,
+      "line": 1294
+    },
+    {
+      "heading": "Iron will",
+      "level": 3,
+      "line": 1298
+    },
+    {
+      "heading": "Ritual",
+      "level": 3,
+      "line": 1304
+    },
+    {
+      "heading": "Strange methods",
+      "level": 3,
+      "line": 1310
+    },
+    {
+      "heading": "Warded",
+      "level": 3,
+      "line": 1316
+    },
+    {
+      "heading": "Character items",
+      "level": 2,
+      "line": 1322
+    },
+    {
+      "heading": "Crew creation",
+      "level": 1,
+      "line": 1328
+    },
+    {
+      "heading": "Choose a crew type",
+      "level": 2,
+      "line": 1330
+    },
+    {
+      "heading": "Choose an initial reputation & lair",
+      "level": 2,
+      "line": 1340
+    },
+    {
+      "heading": "Establish your hunting grounds",
+      "level": 2,
+      "line": 1357
+    },
+    {
+      "heading": "Choose a special ability",
+      "level": 2,
+      "line": 1371
+    },
+    {
+      "heading": "Assign crew upgrades",
+      "level": 2,
+      "line": 1377
+    },
+    {
+      "heading": "Choose a favorite contact",
+      "level": 2,
+      "line": 1390
+    },
+    {
+      "heading": "Crew upgrade Examples",
+      "level": 2,
+      "line": 1399
+    },
+    {
+      "heading": "Cohorts",
+      "level": 2,
+      "line": 1423
+    },
+    {
+      "heading": "Creating a gang",
+      "level": 3,
+      "line": 1427
+    },
+    {
+      "heading": "Creating an expert",
+      "level": 3,
+      "line": 1443
+    },
+    {
+      "heading": "Edges & flaws",
+      "level": 3,
+      "line": 1449
+    },
+    {
+      "heading": "Modifying a cohort",
+      "level": 3,
+      "line": 1467
+    },
+    {
+      "heading": "Using a cohort",
+      "level": 3,
+      "line": 1471
+    },
+    {
+      "heading": "Cohort harm & Healing",
+      "level": 2,
+      "line": 1479
+    },
+    {
+      "heading": "Crew creation summary",
+      "level": 2,
+      "line": 1492
+    },
+    {
+      "heading": "Crew playbook",
+      "level": 1,
+      "line": 1522
+    },
+    {
+      "heading": "Starting upgrades",
+      "level": 2,
+      "line": 1532
+    },
+    {
+      "heading": "Favored Operations",
+      "level": 2,
+      "line": 1536
+    },
+    {
+      "heading": "Contacts",
+      "level": 2,
+      "line": 1539
+    },
+    {
+      "heading": "Crew upgrades",
+      "level": 2,
+      "line": 1545
+    },
+    {
+      "heading": "Make a Claim Map for the Crew",
+      "level": 3,
+      "line": 1557
+    },
+    {
+      "heading": "Crew special abilities",
+      "level": 2,
+      "line": 1619
+    },
+    {
+      "heading": "Deadly",
+      "level": 3,
+      "line": 1623
+    },
+    {
+      "heading": "Death veil",
+      "level": 3,
+      "line": 1629
+    },
+    {
+      "heading": "No traces",
+      "level": 3,
+      "line": 1633
+    },
+    {
+      "heading": "Patron",
+      "level": 3,
+      "line": 1639
+    },
+    {
+      "heading": "Predators",
+      "level": 3,
+      "line": 1645
+    },
+    {
+      "heading": "Fiends",
+      "level": 3,
+      "line": 1651
+    },
+    {
+      "heading": "Forged in the fire",
+      "level": 3,
+      "line": 1657
+    },
+    {
+      "heading": "War dogs",
+      "level": 3,
+      "line": 1663
+    },
+    {
+      "heading": "Anointed",
+      "level": 3,
+      "line": 1667
+    },
+    {
+      "heading": "Accord",
+      "level": 3,
+      "line": 1671
+    },
+    {
+      "heading": "High society",
+      "level": 3,
+      "line": 1677
+    },
+    {
+      "heading": "Pack rats",
+      "level": 3,
+      "line": 1681
+    },
+    {
+      "heading": "Second story",
+      "level": 3,
+      "line": 1687
+    },
+    {
+      "heading": "Synchronized",
+      "level": 3,
+      "line": 1691
+    },
+    {
+      "heading": "All hands",
+      "level": 3,
+      "line": 1697
+    },
+    {
+      "heading": "Just passing through",
+      "level": 3,
+      "line": 1701
+    },
+    {
+      "heading": "The Score",
+      "level": 1,
+      "line": 1705
+    },
+    {
+      "heading": "Planning & engagement",
+      "level": 1,
+      "line": 1723
+    },
+    {
+      "heading": "The Detail",
+      "level": 2,
+      "line": 1738
+    },
+    {
+      "heading": "Item Loadouts",
+      "level": 2,
+      "line": 1742
+    },
+    {
+      "heading": "Engagement Roll",
+      "level": 2,
+      "line": 1746
+    },
+    {
+      "heading": "Major Advantages / Disadvantages",
+      "level": 3,
+      "line": 1752
+    },
+    {
+      "heading": "ENGAGEMENT ROLL",
+      "level": 3,
+      "line": 1765
+    },
+    {
+      "heading": "Outcomes",
+      "level": 3,
+      "line": 1788
+    },
+    {
+      "heading": "How long does it last?",
+      "level": 3,
+      "line": 1796
+    },
+    {
+      "heading": "Linked Plans",
+      "level": 2,
+      "line": 1800
+    },
+    {
+      "heading": "Flashbacks",
+      "level": 2,
+      "line": 1809
+    },
+    {
+      "heading": "Limits of flashbacks",
+      "level": 3,
+      "line": 1825
+    },
+    {
+      "heading": "flashback examples",
+      "level": 4,
+      "line": 1829
+    },
+    {
+      "heading": "Giving up on a score",
+      "level": 2,
+      "line": 1861
+    },
+    {
+      "heading": "Teamwork",
+      "level": 1,
+      "line": 1865
+    },
+    {
+      "heading": "Teamwork",
+      "level": 2,
+      "line": 1867
+    },
+    {
+      "heading": "Assist",
+      "level": 3,
+      "line": 1876
+    },
+    {
+      "heading": "Lead a group action",
+      "level": 3,
+      "line": 1882
+    },
+    {
+      "heading": "Protect",
+      "level": 3,
+      "line": 1894
+    },
+    {
+      "heading": "Set up",
+      "level": 3,
+      "line": 1900
+    },
+    {
+      "heading": "Do We Have to Use Teamwork?",
+      "level": 2,
+      "line": 1912
+    },
+    {
+      "heading": "Downtime",
+      "level": 1,
+      "line": 1916
+    },
+    {
+      "heading": "Payoff",
+      "level": 1,
+      "line": 1933
+    },
+    {
+      "heading": "Heat",
+      "level": 1,
+      "line": 1960
+    },
+    {
+      "heading": "Incarceration",
+      "level": 2,
+      "line": 1987
+    },
+    {
+      "heading": "INCARCERATION ROLL",
+      "level": 3,
+      "line": 2005
+    },
+    {
+      "heading": "Prison claims",
+      "level": 2,
+      "line": 2014
+    },
+    {
+      "heading": "CLAIMS: PRISON",
+      "level": 3,
+      "line": 2018
+    },
+    {
+      "heading": "Allied claim",
+      "level": 3,
+      "line": 2030
+    },
+    {
+      "heading": "Cell block control",
+      "level": 3,
+      "line": 2034
+    },
+    {
+      "heading": "Guard payoff",
+      "level": 3,
+      "line": 2038
+    },
+    {
+      "heading": "Hardcase",
+      "level": 3,
+      "line": 2042
+    },
+    {
+      "heading": "Parole influence",
+      "level": 3,
+      "line": 2046
+    },
+    {
+      "heading": "Smuggling",
+      "level": 3,
+      "line": 2050
+    },
+    {
+      "heading": "Entanglements",
+      "level": 1,
+      "line": 2054
+    },
+    {
+      "heading": "Arrest",
+      "level": 3,
+      "line": 2076
+    },
+    {
+      "heading": "Cooperation",
+      "level": 3,
+      "line": 2082
+    },
+    {
+      "heading": "Demonic notice",
+      "level": 3,
+      "line": 2086
+    },
+    {
+      "heading": "Flipped",
+      "level": 3,
+      "line": 2090
+    },
+    {
+      "heading": "Gang trouble",
+      "level": 3,
+      "line": 2094
+    },
+    {
+      "heading": "Interrogation",
+      "level": 3,
+      "line": 2098
+    },
+    {
+      "heading": "Questioning",
+      "level": 3,
+      "line": 2104
+    },
+    {
+      "heading": "Reprisals",
+      "level": 3,
+      "line": 2110
+    },
+    {
+      "heading": "Rivals",
+      "level": 3,
+      "line": 2114
+    },
+    {
+      "heading": "Show of force",
+      "level": 3,
+      "line": 2118
+    },
+    {
+      "heading": "Unquiet dead",
+      "level": 3,
+      "line": 2122
+    },
+    {
+      "heading": "The usual suspects",
+      "level": 3,
+      "line": 2128
+    },
+    {
+      "heading": "Downtime activities",
+      "level": 1,
+      "line": 2132
+    },
+    {
+      "heading": "Acquire asset",
+      "level": 3,
+      "line": 2155
+    },
+    {
+      "heading": "Long-term project",
+      "level": 3,
+      "line": 2178
+    },
+    {
+      "heading": "Recover",
+      "level": 3,
+      "line": 2188
+    },
+    {
+      "heading": "Reduce heat",
+      "level": 3,
+      "line": 2206
+    },
+    {
+      "heading": "Train",
+      "level": 3,
+      "line": 2212
+    },
+    {
+      "heading": "Indulge vice",
+      "level": 3,
+      "line": 2216
+    },
+    {
+      "heading": "VICE ROLL",
+      "level": 3,
+      "line": 2222
+    },
+    {
+      "heading": "Stress Relief",
+      "level": 2,
+      "line": 2230
+    },
+    {
+      "heading": "Indulging Your Vice",
+      "level": 2,
+      "line": 2236
+    },
+    {
+      "heading": "Overindulgence",
+      "level": 3,
+      "line": 2244
+    },
+    {
+      "heading": "Ignoring your vice",
+      "level": 3,
+      "line": 2255
+    },
+    {
+      "heading": "Roleplaying & XP",
+      "level": 3,
+      "line": 2259
+    },
+    {
+      "heading": "NPC & faction downtime",
+      "level": 2,
+      "line": 2263
+    },
+    {
+      "heading": "DOWNTIME ACTIVITIES SUMMARY",
+      "level": 3,
+      "line": 2283
+    },
+    {
+      "heading": "ACQUIRE ASSET",
+      "level": 4,
+      "line": 2287
+    },
+    {
+      "heading": "LONG-TERM PROJECT",
+      "level": 4,
+      "line": 2298
+    },
+    {
+      "heading": "RECOVER",
+      "level": 4,
+      "line": 2309
+    },
+    {
+      "heading": "REDUCE HEAT",
+      "level": 4,
+      "line": 2313
+    },
+    {
+      "heading": "TRAIN",
+      "level": 4,
+      "line": 2322
+    },
+    {
+      "heading": "VICE",
+      "level": 4,
+      "line": 2326
+    },
+    {
+      "heading": "Magnitude",
+      "level": 1,
+      "line": 2341
+    },
+    {
+      "heading": "AREA/SCALE",
+      "level": 3,
+      "line": 2361
+    },
+    {
+      "heading": "DURATION/RANGE",
+      "level": 3,
+      "line": 2369
+    },
+    {
+      "heading": "TIER & QUALITY / FORCE",
+      "level": 3,
+      "line": 2378
+    },
+    {
+      "heading": "QUALITY EXAMPLES",
+      "level": 3,
+      "line": 2387
+    },
+    {
+      "heading": "FORCE EXAMPLES",
+      "level": 3,
+      "line": 2401
+    },
+    {
+      "heading": "Rituals",
+      "level": 1,
+      "line": 2415
+    },
+    {
+      "heading": "Finding a ritual source",
+      "level": 2,
+      "line": 2419
+    },
+    {
+      "heading": "Learning a ritual",
+      "level": 2,
+      "line": 2423
+    },
+    {
+      "heading": "Ritual Questions",
+      "level": 3,
+      "line": 2427
+    },
+    {
+      "heading": "Example Ritual Answers",
+      "level": 3,
+      "line": 2433
+    },
+    {
+      "heading": "Performing a Ritual",
+      "level": 2,
+      "line": 2441
+    },
+    {
+      "heading": "Crafting",
+      "level": 1,
+      "line": 2455
+    },
+    {
+      "heading": "Inventing",
+      "level": 2,
+      "line": 2459
+    },
+    {
+      "heading": "Creation Questions",
+      "level": 3,
+      "line": 2463
+    },
+    {
+      "heading": "Crafting",
+      "level": 2,
+      "line": 2476
+    },
+    {
+      "heading": "CRAFTING ROLL",
+      "level": 3,
+      "line": 2484
+    },
+    {
+      "heading": "Modifying an item",
+      "level": 3,
+      "line": 2503
+    },
+    {
+      "heading": "Drawbacks",
+      "level": 3,
+      "line": 2513
+    }
   ]
 }
