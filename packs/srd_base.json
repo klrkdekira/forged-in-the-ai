@@ -1,0 +1,796 @@
+{
+  "id": "srd",
+  "name": "Blades in the Dark SRD Base Pack",
+  "description": "Core mechanics and abilities extracted from the SRD.",
+  "version": "1.0.0",
+  "special_abilities": [
+    {
+      "id": "battleborn",
+      "name": "Battleborn",
+      "description": "You may expend your **special armor** to reduce harm from an attack in combat or to **push yourself** during a fight.\n\n> When you use this ability, tick the special armor box on your playbook sheet. If you \"reduce harm\" that means the level of harm you're facing right now is reduced by one. If you use this ability to push yourself, you get one of the benefits (+1d, +1 effect, act despite severe harm) but you don't take 2 stress. Your special armor is restored at the beginning of downtime.",
+      "tags": []
+    },
+    {
+      "id": "bodyguard",
+      "name": "Bodyguard",
+      "description": "When you **protect** a teammate, take **+1d** to your resistance roll. When you gather info to anticipate possible threats in the current situation, you get **+1 effect**.\n\n> The protect teamwork maneuver lets you face a consequence for a teammate. If you choose to resist that consequence, this ability gives you +1d to your resistance roll. Also, when you read a situation to gather information about hidden dangers or potential attackers, you get +1 effect—which means more detailed information.",
+      "tags": []
+    },
+    {
+      "id": "arcane_fighter",
+      "name": "Arcane fighter",
+      "description": "You may imbue your hands, melee weapons, or tools with spirit energy. You gain **potency** in combat vs. the supernatural..\n\n> When you imbue yourself with arcane energy, how do you do it? What does it look like when the energy manifests?",
+      "tags": []
+    },
+    {
+      "id": "leader",
+      "name": "Leader",
+      "description": "When you **Command** a **cohort** in combat, they continue to fight when they would otherwise **break** (they're not taken out when they suffer level 3 harm). They gain **+1 effect** and **1 armor**.\n\n> This ability makes your cohorts more effective in battle and also allows them to resist harm by using armor. While you lead your cohorts, they won't stop fighting until they take fatal harm (level 4) or you order them to cease. What do you do to inspire such bravery in battle?",
+      "tags": []
+    },
+    {
+      "id": "mule",
+      "name": "Mule",
+      "description": "Your load limits are higher. Light: 5. Normal: 7. Heavy: 8.\n\n> This ability is great if you want to wear heavy armor and pack a heavy weapon without attracting lots of attention. Since your exact gear is determined on-the-fly during an operation, having more load also gives you more options to get creative with when dealing with problems during a score.",
+      "tags": []
+    },
+    {
+      "id": "not_to_be_trifled_with",
+      "name": "Not to be trifled with",
+      "description": "You can **push yourself** to do one of the following: *perform a feat of physical force that verges on the superhuman—engage a small gang on equal footing in close combat.*\n\n> When you push yourself to activate this ability, you still get one of the normal benefits of pushing yourself (+1d, +1 effect, etc.) in addition to the special ability.\n>\n> If you perform a feat that verges on the superhuman, you might break a metal weapon with your bare hands, tackle a galloping horse, lift a huge weight, etc. If you engage a small gang on equal footing, you don't suffer reduced effect due to scale against a small gang (up to six people).",
+      "tags": []
+    },
+    {
+      "id": "savage",
+      "name": "Savage",
+      "description": "When you unleash physical violence, it's especially frightening. When you **Command** a frightened target, take **+1d**.\n\n> You instill fear in those around you when you get violent. How they react depends on the person. Some people will flee from you, some will be impressed, some will get violent in return. The GM judges the response of a given NPC.\n>\n> In addition, when you **Command** someone who's affected by fear (from this ability or otherwise), take +1d to your roll.",
+      "tags": []
+    },
+    {
+      "id": "vigorous",
+      "name": "Vigorous",
+      "description": "You recover from harm faster. Permanently fill in one of your healing clock segments. Take **+1d** to healing treatment rolls.\n\n> Your healing clock becomes a 3-clock, and you get a bonus die when you recover.",
+      "tags": []
+    },
+    {
+      "id": "sharpshooter",
+      "name": "Sharpshooter",
+      "description": "You can **push yourself** to do one of the following: *make a ranged attack at extreme distance beyond what's normal for the weapon—unleash a barrage of rapid fire to suppress the enemy.*\n\n> When you push yourself to activate this ability, you still get one of the normal benefits of pushing yourself (+1d, +1 effect, etc.) in addition to the special ability.\n>\n> The first use of this ability allows you to attempt long-range sniper shots that would otherwise be impossible with  typical rudimentary firearms. The second use allows you to keep up a steady rate of fire in a battle (enough to \"suppress\" a small gang up to six people), rather than stopping for a slow reload or discarding a gun after each shot. When an enemy is suppressed, they're reluctant to maneuver or attack (usually calling for a fortune roll to see if they can manage it).",
+      "tags": []
+    },
+    {
+      "id": "focused",
+      "name": "Focused",
+      "description": "You may expend your **special armor** to resist a consequence of surprise or mental harm (fear, confusion, losing track of someone) or to **push yourself** for ranged combat or tracking.\n\n> When you use this ability, tick the special armor box on your playbook sheet. If you \"resist a consequence\" of the appropriate type, you avoid it completely. If you use this ability to push yourself, you get one of the benefits (+1d, +1 effect, act despite severe harm) but you don't take 2 stress. Your special armor is restored at the beginning of downtime.",
+      "tags": []
+    },
+    {
+      "id": "scout",
+      "name": "Scout",
+      "description": "When you gather information to discover the location of a target, you get **+1 effect**. When you hide in a prepared position or use camouflage you get **+1d** to rolls to avoid detection.\n\n> A \"target\" can be a person, a destination, a good ambush spot, an item, etc.",
+      "tags": []
+    },
+    {
+      "id": "tough_as_nails",
+      "name": "Tough as nails",
+      "description": "Penalties from harm are one level less severe (though level 4 harm is still fatal).\n\n> With this ability, level 3 harm doesn't incapacitate you; instead you take -1d to your rolls (as if it were level 2 harm). Level 2 harm affects you as if it were level 1 (less effect). Level 1 harm has no effect on you (but you still write it on your sheet, and must recover to heal it). Record the harm at its original level—for healing purposes, the original harm level applies.",
+      "tags": []
+    },
+    {
+      "id": "vengeful",
+      "name": "Vengeful",
+      "description": "You gain an additional **xp trigger**: *You got payback against someone who harmed you or someone you care about.* If your crew helped you get payback, also mark crew xp.",
+      "tags": []
+    },
+    {
+      "id": "alchemist",
+      "name": "Alchemist",
+      "description": "When you **invent** or **craft** a creation with *alchemical* features, you get **+1 result level** to your roll (a **1-3** becomes a **4/5**, etc.). You begin with one special formula already known.\n\n> Follow the Inventing procedure with the GM to define your first special alchemical formula.",
+      "tags": []
+    },
+    {
+      "id": "analyst",
+      "name": "Analyst",
+      "description": "During downtime, you get **two ticks** to distribute among any long term project clocks that involve investigation or learning a new formula or design plan.",
+      "tags": []
+    },
+    {
+      "id": "artificer",
+      "name": "Artificer",
+      "description": "When you **invent** or **craft** a creation with *spark-craft* features, you get **+1 result level** to your roll (a **1-3** becomes a **4/5**, etc.). You begin with one special design already known.\n\n> Follow the Inventing procedure with the GM to define your first spark-craft design.",
+      "tags": []
+    },
+    {
+      "id": "supernatural_ward",
+      "name": "Supernatural ward",
+      "description": "When you **Wreck** an area with arcane substances, ruining it for any other use, it becomes anathema or enticing to the supernatural (your choice).\n\n> If you make an area anathema to the supernatural, they will do everything they can to avoid it, and will suffer torment if forced inside the area. If you make an area enticing to spirits, they will seek it out and linger in the area, and will suffer torment if forced to leave. This effect lasts for several days over an area the size of a small room. Particularly powerful or prepared entities may roll their quality or arcane magnitude to see how well they're able to resist the effect.",
+      "tags": []
+    },
+    {
+      "id": "saboteur",
+      "name": "Saboteur",
+      "description": "When you **Wreck**, your work is much quieter than it should be and the damage is very well-hidden from casual inspection.\n\n> You can drill holes in things, melt stuff with acid, even use a muffled explosive, and it will all be very quiet and extremely hard to notice.",
+      "tags": []
+    },
+    {
+      "id": "infiltrator",
+      "name": "Infiltrator",
+      "description": "You are not affected by **quality** or **Tier** when you bypass security measures.\n\n> This ability lets you contend with higher-Tier enemies on equal footing. When you're cracking a safe, picking a lock, or sneaking past elite guards, your effect level is never reduced due to superior Tier or quality level of your opposition.\n>\n> Are you a renowned safe cracker? Do people tell stories of how you slipped under the noses of two Chief Inspectors, or are your exceptional talents yet to be discovered?",
+      "tags": []
+    },
+    {
+      "id": "ambush",
+      "name": "Ambush",
+      "description": "When you attack from hiding or spring a trap, you get **+1d** to your roll.\n\n> This ability benefits from preparation— so don't forget you can do that in a flashback.",
+      "tags": []
+    },
+    {
+      "id": "daredevil",
+      "name": "Daredevil",
+      "description": "When you roll a **desperate** action, you get **+1d** to your roll if you also take **-1d** to any resistance rolls against consequences from your action.\n\n> This special ability is a bit of a gamble. The bonus die helps you, but if you suffer consequences, they'll probably be more costly to resist. But hey, you're a daredevil, so no big deal, right?",
+      "tags": []
+    },
+    {
+      "id": "the_devils_footsteps",
+      "name": "The devil's footsteps",
+      "description": "You can **push yourself** to do one of the following: *perform a feat of athletics that verges on the superhuman—maneuver to confuse your enemies so they mistakenly attack each other.*\n\n> When you push yourself to activate this ability, you still get one of the normal benefits of pushing yourself (+1d, +1 effect, etc.) if you're making a roll, in addition to the special ability.\n>\n> If you perform an athletic feat (running, tumbling, balance, climbing, etc.) that verges on the superhuman, you might climb a sheer surface that lacks good hand-holds, tumble safely out of a three-story fall, leap a shocking distance, etc.\n>\n> If you maneuver to confuse your enemies, they attack each other for a moment before they realize their mistake. The GM might make a fortune roll to see how badly they harm or interfere with each other.",
+      "tags": []
+    },
+    {
+      "id": "expertise",
+      "name": "Expertise",
+      "description": "Choose one of your action ratings. When you lead a group action using that action, you can suffer only 1 stress at most, regardless of the number of failed rolls.\n\n> This special ability is good for covering for your team. If they're all terrible at your favored action, you don't have to worry about suffering a lot of stress when you lead their group action.",
+      "tags": []
+    },
+    {
+      "id": "reflexes",
+      "name": "Reflexes",
+      "description": "When there's a question about who acts first, the answer is you.\n\n> This ability gives you the initiative in most situations. Some specially trained NPCs might also have reflexes, but otherwise, you're always the first to act, and can interrupt anyone else who tries to beat you to the punch. This ability usually doesn't negate the need to make an action roll that you would otherwise have to make, but it may improve your position or effect.",
+      "tags": []
+    },
+    {
+      "id": "shadow",
+      "name": "Shadow",
+      "description": "You may expend your **special armor** to resist a consequence from detection or security measures, or to **push yourself** for a feat of athletics or stealth.\n\n> When you use this ability, tick the special armor box on your playbook sheet. If you \"resist a consequence\" of the appropriate type, you avoid it completely. If you use this ability to push yourself, you get one of the benefits (+1d, +1 effect, act despite severe harm) but you don't take 2 stress. Your special armor is restored at the beginning of downtime.",
+      "tags": []
+    },
+    {
+      "id": "rooks_gambit",
+      "name": "Rook's gambit",
+      "description": "Take **2 stress** to roll your best action rating while performing a different action. Say how you adapt your skill to this use.\n\n> This is the \"jack-of-all-trades\" ability. If you want to attempt lots of different sorts of actions and still have a good dice pool to roll, this is the special ability for you.",
+      "tags": []
+    },
+    {
+      "id": "like_looking_into_a_mirror",
+      "name": "Like looking into a mirror",
+      "description": "You can always tell when someone is lying to you.\n\n> This ability works in all situations without restriction. It is very powerful, but also a bit of a curse. You see though every lie, even the kind ones.",
+      "tags": []
+    },
+    {
+      "id": "a_little_something_on_the_side",
+      "name": "A little something on the side",
+      "description": "At the end of each downtime phase, you earn **+2 stash**.\n\n> Since this money comes at the end of downtime, after all downtime actions are resolved, you can't remove it from your stash and spend it on extra activities until your next downtime phase.",
+      "tags": []
+    },
+    {
+      "id": "mesmerism",
+      "name": "Mesmerism",
+      "description": "When you **Sway** someone, you may cause them to forget that it's happened until they next interact with you.\n\n> The victim's memory \"glosses over\" the missing time, so it's not suspicious that they've forgotten something. When you next interact with the victim, they remember everything clearly, including the strange effect of this ability.",
+      "tags": []
+    },
+    {
+      "id": "subterfuge",
+      "name": "Subterfuge",
+      "description": "You may expend your **special armor** to resist a consequence from suspicion or persuasion, or to **push yourself** for subterfuge.\n\n> When you use this ability, tick the special armor box on your playbook sheet. If you \"resist a consequence\" of the appropriate type, you avoid it completely. If you use this ability to push yourself, you get one of the benefits (+1d, +1 effect, act despite severe harm) but you don't take 2 stress. Your special armor is restored at the beginning of downtime.",
+      "tags": []
+    },
+    {
+      "id": "trust_in_me",
+      "name": "Trust in me",
+      "description": "You get **+1d** vs. a target with whom you have an intimate relationship.\n\n> This ability isn't just for social interactions. Any action can get the bonus. \"Intimate\" is for you and the group to define, it need not exclusively mean romantic intimacy.",
+      "tags": []
+    },
+    {
+      "id": "foresight",
+      "name": "Foresight",
+      "description": "Two times per score you can **assist** a teammate without paying stress. Describe how you prepared for this.\n\n> You can narrate an event in the past that helps your teammate now, or you might explain how you expected this situation and planned a helpful contingency that you reveal now.",
+      "tags": []
+    },
+    {
+      "id": "calculating",
+      "name": "Calculating",
+      "description": "Due to your careful planning, during downtime, you may give yourself or another crew member **+1 downtime activity**.\n\n> If you forget to use this ability during downtime, you can still activate it during the score and flashback to the previous downtime when the extra activity happened.",
+      "tags": []
+    },
+    {
+      "id": "connected",
+      "name": "Connected",
+      "description": "During downtime, you get **+1 result level** when you **acquire an asset** or **reduce heat**.\n\n> Your array of underworld connections can be leveraged to loan assets, pressure a vendor to give you a better deal, intimidate witnesses, etc.",
+      "tags": []
+    },
+    {
+      "id": "mastermind",
+      "name": "Mastermind",
+      "description": "You may expend your **special armor** to **protect** a teammate, or to **push yourself** when you gather information or work on a long-term project.\n\n> When you use this ability, tick the special armor box on your playbook sheet. If you protect a teammate, this ability negates or reduces the severity of a consequence or harm that your teammate is facing. You don't have to be present to use this ability—say how you prepared for this situation in the past. If you use this ability to push yourself, you get one of the benefits (+1d, +1 effect, act despite severe harm) but you don't take 2 stress. Your special armor is restored at the beginning of downtime.",
+      "tags": []
+    },
+    {
+      "id": "weaving_the_web",
+      "name": "Weaving the web",
+      "description": "You gain **+1d** to **Consort** when you gather information on a target for a score. You get **+1d** to the **engagement roll** for that operation.\n\n> Your network of underworld connections can always be leveraged to gain insight for a job—even when your contacts aren't aware that they're helping you.",
+      "tags": []
+    },
+    {
+      "id": "arcane_mind",
+      "name": "Arcane mind",
+      "description": "You're always aware of supernatural entities in your presence. Take **+1d** whenever you **gather information** about the supernatural by any means.",
+      "tags": []
+    },
+    {
+      "id": "iron_will",
+      "name": "Iron will",
+      "description": "You are immune to the terror that some supernatural entities inflict on sight. When you make a **resistance roll** with **Resolve**, take **+1d**.\n\n> With this ability, you do not freeze up or flee when confronted by any kind of supernatural entity or strange occult event.",
+      "tags": []
+    },
+    {
+      "id": "ritual",
+      "name": "Ritual",
+      "description": "You know the arcane methods to perform ritual sorcery. You can **Study** an occult ritual (or create a new one) to summon a supernatural effect or being. You begin with one ritual already learned.\n\n> Without this special ability, the study and practice of rituals leaves you utterly vulnerable to the powers you supplicate. Such endeavors are not recommended.",
+      "tags": []
+    },
+    {
+      "id": "strange_methods",
+      "name": "Strange methods",
+      "description": "When you **invent** or **craft** a creation with *arcane* features, get **+1 result level** to your roll (a **1-3** becomes a **4/5**, etc.). You begin with one arcane design already known.\n\n> Follow the Inventing procedure with the GM  to define your first arcane design.",
+      "tags": []
+    },
+    {
+      "id": "warded",
+      "name": "Warded",
+      "description": "You may expend your **special armor** to resist a supernatural consequence, or to **push yourself** when you contend with or employ arcane forces.\n\n> When you use this ability, tick the special armor box on your playbook sheet. If you resist a consequence, this ability negates or reduces its severity. If you use this ability to push yourself, you get one of the benefits (+1d, +1 effect, act despite severe harm) but you don't take 2 stress. Your special armor is restored at the beginning of downtime.",
+      "tags": []
+    },
+    {
+      "id": "deadly",
+      "name": "Deadly",
+      "description": "Each PC may add +1 action rating to **Hunt**, **Prowl**, or **Skirmish** (up to a max rating of 3).\n\n> Each player may choose the action they prefer (you don't all have to choose the same one). If you take this ability during initial character and crew creation, it supersedes the normal starting limit for action ratings.",
+      "tags": []
+    },
+    {
+      "id": "death_veil",
+      "name": "Death veil",
+      "description": "Due to hard-won experience or occult ritual, you don't take extra **heat** when killing is involved on a score.",
+      "tags": []
+    },
+    {
+      "id": "no_traces",
+      "name": "No traces",
+      "description": "When you keep an operation quiet or make it look like an accident, you get half the **rep** value of the target (round up) instead of zero. When you end downtime with zero **heat**, take **+1** **rep**.\n\n> There are many clients who value quiet operations. This ability rewards you for keeping a low-profile.",
+      "tags": []
+    },
+    {
+      "id": "patron",
+      "name": "Patron",
+      "description": "When you advance your **Tier**, it costs half the **coin** it normally would.\n\n> Who is your patron? Why do they help you?",
+      "tags": []
+    },
+    {
+      "id": "predators",
+      "name": "Predators",
+      "description": "When you use a stealth or deception plan to commit murder, take **+1d** to the **engagement roll**.\n\n> This ability applies when the goal is murder. It doesn't apply to other stealth or deception operations you attempt that happen to involve killing.",
+      "tags": []
+    },
+    {
+      "id": "fiends",
+      "name": "Fiends",
+      "description": "Fear is as good as respect. You may count each **wanted level** as if it were **turf**.\n\n> The maximum **wanted level** is 4. Regardless of how much turf you hold (from this ability or otherwise) the minimum **rep** cost to advance your Tier is always 6.*",
+      "tags": []
+    },
+    {
+      "id": "forged_in_the_fire",
+      "name": "Forged in the fire",
+      "description": "Each PC has been toughened by cruel experience. You get **+1d** to **resistance** rolls.\n\n> This ability applies to PCs in the crew. It doesn't confer any special toughness to your cohorts.",
+      "tags": []
+    },
+    {
+      "id": "war_dogs",
+      "name": "War dogs",
+      "description": "When you're at war (-3 faction status), your crew does not suffer -1 hold and PCs still get two downtime activities, instead of just one.",
+      "tags": []
+    },
+    {
+      "id": "anointed",
+      "name": "Anointed",
+      "description": "You gain **+1d** to **resistance** rolls against supernatural threats. You get **+1d** to healing rolls when you have supernatural harm.",
+      "tags": []
+    },
+    {
+      "id": "accord",
+      "name": "Accord",
+      "description": "Sometimes friends are as good as territory. You may treat up to three **+3 faction statuses** you hold as if they are **turf**.\n\n> If your status changes, you lose the turf until it becomes +3 again. Regardless of how much turf you hold (from this ability or otherwise) the minimum **rep** cost to advance your Tier is always 6.",
+      "tags": []
+    },
+    {
+      "id": "high_society",
+      "name": "High society",
+      "description": "It's all about who you know. Take **-1 **heat**** during downtime and **+1d** to **gather information** about the city's elite.",
+      "tags": []
+    },
+    {
+      "id": "pack_rats",
+      "name": "Pack rats",
+      "description": "Your lair is a jumble of stolen items. When you roll to **acquire an asset**, take **+1d**.\n\n> This ability might mean that you actually have the item you need in your pile of stuff, or it could mean you have extra odds and ends to barter with.",
+      "tags": []
+    },
+    {
+      "id": "second_story",
+      "name": "Second story",
+      "description": "When you execute a clandestine infiltration, you get **+1d** to the **engagement roll**.",
+      "tags": []
+    },
+    {
+      "id": "synchronized",
+      "name": "Synchronized",
+      "description": "When you perform a **group action**, you may count multiple 6s from different rolls as a **critical** success.\n\n> For example, Lyric leads a group action to **Attune** to the ghost field to overcome a magical ward on the Dimmer Sisters' door. Emily, Lyric's player, rolls and gets a **6**, and so does Matt! Because the crew has Synchronized, their two separate **6**s count as a **critical** success on the roll.",
+      "tags": []
+    },
+    {
+      "id": "all_hands",
+      "name": "All hands",
+      "description": "During **downtime**, one of your **cohorts** may perform a downtime activity for the crew to **acquire an asset**, **reduce** **heat**, or work on a **long-term project**.",
+      "tags": []
+    },
+    {
+      "id": "just_passing_through",
+      "name": "Just passing through",
+      "description": "During **downtime**, take **-1 **heat****. When your **heat** is 4 or less, you get **+1d** to deceive people when you pass yourselves off as ordinary citizens.",
+      "tags": []
+    }
+  ],
+  "items": [
+    {
+      "id": "blade_or_two",
+      "name": "A Blade or Two",
+      "description": "A fighting knife, switchblade, or other small weapon.",
+      "load": 1,
+      "tags": []
+    },
+    {
+      "id": "throwing_knives",
+      "name": "Throwing Knives",
+      "description": "Six small, balanced throwing blades.",
+      "load": 1,
+      "tags": []
+    },
+    {
+      "id": "pistol",
+      "name": "A Pistol",
+      "description": "A heavy, single-shot pistol.",
+      "load": 1,
+      "tags": []
+    },
+    {
+      "id": "large_weapon",
+      "name": "A Large Weapon",
+      "description": "A weapon requiring two hands (sword, pole-arm, rifle).",
+      "load": 2,
+      "tags": []
+    },
+    {
+      "id": "unusual_weapon",
+      "name": "An Unusual Weapon",
+      "description": "A whip, dart-thrower, trick-blade, etc.",
+      "load": 1,
+      "tags": []
+    },
+    {
+      "id": "armor",
+      "name": "Armor",
+      "description": "Thick leather tunic and high boots.",
+      "load": 2,
+      "tags": []
+    },
+    {
+      "id": "heavy_armor",
+      "name": "Heavy Armor",
+      "description": "Plate and chainmail (requires Armor).",
+      "load": 3,
+      "tags": []
+    },
+    {
+      "id": "burglary_gear",
+      "name": "Burglary Gear",
+      "description": "Lockpicks, prybar, wire-snippers, etc.",
+      "load": 1,
+      "tags": []
+    },
+    {
+      "id": "climbing_gear",
+      "name": "Climbing Gear",
+      "description": "Rope, grappling hook, pitons.",
+      "load": 2,
+      "tags": []
+    },
+    {
+      "id": "arcane_implements",
+      "name": "Arcane Implements",
+      "description": "Vials of blood, bone-dust, spirit-incense.",
+      "load": 1,
+      "tags": []
+    },
+    {
+      "id": "documents",
+      "name": "Documents",
+      "description": "Forged papers, ledgers, blueprints.",
+      "load": 1,
+      "tags": []
+    },
+    {
+      "id": "subterfuge_supplies",
+      "name": "Subterfuge Supplies",
+      "description": "Makeup, fake mustaches, disguises.",
+      "load": 1,
+      "tags": []
+    },
+    {
+      "id": "demolition_tools",
+      "name": "Demolition Tools",
+      "description": "Sledgehammer, heavy prybar, etc.",
+      "load": 2,
+      "tags": []
+    },
+    {
+      "id": "tinkering_tools",
+      "name": "Tinkering Tools",
+      "description": "Fine hand tools and supplies.",
+      "load": 1,
+      "tags": []
+    },
+    {
+      "id": "lantern",
+      "name": "Lantern",
+      "description": "Oil or electroplasmic lamp.",
+      "load": 1,
+      "tags": []
+    }
+  ],
+  "reputations": [
+    {
+      "id": "ambitious",
+      "name": "Ambitious",
+      "description": null
+    },
+    {
+      "id": "brutal",
+      "name": "Brutal",
+      "description": null
+    },
+    {
+      "id": "daring",
+      "name": "Daring",
+      "description": null
+    },
+    {
+      "id": "honorable",
+      "name": "Honorable",
+      "description": null
+    },
+    {
+      "id": "professional",
+      "name": "Professional",
+      "description": null
+    },
+    {
+      "id": "savvy",
+      "name": "Savvy",
+      "description": null
+    },
+    {
+      "id": "subtle",
+      "name": "Subtle",
+      "description": null
+    },
+    {
+      "id": "strange",
+      "name": "Strange",
+      "description": null
+    }
+  ],
+  "traumas": [
+    {
+      "id": "cold",
+      "name": "Cold",
+      "description": "Not moved by emotional appeals or social bonds."
+    },
+    {
+      "id": "haunted",
+      "name": "Haunted",
+      "description": "Often lost in reverie, reliving past horrors, seeing things."
+    },
+    {
+      "id": "obsessed",
+      "name": "Obsessed",
+      "description": "Enthralled by one thing: an activity, a person, an ideology."
+    },
+    {
+      "id": "paranoid",
+      "name": "Paranoid",
+      "description": "Imagine danger everywhere; can't trust others."
+    },
+    {
+      "id": "reckless",
+      "name": "Reckless",
+      "description": "Little regard for your own safety or best interests."
+    },
+    {
+      "id": "soft",
+      "name": "Soft",
+      "description": "Lose your edge; become sentimental, passive, gentle."
+    },
+    {
+      "id": "unstable",
+      "name": "Unstable",
+      "description": "Emotional state is volatile. Can instantly rage, or fall into despair, act impulsively, or freeze up."
+    },
+    {
+      "id": "vicious",
+      "name": "Vicious",
+      "description": "Seek out opportunities to hurt people, even for no good reason."
+    }
+  ],
+  "vices": [
+    {
+      "id": "faith",
+      "name": "Faith",
+      "description": "Dedicated to an unseen power, forgotten god, ancestor, etc."
+    },
+    {
+      "id": "gambling",
+      "name": "Gambling",
+      "description": "Crave games of chance, betting on sporting events, etc."
+    },
+    {
+      "id": "luxury",
+      "name": "Luxury",
+      "description": "Expensive or ostentatious displays of opulence."
+    },
+    {
+      "id": "obligation",
+      "name": "Obligation",
+      "description": "Devoted to a family, a cause, an organization, a charity, etc."
+    },
+    {
+      "id": "pleasure",
+      "name": "Pleasure",
+      "description": "Gratification from lovers, food, drink, drugs, art, theater, etc."
+    },
+    {
+      "id": "stupor",
+      "name": "Stupor",
+      "description": "Seek oblivion in the abuse of drugs, drinking to excess, getting beaten to a pulp in fighting pits, etc."
+    },
+    {
+      "id": "weird",
+      "name": "Weird",
+      "description": "Experiment with strange essences, consort with rogue spirits, observe bizarre rituals or taboos, etc."
+    }
+  ],
+  "crew_upgrades": [
+    {
+      "id": "boat_house",
+      "name": "Boat House",
+      "description": "A boat, a dock, and a shack.",
+      "cost": 1
+    },
+    {
+      "id": "carriage_house",
+      "name": "Carriage House",
+      "description": "A carriage, two draft animals, and a stable.",
+      "cost": 1
+    },
+    {
+      "id": "cohort",
+      "name": "Cohort",
+      "description": "A gang or expert NPC.",
+      "cost": 2
+    },
+    {
+      "id": "hidden_lair",
+      "name": "Hidden Lair",
+      "description": "Secret location.",
+      "cost": 1
+    },
+    {
+      "id": "mastery",
+      "name": "Mastery",
+      "description": "PC action ratings can reach 4.",
+      "cost": 4
+    },
+    {
+      "id": "quality",
+      "name": "Quality",
+      "description": "+1 quality for one gear type.",
+      "cost": 1
+    },
+    {
+      "id": "quarters",
+      "name": "Quarters",
+      "description": "Living space in lair.",
+      "cost": 1
+    },
+    {
+      "id": "secure_lair",
+      "name": "Secure Lair",
+      "description": "Locks, alarms, traps.",
+      "cost": 1
+    },
+    {
+      "id": "training",
+      "name": "Training",
+      "description": "2 xp instead of 1 when training a specific track.",
+      "cost": 1
+    },
+    {
+      "id": "vault",
+      "name": "Vault",
+      "description": "Secure storage for 8 coin.",
+      "cost": 1
+    },
+    {
+      "id": "workshop",
+      "name": "Workshop",
+      "description": "Tools for tinkering/alchemy.",
+      "cost": 1
+    }
+  ],
+  "action_outcomes": [
+    {
+      "position": "controlled",
+      "results": [
+        {
+          "level": "critical",
+          "description": "You do it with increased effect."
+        },
+        {
+          "level": "6",
+          "description": "You do it."
+        },
+        {
+          "level": "4/5",
+          "description": "You hesitate. Withdraw and try a different approach, or else do it with a minor consequence: a minor complication occurs, you have reduced effect, you suffer lesser harm, you end up in a risky position."
+        },
+        {
+          "level": "1-3",
+          "description": "You falter. Press on by seizing a risky opportunity, or withdraw and try a different approach."
+        }
+      ]
+    },
+    {
+      "position": "risky",
+      "results": [
+        {
+          "level": "critical",
+          "description": "You do it with increased effect."
+        },
+        {
+          "level": "6",
+          "description": "You do it."
+        },
+        {
+          "level": "4/5",
+          "description": "You do it, but there's a consequence: you suffer harm, a complication occurs, you have reduced effect, you end up in a desperate position."
+        },
+        {
+          "level": "1-3",
+          "description": "Things go badly. You suffer harm, a complication occurs, you end up in a desperate position, you lose this opportunity."
+        }
+      ]
+    },
+    {
+      "position": "desperate",
+      "results": [
+        {
+          "level": "critical",
+          "description": "You do it with increased effect."
+        },
+        {
+          "level": "6",
+          "description": "You do it."
+        },
+        {
+          "level": "4/5",
+          "description": "You do it, but there's a consequence: you suffer severe harm, a serious complication occurs, you have reduced effect."
+        },
+        {
+          "level": "1-3",
+          "description": "It's the worst outcome. You suffer severe harm, a serious complication occurs, you lose this opportunity for action."
+        }
+      ]
+    }
+  ],
+  "heat_penalties": [
+    {
+      "condition": "0 heat",
+      "heat_added": 0
+    },
+    {
+      "condition": "Smooth & quiet; low exposure",
+      "heat_added": 0
+    },
+    {
+      "condition": "Contained; standard exposure",
+      "heat_added": 2
+    },
+    {
+      "condition": "Loud & chaotic; high exposure",
+      "heat_added": 4
+    },
+    {
+      "condition": "Wild; devastating exposure",
+      "heat_added": 6
+    },
+    {
+      "condition": "High-profile or well-connected target",
+      "heat_added": 1
+    },
+    {
+      "condition": "Situation happened on hostile turf",
+      "heat_added": 1
+    },
+    {
+      "condition": "At war with another faction",
+      "heat_added": 1
+    },
+    {
+      "condition": "Killing was involved",
+      "heat_added": 2
+    }
+  ],
+  "entanglements": [
+    {
+      "heat_band": "0-3",
+      "roll_result": "1-3",
+      "entanglement": "Gang Trouble or The Usual Suspects"
+    },
+    {
+      "heat_band": "0-3",
+      "roll_result": "4/5",
+      "entanglement": "Rivals or Unquiet Dead"
+    },
+    {
+      "heat_band": "0-3",
+      "roll_result": "6",
+      "entanglement": "Cooperation"
+    },
+    {
+      "heat_band": "4-5",
+      "roll_result": "1-3",
+      "entanglement": "Gang Trouble or Questioning"
+    },
+    {
+      "heat_band": "4-5",
+      "roll_result": "4/5",
+      "entanglement": "Reprisals or Unquiet Dead"
+    },
+    {
+      "heat_band": "4-5",
+      "roll_result": "6",
+      "entanglement": "Show of Force"
+    },
+    {
+      "heat_band": "6",
+      "roll_result": "1-3",
+      "entanglement": "Flipped or Interrogation"
+    },
+    {
+      "heat_band": "6",
+      "roll_result": "4/5",
+      "entanglement": "Demonic Notice or Show of Force"
+    },
+    {
+      "heat_band": "6",
+      "roll_result": "6",
+      "entanglement": "Arrest"
+    }
+  ]
+}
