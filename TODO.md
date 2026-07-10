@@ -74,23 +74,30 @@ refer to that document. Each phase should end in something playable/testable.
 
 ## Phase 2: Characters, crew, and world state
 
-- [ ] Character sheet JSON schema, field-for-field with the official sheet (FR-7)
-- [ ] Crew sheet schema: tier, hold, rep, heat/wanted, claims, upgrades,
-      cohorts (FR-7)
-- [ ] Faction, NPC, Location, Item, Score entities (§5)
-- [ ] Relationship edges as data of their own with event-referenced history;
-      faction status (-3 to +3) as a typed edge (FR-33)
-- [ ] Sheet mutations as engine operations only (FR-10)
-- [ ] JSON import/export plus markdown sheet render (FR-8)
-- [ ] SRD base content pack: extract the special-ability bank (full rules
+- [x] Character sheet JSON schema, field-for-field with the official sheet
+      (FR-7) (`engine/character.py`)
+- [x] Crew sheet schema: tier, hold, rep, heat/wanted, claims, upgrades,
+      cohorts (FR-7) (`engine/crew.py`, `engine/crew_mechanics.py`)
+- [x] Faction, NPC, Location, Item, Score entities (§5) (`engine/entities.py`)
+- [x] Relationship edges as data of their own with event-referenced history;
+      faction status (-3 to +3) as a typed edge (FR-33) (`engine/relationships.py`)
+- [x] Sheet mutations as engine operations only (FR-10) (`engine/operations.py`;
+      a representative set - stress/trauma/harm/heat/development - not yet
+      the exhaustive tool surface, which is Phase 4's FR-12)
+- [x] JSON import/export plus markdown sheet render (FR-8) (Pydantic
+      model_dump_json/model_validate_json; `render_markdown` in
+      `engine/character.py` and `engine/crew.py`)
+- [x] SRD base content pack: extract the special-ability bank (full rules
       text), item rules, and reputation lists from the SRD into committed
-      pack data (FR-9, C3a)
-- [ ] Example fixture pack (one playbook, one crew type) proving the pack
+      pack data (FR-9, C3a) (done in Phase 0; `packs/srd_base.json`)
+- [x] Example fixture pack (one playbook, one crew type) proving the pack
       format without core-book content; no shipped setting, settings are
-      session-zero generated (FR-9, FR-36, C4)
-- [ ] Guided sheet entry flow for owners of the book: build a private playbook
+      session-zero generated (FR-9, FR-36, C4) (`packs/example_base.json`,
+      `make build-example-pack`)
+- [x] Guided sheet entry flow for owners of the book: build a private playbook
       assembly (starting dots, ability references into the SRD bank, friends,
-      items) in minutes (FR-8, D6)
+      items) in minutes (FR-8, D6) (`make guided-entry`; saves to
+      `server/data/characters/`, gitignored, never committed)
 
 ## Phase 3: Score & campaign loop (still no AI)
 

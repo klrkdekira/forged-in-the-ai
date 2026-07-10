@@ -1,4 +1,4 @@
-.PHONY: lint test licensing-grep generate drift-check check check-all build dev fetch-srd extract-srd build-example-pack
+.PHONY: lint test licensing-grep generate drift-check check check-all build dev fetch-srd extract-srd build-example-pack guided-entry
 
 # Single entry point for the whole repo (CLAUDE.md); no hosted CI, so this
 # is what the owner runs by hand and what any future CI would call.
@@ -26,6 +26,11 @@ extract-srd:
 # Regenerates packs/example_base.json, the original (non-SRD) fixture pack.
 build-example-pack:
 	cd server && uv run python -m cli build-example-pack
+
+# Interactive: build your own (private, never committed) character from
+# your own copy of the book (FR-8, D6, C6).
+guided-entry:
+	cd server && uv run python -m cli guided-entry
 
 # Regenerates web/src/api/schema.d.ts from the server's OpenAPI spec; run
 # after changing server routes/models and commit the result.
