@@ -4,6 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from engine.campaign import CampaignCanon
 from engine.character import Action, Attribute, Character
 from engine.clocks import Clock, ClockKind
 from engine.crew import Crew
@@ -23,6 +24,7 @@ class GameState(BaseModel):
     character: Character
     crew: Crew
     session: Session
+    canon: CampaignCanon | None = None
     clocks: dict[str, Clock] = Field(default_factory=dict)
     npcs: dict[str, Npc] = Field(default_factory=dict)
     faction_statuses: dict[str, FactionStatus] = Field(
@@ -85,6 +87,14 @@ class CreateNpcArgs(BaseModel):
 class UpdateFactionStatusArgs(BaseModel):
     faction_id: str
     delta: int = Field(..., description="Change to apply, e.g. -1 or -2 after a hostile score")
+
+
+class AddCanonFactArgs(BaseModel):
+    fact: str = Field(..., description="A new established fact about the setting")
+
+
+class InvokeXCardArgs(BaseModel):
+    note: str | None = Field(None, description="Optional context for the campaign log")
 
 
 class ToolExecutor:
@@ -238,6 +248,36 @@ class ToolExecutor:
             result={"status": updated.status},
         )
 
+    def add_canon_fact(self, state: GameState, args: AddCanonFactArgs) -> ToolCallResult:
+        """FR-36: the session-zero-generated setting grows as new facts
+        are established during play."""
+        if state.canon is None:
+            raise ValueError("no campaign canon set for this session")
+        canon = state.canon.with_fact(args.fact)
+        log = state.log.append(
+            "canon",
+            state.canon.setting_name,
+            "canon_fact_added",
+            {"fact": args.fact},
+            self._clock(),
+        )
+        return ToolCallResult(
+            state=state.model_copy(update={"canon": canon, "log": log}), result={"fact": args.fact}
+        )
+
+    def invoke_x_card(self, state: GameState, args: InvokeXCardArgs) -> ToolCallResult:
+        """FR-17: a safety-tool command that rewinds/redirects the fiction
+        without argument - not an SRD mechanic. Logging the event is the
+        engine's part; stopping and redirecting the scene is the GM
+        agent's (system-prompt-level) responsibility, not something this
+        tool decides on the model's behalf."""
+        log = state.log.append(
+            "session", "current", "x_card_invoked", {"note": args.note}, self._clock()
+        )
+        return ToolCallResult(
+            state=state.model_copy(update={"log": log}), result={"acknowledged": True}
+        )
+
 
 # FR-12: the tool surface exposed to the GM agent - name, argument schema,
 # and the ToolExecutor method that handles it. Used both to build
@@ -257,6 +297,8 @@ TOOL_SPECS: dict[str, tuple[type[BaseModel], str]] = {
         UpdateFactionStatusArgs,
         "Change the crew's status with a faction (-3 to +3).",
     ),
+    "add_canon_fact": (AddCanonFactArgs, "Record a new established fact about the setting."),
+    "invoke_x_card": (InvokeXCardArgs, "Safety tool: stop and redirect the current scene."),
 }
 
 

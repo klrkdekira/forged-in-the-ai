@@ -153,10 +153,18 @@ refer to that document. Each phase should end in something playable/testable.
       (`ai/context.py` assemble_turn_context, budget from ADR-0003;
       `ai/canon.py` render_canon builds sections from a GameState, reusing
       Phase 2's markdown renderers)
-- [ ] Session zero flow: lines and veils, tone; X-card command; original
+- [x] Session zero flow: lines and veils, tone; X-card command; original
       setting generation interview persisted as campaign canon (FR-17, FR-36)
-- [ ] Controller model: one human seat controls any number of PCs/cohorts;
-      solo play is the whole crew under one seat (FR-25)
+      (`engine/campaign.py` SessionZeroConfig/CampaignCanon - neither is
+      SRD content, they're generic tabletop safety tools; `add_canon_fact`/
+      `invoke_x_card` tools in `ai/tools.py`. The AI-run interview itself
+      needs a live model, so isn't testable headlessly - the schema and
+      tools it would use are)
+- [x] Controller model: one human seat controls any number of PCs/cohorts;
+      solo play is the whole crew under one seat (FR-25) (`engine/controller.py`
+      Controller/solo_controller; ai/tools.py's single-`character` GameState
+      is still the MVP simplification - wiring multiple PCs through the
+      tool surface is additive follow-up work, not done here)
 - [ ] Session WebSocket channel: server-authoritative state deltas from the
       event log, single-player first (FR-30)
 - [ ] Web play UI: chat with streaming narration (NFR-3) and a roll

@@ -4,10 +4,12 @@ from datetime import UTC, datetime
 import pytest
 
 from ai.tools import (
+    AddCanonFactArgs,
     ApplyHarmArgs,
     CreateClockArgs,
     CreateNpcArgs,
     GameState,
+    InvokeXCardArgs,
     MarkStressArgs,
     RollActionArgs,
     RollFortuneArgs,
@@ -18,6 +20,7 @@ from ai.tools import (
     UpdateFactionStatusArgs,
     tool_definitions,
 )
+from engine.campaign import CampaignCanon
 from engine.character import Action, Attribute, Character
 from engine.clocks import ClockKind
 from engine.crew import Crew
@@ -59,6 +62,8 @@ def test_tool_definitions_cover_every_registered_tool():
         "transition_phase",
         "create_npc",
         "update_faction_status",
+        "add_canon_fact",
+        "invoke_x_card",
     }
     assert all("parameters" in d["function"] for d in definitions)
 
@@ -162,6 +167,29 @@ def test_update_faction_status_accumulates_across_calls():
 
     assert result.result["status"] == -2
     assert result.state.faction_statuses["f1"].history == [1, 2]
+
+
+def test_add_canon_fact_grows_the_campaign_canon():
+    # FR-36: the session-zero-generated setting grows during play.
+    state = _state().model_copy(update={"canon": CampaignCanon(setting_name="Test City")})
+
+    result = _executor().add_canon_fact(state, AddCanonFactArgs(fact="The docks are haunted."))
+
+    assert result.state.canon.facts == ["The docks are haunted."]
+
+
+def test_add_canon_fact_refuses_without_canon_set():
+    with pytest.raises(ValueError, match="no campaign canon"):
+        _executor().add_canon_fact(_state(), AddCanonFactArgs(fact="anything"))
+
+
+def test_invoke_x_card_logs_an_event():
+    # FR-17: safety-tool command, logged but not narratively resolved here.
+    result = _executor().invoke_x_card(_state(), InvokeXCardArgs(note="pacing check"))
+
+    assert result.result["acknowledged"]
+    assert result.state.log.events[-1].event_type == "x_card_invoked"
+    assert result.state.log.events[-1].payload["note"] == "pacing check"
 
 
 def test_tool_calls_are_deterministic_for_the_same_seed():
