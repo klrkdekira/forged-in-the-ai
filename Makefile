@@ -22,7 +22,6 @@ drift-check:
 
 check: lint test licensing-grep drift-check
 
-# Placeholder: real once the root Dockerfile (TODO.md Phase 0) lands.
 build:
 	docker build -t forged-in-the-ai .
 

@@ -14,7 +14,7 @@ refer to that document. Each phase should end in something playable/testable.
       single entry point for lint, tests, drift check, licensing grep, and
       the image build (no hosted CI; if CI is ever added it runs the same
       Makefile targets)
-- [ ] Multi-stage `Dockerfile` at root: web build stage, then Python runtime
+- [x] Multi-stage `Dockerfile` at root: web build stage, then Python runtime
       stage; FastAPI serves the built SPA from a single image (NFR-7, ADR-0004)
 - [ ] `compose.yml` at root: one-command run with user-data volume; `dev`
       profile with uvicorn --reload and the Vite dev server; optional Ollama

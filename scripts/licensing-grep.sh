@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 forbidden='Doskvol|Duskwall'
 # Docs describing the content policy are allowed to name the forbidden
 # terms; code, packs, and fixtures are not.
-allowlist='^(NOTICE\.md|CLAUDE\.md|README\.md|packs/README\.md|SPECIFICATION\.md|docs/.*\.md)$'
+allowlist='^(NOTICE\.md|CLAUDE\.md|README\.md|packs/README\.md|SPECIFICATION\.md|docs/.*\.md|scripts/licensing-grep\.sh)$'
 
 hit_file="$(mktemp)"
 trap 'rm -f "$hit_file"' EXIT
