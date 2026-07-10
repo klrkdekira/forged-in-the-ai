@@ -5,9 +5,11 @@ import { Input } from '@/components/ui/input'
 import { useSessionSocket } from '@/hooks/use-session-socket'
 
 import { ChatMessageView } from './chat-message-view'
+import { RollNegotiationDialog } from './roll-negotiation-dialog'
 
 export function PlayPage() {
-  const { connected, busy, messages, state, sendMessage } = useSessionSocket()
+  const { connected, busy, messages, state, pendingRoll, sendMessage, sendRollDecision } =
+    useSessionSocket()
   const [draft, setDraft] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -61,6 +63,8 @@ export function PlayPage() {
           Send
         </Button>
       </form>
+
+      {pendingRoll && <RollNegotiationDialog proposal={pendingRoll} onDecide={sendRollDecision} />}
     </div>
   )
 }

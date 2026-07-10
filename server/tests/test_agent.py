@@ -10,6 +10,7 @@ from ai.llm_client import LLMClient
 from ai.tools import GameState, ToolExecutor
 from engine.character import Character
 from engine.crew import Crew
+from engine.rolls import Effect
 from engine.session import Session
 
 AT = datetime(2026, 1, 1, tzinfo=UTC)
@@ -128,6 +129,72 @@ async def test_agent_stops_after_too_many_tool_rounds():
 
     assert events[-1].type == "error"
     assert not any(e.type == "narration_done" for e in events)
+
+
+@pytest.mark.anyio
+async def test_agent_pauses_a_roll_action_for_the_players_decision():
+    # FR-16: the GM agent proposes position/effect (Action Roll steps 1-4)
+    # but pauses before rolling so the player can add bonus dice or trade
+    # position for effect (step 5, "Add Bonus Dice"/"Trading Position for
+    # Effect") - it should never resolve the roll on its own.
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        calls.append(body)
+        if body.get("stream"):
+            return httpx.Response(
+                200, text='data: {"choices":[{"delta":{"content":"Rolled."}}]}\n\ndata: [DONE]\n\n'
+            )
+        if len(calls) == 1:
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [
+                        {
+                            "message": _tool_call_message(
+                                "roll_action",
+                                {"action": "prowl", "position": "risky", "effect": "standard"},
+                            )
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(
+            200, json={"choices": [{"message": {"role": "assistant", "content": "placeholder"}}]}
+        )
+
+    client = LLMClient(
+        base_url="http://fake-llm/v1", model="test-model", transport=httpx.MockTransport(handler)
+    )
+    agent = GmAgent(client, _executor())
+    turn = agent.handle_player_message(_state(), "I sneak past the guards.")
+
+    proposed = await anext(turn)
+    assert proposed.type == "roll_proposed"
+    assert proposed.payload == {
+        "action": "prowl",
+        "position": "risky",
+        "effect": "standard",
+        "pool_size": 0,
+    }
+
+    tool_event = await turn.asend({"push_dice": True, "trade": "worse_position_better_effect"})
+    assert tool_event.type == "tool_call"
+    # trading risky/standard for desperate/great, then pushing for +1d
+    assert tool_event.payload["result"]["position"] == "desperate"
+    assert tool_event.payload["result"]["effect"] == Effect.GREAT.value
+
+    remaining = [event async for event in turn]
+    await client.aclose()
+
+    done_event = next(e for e in remaining if e.type == "narration_done")
+    stress_events = [
+        event
+        for event in done_event.payload["state"]["log"]["events"]
+        if event["event_type"] == "stress_marked"
+    ]
+    assert stress_events[-1]["payload"]["amount"] == 2  # push_dice cost
 
 
 @pytest.mark.anyio

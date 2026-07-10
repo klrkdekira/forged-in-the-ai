@@ -103,6 +103,57 @@ def test_session_ws_runs_a_tool_call_before_narrating():
         assert "band" in tool_event["result"]
 
 
+def test_session_ws_pauses_for_a_roll_decision_then_resolves_it():
+    # FR-16: the WS handler drives the agent's negotiation pause - it must
+    # wait for a roll_decision message before the proposed roll executes.
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        calls.append(body)
+        if body.get("stream"):
+            return httpx.Response(
+                200,
+                text='data: {"choices":[{"delta":{"content":"You slip past."}}]}\n\n'
+                "data: [DONE]\n\n",
+            )
+        if len(calls) == 1:
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [
+                        {
+                            "message": _tool_call_message(
+                                "roll_action",
+                                {"action": "prowl", "position": "risky", "effect": "standard"},
+                            )
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(
+            200, json={"choices": [{"message": {"role": "assistant", "content": "placeholder"}}]}
+        )
+
+    app.dependency_overrides[get_llm_client] = lambda: _mock_client(handler)
+
+    with TestClient(app) as test_client, test_client.websocket_connect("/ws/session") as ws:
+        ws.receive_json()  # initial state
+        ws.send_json({"type": "player_message", "text": "I sneak past the guards."})
+
+        proposed = ws.receive_json()
+        assert proposed["type"] == "roll_proposed"
+        assert proposed["position"] == "risky"
+        assert proposed["effect"] == "standard"
+
+        ws.send_json({"type": "roll_decision", "decision": {"push_effect": True}})
+
+        tool_event = ws.receive_json()
+        assert tool_event["type"] == "tool_call"
+        assert tool_event["name"] == "roll_action"
+        assert tool_event["result"]["effect"] == 3  # standard, pushed +1
+
+
 def test_session_ws_closes_when_the_llm_is_not_configured(monkeypatch):
     monkeypatch.setenv("LLM_BASE_URL", "")
     monkeypatch.setenv("LLM_MODEL", "")

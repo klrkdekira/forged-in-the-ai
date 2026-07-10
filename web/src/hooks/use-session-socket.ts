@@ -12,6 +12,23 @@ export interface GameStateSnapshot {
   [key: string]: unknown
 }
 
+// FR-16: the GM-proposed roll (Action Roll steps 1-4) the player negotiates
+// before it executes - pool/position/effect shown, push/Devil's Bargain/
+// trade-off offered.
+export interface RollProposal {
+  action: string
+  position: 'controlled' | 'risky' | 'desperate'
+  effect: 'zero' | 'limited' | 'standard' | 'great' | 'extreme'
+  pool_size: number
+}
+
+export interface RollDecision {
+  push_dice?: boolean
+  push_effect?: boolean
+  devils_bargain?: string | null
+  trade?: 'worse_position_better_effect' | 'better_position_worse_effect' | null
+}
+
 // FR-30: server-authoritative state deltas over one WebSocket connection.
 // The client only ever sends player messages; every state change arrives
 // as a tool_call/narration_done event from the server.
@@ -20,6 +37,7 @@ export function useSessionSocket() {
   const [busy, setBusy] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [state, setState] = useState<GameStateSnapshot | null>(null)
+  const [pendingRoll, setPendingRoll] = useState<RollProposal | null>(null)
   const socketRef = useRef<WebSocket | null>(null)
 
   useEffect(() => {
@@ -35,7 +53,16 @@ export function useSessionSocket() {
         case 'state':
           setState(data.state)
           break
+        case 'roll_proposed':
+          setPendingRoll({
+            action: data.action,
+            position: data.position,
+            effect: data.effect,
+            pool_size: data.pool_size,
+          })
+          break
         case 'tool_call':
+          setPendingRoll(null)
           setMessages((prev) => [...prev, { kind: 'tool', name: data.name, result: data.result }])
           break
         case 'narration_chunk':
@@ -71,5 +98,10 @@ export function useSessionSocket() {
     socketRef.current?.send(JSON.stringify({ type: 'player_message', text }))
   }, [])
 
-  return { connected, busy, messages, state, sendMessage }
+  const sendRollDecision = useCallback((decision: RollDecision) => {
+    setPendingRoll(null)
+    socketRef.current?.send(JSON.stringify({ type: 'roll_decision', decision }))
+  }, [])
+
+  return { connected, busy, messages, state, pendingRoll, sendMessage, sendRollDecision }
 }

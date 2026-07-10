@@ -14,6 +14,16 @@ class Position(StrEnum):
     DESPERATE = "desperate"
 
 
+_POSITION_ORDER = [Position.CONTROLLED, Position.RISKY, Position.DESPERATE]
+
+
+def step_position(position: Position, delta: int) -> Position:
+    """SRD: "Trading Position for Effect" - moves towards desperate (positive
+    delta) or controlled (negative delta), clamped at either end."""
+    index = _POSITION_ORDER.index(position)
+    return _POSITION_ORDER[max(0, min(len(_POSITION_ORDER) - 1, index + delta))]
+
+
 class Effect(IntEnum):
     """SRD: "Effect" - zero and extreme are outside the three named levels,
     reached only by factors or a critical (zero) / by factors alone

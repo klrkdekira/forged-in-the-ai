@@ -171,16 +171,22 @@ refer to that document. Each phase should end in something playable/testable.
       event log, single-player first (FR-30) (`app/session_ws.py`,
       `/ws/session`; verified end to end against the user's real vLLM
       backend, not just mocked)
-- [ ] Web play UI: chat with streaming narration (NFR-3) and a roll
+- [x] Web play UI: chat with streaming narration (NFR-3) and a roll
       negotiation dialog; pool/position/effect shown, push/assist/devil's
       bargain/trade-off offered before rolling (FR-16). Chat with real
       streaming narration is done (`/play`, `ai/agent.py`'s GmAgent) and
       playtest-verified live, with markdown rendering of narration
-      (`react-markdown` in `chat-message-view.tsx`). Not done: a pre-roll
-      negotiation dialog - right now the GM agent calls `roll_action`
-      directly, the player never sees/adjusts pool/position/effect or gets
-      offered push/assist/Devil's Bargain/trade-off before the roll
-      happens.
+      (`react-markdown` in `chat-message-view.tsx`). The negotiation dialog
+      (`RollNegotiationDialog`) pauses the GM agent's tool-calling loop on
+      a `roll_action` proposal - `GmAgent.handle_player_message` yields a
+      `roll_proposed` event and resumes via `asend()` once the player
+      submits push/Devil's Bargain/trade-off choices (`ai/agent.py`'s
+      `_resolve_roll`, `engine/rolls.py`'s `step_position`); verified live
+      against the user's real vLLM backend end to end (proposal shown,
+      decision applied, roll executed with the right bonus dice/position/
+      effect). Assistance is not wired in: the tool surface's GameState is
+      still single-PC (FR-25's MVP simplification), so there's no second
+      character to take the stress and grant it.
 - [ ] Interactive sheet panel: stress/harm/XP/load/coin ticks via engine
       operations only (FR-28)
 - [ ] Table view v1: active clocks and crew claim map (FR-29)

@@ -6,7 +6,16 @@ from ai.canon import render_canon
 from ai.context import assemble_turn_context
 from ai.llm_client import LLMClient
 from ai.system_prompt import build_system_prompt
-from ai.tools import TOOL_SPECS, GameState, ToolExecutor, tool_definitions
+from ai.tools import (
+    TOOL_SPECS,
+    GameState,
+    MarkStressArgs,
+    RollActionArgs,
+    RollDecision,
+    ToolExecutor,
+    tool_definitions,
+)
+from engine.rolls import step_position
 
 MAX_TOOL_ROUNDS = 6
 
@@ -70,9 +79,24 @@ class GmAgent:
                 }
             )
             for call in response.tool_calls:
-                result = self._run_tool(state, call.name, call.arguments)
-                if "state" in result:
-                    state = result.pop("state")
+                if call.name == "roll_action":
+                    proposal = RollActionArgs.model_validate_json(call.arguments)
+                    pool_size = state.character.action_ratings.get(proposal.action, 0)
+                    decision_payload = yield AgentTurnEvent(
+                        type="roll_proposed",
+                        payload={
+                            "action": proposal.action.value,
+                            "position": proposal.position.value,
+                            "effect": proposal.effect.name.lower(),
+                            "pool_size": pool_size,
+                        },
+                    )
+                    decision = RollDecision.model_validate(decision_payload or {})
+                    result, state = self._resolve_roll(state, proposal, decision)
+                else:
+                    result = self._run_tool(state, call.name, call.arguments)
+                    if "state" in result:
+                        state = result.pop("state")
                 yield AgentTurnEvent(
                     type="tool_call", payload={"name": call.name, "result": result}
                 )
@@ -96,6 +120,35 @@ class GmAgent:
         yield AgentTurnEvent(
             type="narration_done", payload={"state": state.model_dump(mode="json")}
         )
+
+    def _resolve_roll(
+        self, state: GameState, proposal: RollActionArgs, decision: RollDecision
+    ) -> tuple[dict, GameState]:
+        """FR-16: applies the player's `RollDecision` to a GM-proposed
+        action roll, then executes it. `proposal` carries the GM's
+        judgement (goal, action, position, effect - Action Roll steps 1-4);
+        this method covers step 5, "Add Bonus Dice", plus "Trading Position
+        for Effect"."""
+        position, effect = proposal.position, proposal.effect
+        if decision.trade == "worse_position_better_effect":
+            position, effect = step_position(position, 1), effect.bumped(1)
+        elif decision.trade == "better_position_worse_effect":
+            position, effect = step_position(position, -1), effect.bumped(-1)
+        if decision.push_effect:
+            effect = effect.bumped(1)
+
+        stress_spent = 2 * decision.push_dice + 2 * decision.push_effect
+        if stress_spent:
+            state = self._executor.mark_stress(state, MarkStressArgs(amount=stress_spent)).state
+
+        bonus_dice = int(decision.push_dice) + int(bool(decision.devils_bargain))
+        roll_result = self._executor.roll_action(
+            state,
+            RollActionArgs(action=proposal.action, position=position, effect=effect),
+            bonus_dice=bonus_dice,
+            devils_bargain=decision.devils_bargain,
+        )
+        return roll_result.result, roll_result.state
 
     def _run_tool(self, state: GameState, name: str, raw_arguments: str) -> dict:
         spec = TOOL_SPECS.get(name)

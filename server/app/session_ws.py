@@ -56,9 +56,26 @@ async def session_ws(websocket: WebSocket, client: LLMClient = Depends(get_llm_c
             if message.get("type") != "player_message":
                 continue
 
-            async for event in agent.handle_player_message(state, message.get("text", "")):
+            turn = agent.handle_player_message(state, message.get("text", ""))
+            to_send = None
+            while True:
+                try:
+                    event = await (turn.asend(to_send) if to_send is not None else anext(turn))
+                except StopAsyncIteration:
+                    break
+                to_send = None
                 await websocket.send_json({"type": event.type, **event.payload})
-                if event.type == "narration_done":
+                if event.type == "roll_proposed":
+                    # FR-16: pause the tool-calling loop for the player's
+                    # push/assist/Devil's Bargain/trade-off decision before
+                    # the proposed roll actually executes.
+                    decision_message = await websocket.receive_json()
+                    to_send = (
+                        decision_message.get("decision", {})
+                        if decision_message.get("type") == "roll_decision"
+                        else {}
+                    )
+                elif event.type == "narration_done":
                     state = GameState.model_validate(event.payload["state"])
     except WebSocketDisconnect:
         pass

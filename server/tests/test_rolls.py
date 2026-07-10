@@ -9,6 +9,7 @@ from engine.rolls import (
     band_for,
     fortune_roll,
     resistance_roll,
+    step_position,
 )
 
 
@@ -68,6 +69,17 @@ def test_effect_bump_caps_at_extreme():
 
 def test_effect_bump_floors_at_zero():
     assert Effect.ZERO.bumped(-1) is Effect.ZERO
+
+
+def test_step_position_moves_towards_desperate_and_clamps():
+    # SRD: "Trading Position for Effect".
+    assert step_position(Position.RISKY, 1) is Position.DESPERATE
+    assert step_position(Position.DESPERATE, 1) is Position.DESPERATE
+
+
+def test_step_position_moves_towards_controlled_and_clamps():
+    assert step_position(Position.RISKY, -1) is Position.CONTROLLED
+    assert step_position(Position.CONTROLLED, -1) is Position.CONTROLLED
 
 
 def test_fortune_roll_uses_the_same_bands_as_an_action_roll():
