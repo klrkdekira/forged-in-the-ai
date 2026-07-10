@@ -6,7 +6,8 @@ the AI runs the fiction, NPCs, and factions while a deterministic rules
 engine rolls the dice and keeps an auditable record of the world state.
 Single-player first, multiplayer later.
 
-**Status: pre-implementation.** Specification and planning only; no code yet.
+**Status: Phase 0 (foundations).** Monorepo skeleton in place; see
+[TODO.md](TODO.md) for progress.
 
 **Stack** (ADR-0002): Python/FastAPI and Pydantic server, React and TypeScript
 (Vite) web client with interactive sheets and maps, monorepo, LLM via any

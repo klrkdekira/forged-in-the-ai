@@ -9,7 +9,7 @@ refer to that document. Each phase should end in something playable/testable.
       `docs/adr/0002-tech-stack.md`
 - [x] Decide LLM interface (D2): OpenAI-compatible API (Ollama/vLLM/hosted),
       see `docs/adr/0001-openai-compatible-llm-api.md`
-- [ ] Monorepo skeleton per ADR-0002: `server/` (uv, FastAPI, ruff, pytest),
+- [x] Monorepo skeleton per ADR-0002: `server/` (uv, FastAPI, ruff, pytest),
       `web/` (pnpm, Vite, React, vitest), `packs/`; a root Makefile is the
       single entry point for lint, tests, drift check, licensing grep, and
       the image build (no hosted CI; if CI is ever added it runs the same
