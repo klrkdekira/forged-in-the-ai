@@ -2,7 +2,7 @@ import random
 from collections.abc import Callable
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from engine.campaign import CampaignCanon
 from engine.character import Action, Attribute, Character
@@ -41,7 +41,20 @@ class ToolCallResult(BaseModel):
 class RollActionArgs(BaseModel):
     action: Action
     position: Position
-    effect: Effect
+    effect: Effect = Field(
+        ..., description="limited, standard, great, zero, or extreme (name or Effect's int value)"
+    )
+
+    @field_validator("effect", mode="before")
+    @classmethod
+    def _effect_by_name(cls, value: object) -> object:
+        """`Effect` is an IntEnum (its ordering drives `bumped()`), but
+        that means the raw tool-call value would otherwise have to be a
+        magic number (0-4) instead of a name - awkward for a human typing
+        JSON, and an easy mistake for a model reading the tool schema."""
+        if isinstance(value, str) and value.upper() in Effect.__members__:
+            return Effect[value.upper()]
+        return value
 
 
 class RollFortuneArgs(BaseModel):

@@ -1,4 +1,4 @@
-.PHONY: lint test licensing-grep generate drift-check check check-all build dev fetch-srd extract-srd build-example-pack guided-entry index-srd
+.PHONY: lint test licensing-grep generate drift-check check check-all build dev fetch-srd extract-srd build-example-pack guided-entry index-srd dev-session
 
 # Single entry point for the whole repo (CLAUDE.md); no hosted CI, so this
 # is what the owner runs by hand and what any future CI would call.
@@ -35,6 +35,11 @@ guided-entry:
 # (Re)builds the SRD retrieval index (FTS5, app.db) from the local SRD copy.
 index-srd:
 	cd server && uv run python -m cli index-srd
+
+# Interactive headless engine session (no LLM/web client): drive the same
+# tool surface the GM agent uses, for dev/testing (kept from Phases 1-3).
+dev-session:
+	cd server && uv run python -m cli session
 
 # Regenerates web/src/api/schema.d.ts from the server's OpenAPI spec; run
 # after changing server routes/models and commit the result.

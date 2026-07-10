@@ -68,6 +68,20 @@ def test_tool_definitions_cover_every_registered_tool():
     assert all("parameters" in d["function"] for d in definitions)
 
 
+def test_roll_action_args_accepts_effect_by_name():
+    # Effect is an IntEnum for its bumped() arithmetic, but a tool call
+    # (human or model) should be able to pass "standard", not a raw 2.
+    args = RollActionArgs(action=Action.PROWL, position=Position.RISKY, effect="standard")
+
+    assert args.effect is Effect.STANDARD
+
+
+def test_roll_action_args_still_accepts_the_effect_enum_directly():
+    args = RollActionArgs(action=Action.PROWL, position=Position.RISKY, effect=Effect.GREAT)
+
+    assert args.effect is Effect.GREAT
+
+
 def test_roll_action_uses_the_character_action_rating_and_logs_it():
     result = _executor().roll_action(
         _state(),

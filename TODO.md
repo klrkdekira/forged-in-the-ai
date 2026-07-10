@@ -175,7 +175,10 @@ refer to that document. Each phase should end in something playable/testable.
 - [ ] Table view v1: active clocks and crew claim map (FR-29)
 - [ ] Journal view v1: chronological turn log with expandable roll audit
       records (FR-31, FR-32)
-- [ ] Dev CLI harness for headless engine sessions (kept from Phases 1–3)
+- [x] Dev CLI harness for headless engine sessions (kept from Phases 1–3)
+      (`make dev-session`, `server/cli/session.py`: an interactive loop
+      over the same ToolExecutor the GM agent uses, `<tool> <json args>`;
+      load/create a character and crew, saves the session log as JSONL)
 - [ ] Playtest: one full solo session (free play, score, downtime)
 
 ## Phase 5: Persistence & campaign continuity

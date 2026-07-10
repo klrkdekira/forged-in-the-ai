@@ -6,6 +6,7 @@ from cli import fetch_srd as fetch_srd_module
 from cli import guided_entry as guided_entry_module
 from cli import index_srd as index_srd_module
 from cli import licensing_grep as licensing_grep_module
+from cli import session as session_module
 
 
 @click.group()
@@ -19,3 +20,4 @@ cli.add_command(licensing_grep_module.licensing_grep)
 cli.add_command(example_pack_module.build_example_pack)
 cli.add_command(guided_entry_module.guided_entry)
 cli.add_command(index_srd_module.index_srd)
+cli.add_command(session_module.dev_session)
