@@ -1,0 +1,122 @@
+{
+  "id": "example",
+  "name": "Original Example Pack",
+  "description": "An entirely original playbook (Wayfarer) and crew type (Couriers), proving the content-pack format without any core-book content.",
+  "version": "1.0.0",
+  "special_abilities": [
+    {
+      "id": "keen_eye",
+      "name": "Keen Eye",
+      "description": "When you Survey unfamiliar territory, take +1d.",
+      "tags": [
+        "playbook"
+      ]
+    },
+    {
+      "id": "silver_tongue",
+      "name": "Silver Tongue",
+      "description": "When you Sway a stranger you've just met, take +1 effect.",
+      "tags": [
+        "playbook"
+      ]
+    },
+    {
+      "id": "long_road",
+      "name": "Long Road",
+      "description": "You never suffer reduced effect from fatigue or bad weather.",
+      "tags": [
+        "playbook"
+      ]
+    },
+    {
+      "id": "fleet_footed",
+      "name": "Fleet-Footed",
+      "description": "Your crew's couriers take +1d when racing against a deadline.",
+      "tags": [
+        "crew"
+      ]
+    }
+  ],
+  "items": [
+    {
+      "id": "travelers_cloak",
+      "name": "Traveler's Cloak",
+      "description": null,
+      "load": 1,
+      "tags": []
+    },
+    {
+      "id": "worn_map",
+      "name": "Worn Map",
+      "description": null,
+      "load": 0,
+      "tags": []
+    },
+    {
+      "id": "signal_whistle",
+      "name": "Signal Whistle",
+      "description": null,
+      "load": 1,
+      "tags": []
+    }
+  ],
+  "reputations": [],
+  "traumas": [],
+  "vices": [],
+  "crew_upgrades": [
+    {
+      "id": "way_stations",
+      "name": "Way-Stations",
+      "description": "A network of safe houses along the routes your crew travels.",
+      "cost": 2
+    }
+  ],
+  "action_outcomes": [],
+  "heat_penalties": [],
+  "entanglements": [],
+  "magnitude_levels": [],
+  "downtime_activities": [],
+  "srd_sections": [],
+  "playbooks": [
+    {
+      "id": "wayfarer",
+      "name": "Wayfarer",
+      "starting_action_dots": {
+        "survey": 1,
+        "prowl": 1,
+        "sway": 1
+      },
+      "special_ability_ids": [
+        "keen_eye",
+        "silver_tongue",
+        "long_road"
+      ],
+      "xp_trigger": "Address a challenge by travelling into danger or the unknown.",
+      "item_ids": [
+        "travelers_cloak",
+        "worn_map",
+        "signal_whistle"
+      ],
+      "contact_names": [
+        "Old Rowan the Ferryman",
+        "Captain Vess"
+      ]
+    }
+  ],
+  "crew_types": [
+    {
+      "id": "couriers",
+      "name": "Couriers",
+      "starting_upgrade_ids": [
+        "way_stations"
+      ],
+      "special_ability_ids": [
+        "fleet_footed"
+      ],
+      "claim_names": [
+        "Waystation House",
+        "River Ferry Dock"
+      ]
+    }
+  ]
+}

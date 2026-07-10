@@ -91,6 +91,40 @@ class SrdSection(BaseModel):
     line: int = Field(..., description="1-indexed line number in the source SRD file")
 
 
+class PlaybookTemplate(BaseModel):
+    """FR-9: a playbook as content-pack data (name, starting dots, ability
+    list, xp trigger, items, friends). C3/C4: a *real* Blades in the Dark
+    playbook's assembly is core-book content and must never be filled in
+    here - this shape exists to be populated either by an original example
+    pack, or privately by a book owner via guided entry (never committed)."""
+
+    id: str
+    name: str
+    starting_action_dots: dict[str, int] = Field(
+        default_factory=dict, description="The playbook's 3 pre-assigned dots"
+    )
+    special_ability_ids: list[str] = Field(
+        default_factory=list, description="Ability ids this playbook may choose from"
+    )
+    xp_trigger: str
+    item_ids: list[str] = Field(default_factory=list)
+    contact_names: list[str] = Field(
+        default_factory=list, description="NPCs available as a friend/rival choice"
+    )
+
+
+class CrewTypeTemplate(BaseModel):
+    """FR-9: a crew type as content-pack data. Same C3/C4 caveat as
+    `PlaybookTemplate` - a real BitD crew type's assembly is core-book
+    content and must never be filled in here."""
+
+    id: str
+    name: str
+    starting_upgrade_ids: list[str] = Field(default_factory=list)
+    special_ability_ids: list[str] = Field(default_factory=list)
+    claim_names: list[str] = Field(default_factory=list)
+
+
 class ContentPack(BaseModel):
     id: str
     name: str
@@ -110,3 +144,5 @@ class ContentPack(BaseModel):
     srd_sections: list[SrdSection] = Field(
         default_factory=list, description="Section index of the source SRD file"
     )
+    playbooks: list[PlaybookTemplate] = Field(default_factory=list)
+    crew_types: list[CrewTypeTemplate] = Field(default_factory=list)

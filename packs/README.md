@@ -8,9 +8,9 @@ as versioned data rather than code (SPECIFICATION.md §7, principle 2).
 A pack is a JSON file matching the `ContentPack` schema in
 `server/engine/packs.py` (id, name, description, version, plus the
 mechanics collections: special abilities, items, reputations, traumas,
-vices, crew upgrades, action-outcome/heat/entanglement tables). The
-playbook and crew-type sections of that schema grow in Phase 2 ("SRD base
-content pack" / "Example fixture pack" in TODO.md).
+vices, crew upgrades, action-outcome/heat/entanglement/magnitude/downtime
+tables, an SRD section index, and `PlaybookTemplate`/`CrewTypeTemplate`
+entries).
 
 `server/engine/pack_loader.py` loads packs:
 
@@ -23,8 +23,21 @@ content pack" / "Example fixture pack" in TODO.md).
   itself doesn't distinguish committed from private packs; only where you
   point it does.
 
-Regenerate `srd_base.json` from a local SRD copy with `make extract-srd`
-(see the root README's "The SRD" section).
+Two packs are committed here:
+
+- `srd_base.json`: SRD-derived mechanics only (C3a) - regenerate from a
+  local SRD copy with `make extract-srd` (see the root README's "The SRD"
+  section). Its `playbooks`/`crew_types` lists are empty: the SRD gives us
+  the ability bank, not licensed playbook/crew-type assemblies.
+- `example_base.json`: one entirely original playbook (Wayfarer) and crew
+  type (Couriers), proving the `PlaybookTemplate`/`CrewTypeTemplate` shape
+  end to end without any core-book content (FR-9, C4). Regenerate with
+  `make build-example-pack` (`server/cli/example_pack.py`).
+
+A real Blades in the Dark playbook/crew-type's own assembly (starting
+dots, ability selection, friends, items) is core-book content and must
+never be added to either pack; that assembly is private, book-owner-only
+data built via guided entry (TODO.md Phase 2), never committed.
 
 ## Content policy
 
