@@ -510,7 +510,19 @@ refer to that document. Each phase should end in something playable/testable.
       the roll error is fed back to the model to retry, a failed
       companion decision falls back to rolling as proposed (no stress,
       no bargain), a failed roleplay call stays quiet. Two new
-      `test_agent.py` regressions cover them.)
+      `test_agent.py` regressions cover them.
+
+      Also from the realignment pass: the "deferred web UI" stance had
+      an actively misleading edge, not just a missing feature - the
+      client's WS switch silently dropped `companion_message`, so a
+      companion's line was invisible live, and `messagesFromLog`'s
+      post-undo rebuild ignored `speaker`, relabelling companion lines
+      as if the human typed them. Fixed minimally: a `companion` chat
+      kind rendered under the character's own name, live and on rebuild
+      (`use-session-socket.ts`, `chat-message-view.tsx`, covered by
+      `use-session-socket.test.ts`). The rest - character switcher,
+      companion sheet view, surfacing `companion_roll_decision` - stays
+      deferred as before.)
 - [ ] Playtest: multi-session campaign, verify canon consistency (G3)
 
 ## Phase 6: Rulebook ingestion (bring your own book)

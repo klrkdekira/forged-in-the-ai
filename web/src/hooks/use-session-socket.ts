@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 export type ChatMessage =
   | { kind: 'player'; text: string }
+  | { kind: 'companion'; name: string; text: string }
   | { kind: 'narration'; text: string; done: boolean }
   | { kind: 'tool'; name: string; result: unknown }
   | { kind: 'error'; message: string }
@@ -166,15 +167,25 @@ export interface RollDecision {
 // rewound log too, not just the mechanical state - rebuilt from the same
 // player_message/narration events the recap/journal already use, rather
 // than just clearing it (a blank panel would look like a bug, not a
-// deliberate rewind).
-function messagesFromLog(events: JournalEntry[]): ChatMessage[] {
+// deliberate rewind). A player_message carrying a speaker is an AI
+// companion's line (FR-35), rebuilt under its own name rather than as
+// something the human typed. Exported for its own tests.
+export function messagesFromLog(events: JournalEntry[]): ChatMessage[] {
   return events
     .filter((entry) => entry.event_type === 'player_message' || entry.event_type === 'narration')
-    .map((entry) =>
-      entry.event_type === 'player_message'
-        ? { kind: 'player', text: String(entry.payload.text) }
-        : { kind: 'narration', text: String(entry.payload.text), done: true },
-    )
+    .map((entry): ChatMessage => {
+      if (entry.event_type === 'narration') {
+        return { kind: 'narration', text: String(entry.payload.text), done: true }
+      }
+      if (entry.payload.speaker !== undefined) {
+        return {
+          kind: 'companion',
+          name: String(entry.payload.speaker),
+          text: String(entry.payload.text),
+        }
+      }
+      return { kind: 'player', text: String(entry.payload.text) }
+    })
 }
 
 // FR-18/FR-30: server-authoritative state deltas over one WebSocket
@@ -234,6 +245,15 @@ export function useSessionSocket(campaignId: string) {
             const last = prev.at(-1)
             return last?.kind === 'narration' ? [...prev.slice(0, -1), { ...last, done: true }] : prev
           })
+          break
+        case 'companion_message':
+          // FR-35: an AI crewmate's in-character line, labelled with its
+          // own name - without this it would be invisible live and only
+          // surface (mislabelled) after an undo rebuild.
+          setMessages((prev) => [
+            ...prev,
+            { kind: 'companion', name: data.name, text: data.text },
+          ])
           break
         case 'error':
           setBusy(false)

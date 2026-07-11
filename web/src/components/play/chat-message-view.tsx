@@ -14,6 +14,14 @@ export function ChatMessageView({
       </div>
     )
   }
+  if (message.kind === 'companion') {
+    return (
+      <div className="self-start max-w-[80%] rounded-lg bg-secondary/60 px-3 py-2 text-sm">
+        <div className="text-xs font-semibold text-muted-foreground">{message.name}</div>
+        {message.text}
+      </div>
+    )
+  }
   if (message.kind === 'narration') {
     return (
       <div className="self-start max-w-[80%] rounded-lg bg-accent/40 px-3 py-2 text-sm [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-5 [&_ol]:pl-5 [&_strong]:font-semibold [&_em]:italic">
