@@ -11,7 +11,9 @@ COPY server/pyproject.toml server/uv.lock ./
 RUN uv sync --locked --no-dev --no-install-project
 
 COPY server/app ./app
+COPY server/ai ./ai
 COPY server/engine ./engine
+COPY server/ingestion ./ingestion
 COPY server/state ./state
 RUN uv sync --locked --no-dev
 
@@ -33,6 +35,7 @@ FROM server-base AS runtime
 # Alembic runs at startup (app/main.py lifespan), not needed for the OpenAPI
 # export, so it's copied only here.
 COPY server/alembic ./alembic
+COPY server/alembic_campaign ./alembic_campaign
 COPY server/alembic.ini ./alembic.ini
 COPY --from=web-build /web/dist ./app/static
 
@@ -44,5 +47,9 @@ RUN mkdir -p /data && chown app:app /data
 USER app
 
 ENV PATH="/app/.venv/bin:$PATH"
+# The image has no local SRD copy and no dev CLI, so the SRD retrieval
+# index (FR-13) is fetched and built on first start instead (app/main.py
+# lifespan via state/srd_bootstrap.py); a no-op once app.db has it.
+ENV SRD_AUTOINDEX=1
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

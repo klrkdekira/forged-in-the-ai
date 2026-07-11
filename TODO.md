@@ -15,7 +15,15 @@ refer to that document. Each phase should end in something playable/testable.
       the image build (no hosted CI; if CI is ever added it runs the same
       Makefile targets)
 - [x] Multi-stage `Dockerfile` at root: web build stage, then Python runtime
-      stage; FastAPI serves the built SPA from a single image (NFR-7, ADR-0004)
+      stage; FastAPI serves the built SPA from a single image (NFR-7, ADR-0004).
+      (Phase 6 realignment: the COPY list had never grown past Phase 0's
+      `app`/`engine`/`state`, so the image stopped building the moment
+      `app/` first imported `ai/` (Phase 4) and nobody ran `make build`
+      again to notice; `server/ai`, `server/ingestion`, and
+      `server/alembic_campaign` (campaign dbs migrate on open) are now
+      copied too. Verified by exporting OpenAPI from a tree containing
+      only the copied directories, not by a real `docker compose build` -
+      no container runtime on the dev machine this round.)
 - [x] `compose.yml` at root: one-command run with user-data volume (NFR-7,
       ADR-0004). Hot-reload dev is `make dev` (uvicorn --reload plus the
       Vite dev server, no Docker) rather than a compose `dev` profile;
