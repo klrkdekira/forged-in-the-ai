@@ -334,15 +334,27 @@ refer to that document. Each phase should end in something playable/testable.
       truncation is. Verified live against a real uvicorn process: mark
       stress, adjust coin, undo to just after the stress mark - coin
       reverts, stress doesn't.)
-- [ ] Table view v2: generated district/score maps (FR-29). Canvas library
-      picked: Konva.js via `react-konva` (ADR-0007, D4 leftover resolved).
-      Session zero (above) now actually populates `CampaignCanon.locations`
-      instead of leaving canon permanently `None` - Table view's new
-      "Setting" block (`table-view-panel.tsx`) shows the plain list
-      already. Still open: `CampaignCanon.locations` remains a flat
-      `list[str]` with no positions or adjacency (`ClaimSnapshot` carries
-      neither either) - designing that layout data, and the Konva
-      rendering itself, is this item's remaining scope.
+- [x] Table view v2: generated district/score maps (FR-29). Canvas library:
+      Konva.js via `react-konva` (ADR-0007). Decided against storing
+      positions/adjacency at all (the "remaining scope" the ADR and the
+      session-zero entry above flagged): `CampaignCanon.locations` stays
+      a flat `list[str]` and `ClaimSnapshot` is unchanged - inventing
+      pixel coordinates is an odd thing to ask an LLM to generate
+      reliably, and §3's non-goals rule out a measured grid anyway, so a
+      *computed* layout is both simpler and more honest about what this
+      is (a fiction aid, not a geography). `lib/map-layout.ts`'s
+      `layoutInRing` (pure, unit-tested) spaces however many
+      locations/claims exist evenly around a circle; no connecting lines,
+      since there's no adjacency data to draw them from.
+      `district-map.tsx`/`claim-map.tsx` render that as Konva nodes -
+      claims distinguish controlled (filled) from contested (outline),
+      turf gets a second ring - alongside the existing precise text
+      list, not replacing it. "Score map" specifically (highlighting a
+      score's target location) is out of scope: nothing tracks a score's
+      target location at all yet. Not visually verified live - no headed
+      browser available in this environment - only via `tsc`/`vite
+      build` succeeding and the layout math's own tests; a real visual
+      check is worth doing before calling this done-done.
 - [x] Journal view v2: filters by type, phase, and entity (FR-32)
       (`journal-panel.tsx`, client-only - the full log was already
       broadcast, so no server change needed. Type buckets event_types

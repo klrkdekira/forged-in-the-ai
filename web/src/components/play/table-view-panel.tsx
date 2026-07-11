@@ -5,14 +5,17 @@ import type {
   SheetOperation,
 } from '@/hooks/use-session-socket'
 
+import { ClaimMap } from './claim-map'
+import { DistrictMap } from './district-map'
 import { TickBoxes } from './tick-boxes'
 
-// FR-29: table view v1 - active clocks (clickable, same tick-box control as
-// the sheet panel's stress/XP), the crew's claims, and (once session zero
-// has generated one, FR-36) the setting. The claim/district map itself
-// (generated imagery via Konva, ADR-0007) is v2's remaining job (TODO.md);
-// both claims and the setting are plain read-only text for now, since
-// nothing currently mutates a claim or a location at runtime.
+// FR-29: active clocks (clickable, same tick-box control as the sheet
+// panel's stress/XP), the crew's claims and the district map (each as a
+// generated Konva diagram, ADR-0007, alongside the precise text list -
+// the map is a fiction aid, not the only source of the detail), and
+// (once session zero has generated one, FR-36) the setting. Neither map
+// has stored positions/adjacency to lay out from yet, so both use a
+// computed ring layout (lib/map-layout.ts) rather than an authored one.
 export function TableViewPanel({
   clocks,
   crew,
@@ -42,9 +45,7 @@ export function TableViewPanel({
             <span className="text-muted-foreground">
               Factions: {canon.factions.length > 0 ? canon.factions.join(', ') : 'none yet'}
             </span>
-            <span className="text-muted-foreground">
-              Locations: {canon.locations.length > 0 ? canon.locations.join(', ') : 'none yet'}
-            </span>
+            <DistrictMap locations={canon.locations} />
           </div>
         ) : (
           <p className="text-xs text-muted-foreground">
@@ -80,7 +81,8 @@ export function TableViewPanel({
 
       <div className="flex flex-col gap-2">
         <span className="text-xs font-semibold text-muted-foreground">Claims</span>
-        {crew.claims.length > 0 ? (
+        <ClaimMap claims={crew.claims} />
+        {crew.claims.length > 0 && (
           <ul className="flex flex-col gap-1">
             {crew.claims.map((claim) => (
               <li key={claim.id} className="flex items-center justify-between text-xs">
@@ -92,8 +94,6 @@ export function TableViewPanel({
               </li>
             ))}
           </ul>
-        ) : (
-          <p className="text-xs text-muted-foreground">No claims yet.</p>
         )}
       </div>
     </div>
