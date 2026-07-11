@@ -443,9 +443,10 @@ refer to that document. Each phase should end in something playable/testable.
       by name - a small pre-existing inconsistency fixed along the way:
       character-tagged events used to log `character.name` as
       `entity_id` where clocks/npcs always used a caller-supplied id.
-      `roll_fortune` is the one remaining exception: it has no
-      `character_id` argument at all - the mechanic is trait-agnostic -
-      but still logs the primary PC's name as its `entity_id`).
+      `roll_fortune` was the one leftover, still logging the primary
+      PC's name; the realignment pass moved it to `("session",
+      "current")`, since the mechanic is trait-agnostic and belongs to
+      no character).
 
       This round closed the remaining three pieces, server-side only (web
       UI - a character switcher, visually distinguishing an AI companion's

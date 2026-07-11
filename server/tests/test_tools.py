@@ -340,7 +340,7 @@ def test_add_canon_fact_grows_the_campaign_canon():
 
 
 def test_add_canon_fact_refuses_without_canon_set():
-    with pytest.raises(ValueError, match="no campaign canon"):
+    with pytest.raises(EngineError, match="no campaign canon"):
         _executor().add_canon_fact(_state(), AddCanonFactArgs(fact="anything"))
 
 
@@ -357,7 +357,7 @@ def test_add_canon_location_grows_the_map():
 
 
 def test_add_canon_location_refuses_without_canon_set():
-    with pytest.raises(ValueError, match="no campaign canon"):
+    with pytest.raises(EngineError, match="no campaign canon"):
         _executor().add_canon_location(_state(), AddCanonLocationArgs(location="anything"))
 
 

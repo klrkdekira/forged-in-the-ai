@@ -354,11 +354,13 @@ class ToolExecutor:
         )
 
     def roll_fortune(self, state: GameState, args: RollFortuneArgs) -> ToolCallResult:
-        """SRD: "Fortune Roll"."""
+        """SRD: "Fortune Roll". Logged under the session, not a PC: the
+        mechanic is trait-agnostic (a faction's quality, weather, an
+        offscreen outcome), so it belongs to no character."""
         roll = fortune_roll(args.pool_size, self._rng)
         log = state.log.append(
-            "character",
-            state.character.name,
+            "session",
+            "current",
             "fortune_roll",
             roll.model_dump(mode="json"),
             self._clock(),
@@ -630,7 +632,7 @@ class ToolExecutor:
         """FR-36: the session-zero-generated setting grows as new facts
         are established during play."""
         if state.canon is None:
-            raise ValueError("no campaign canon set for this session")
+            raise EngineError("no campaign canon set for this session")
         canon = state.canon.with_fact(args.fact)
         log = state.log.append(
             "canon",
@@ -647,7 +649,7 @@ class ToolExecutor:
         """FR-15: the map (Table view's district map) grows as the fiction
         introduces new locations during play, not just at session zero."""
         if state.canon is None:
-            raise ValueError("no campaign canon set for this session")
+            raise EngineError("no campaign canon set for this session")
         canon = state.canon.with_location(args.location)
         log = state.log.append(
             "canon",
