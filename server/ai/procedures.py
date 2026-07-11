@@ -27,7 +27,12 @@ GM_ROLE = ProcedureDoc(
         "how risky and effective it is (position/effect), which "
         "consequences follow, and whether a roll is needed and which kind. "
         "Players decide which of their advancement triggers actually "
-        "happened."
+        "happened.\n"
+        "World generation: when the fiction needs a new NPC, location, or "
+        "established fact, generate it and call the matching tool "
+        "(create_npc/add_canon_location/add_canon_fact) so it persists as "
+        "canon and the table's map keeps growing - don't just narrate it "
+        "and move on."
     ),
 )
 

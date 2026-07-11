@@ -28,3 +28,8 @@ class CampaignCanon(BaseModel):
 
     def with_fact(self, fact: str) -> "CampaignCanon":
         return self.model_copy(update={"facts": [*self.facts, fact]})
+
+    def with_location(self, location: str) -> "CampaignCanon":
+        """FR-15: the map grows as new locations are discovered during
+        play, the same way facts do."""
+        return self.model_copy(update={"locations": [*self.locations, location]})

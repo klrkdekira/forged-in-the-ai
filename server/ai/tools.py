@@ -133,6 +133,10 @@ class AddCanonFactArgs(BaseModel):
     fact: str = Field(..., description="A new established fact about the setting")
 
 
+class AddCanonLocationArgs(BaseModel):
+    location: str = Field(..., description="A new location the fiction has just introduced")
+
+
 class SetSessionZeroConfigArgs(BaseModel):
     lines: list[str] = Field(default_factory=list, description="Hard limits: never in the fiction")
     veils: list[str] = Field(
@@ -463,6 +467,24 @@ class ToolExecutor:
             state=state.model_copy(update={"canon": canon, "log": log}), result={"fact": args.fact}
         )
 
+    def add_canon_location(self, state: GameState, args: AddCanonLocationArgs) -> ToolCallResult:
+        """FR-15: the map (Table view's district map) grows as the fiction
+        introduces new locations during play, not just at session zero."""
+        if state.canon is None:
+            raise ValueError("no campaign canon set for this session")
+        canon = state.canon.with_location(args.location)
+        log = state.log.append(
+            "canon",
+            state.canon.setting_name,
+            "canon_location_added",
+            {"location": args.location},
+            self._clock(),
+        )
+        return ToolCallResult(
+            state=state.model_copy(update={"canon": canon, "log": log}),
+            result={"location": args.location},
+        )
+
     def invoke_x_card(self, state: GameState, args: InvokeXCardArgs) -> ToolCallResult:
         """FR-17: a safety-tool command that rewinds/redirects the fiction
         without argument - not an SRD mechanic. Logging the event is the
@@ -496,6 +518,10 @@ TOOL_SPECS: dict[str, tuple[type[BaseModel], str]] = {
         "Change the crew's status with a faction (-3 to +3).",
     ),
     "add_canon_fact": (AddCanonFactArgs, "Record a new established fact about the setting."),
+    "add_canon_location": (
+        AddCanonLocationArgs,
+        "Add a newly-introduced location to the setting's map.",
+    ),
     "invoke_x_card": (InvokeXCardArgs, "Safety tool: stop and redirect the current scene."),
     "set_session_zero_config": (
         SetSessionZeroConfigArgs,

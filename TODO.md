@@ -354,7 +354,19 @@ refer to that document. Each phase should end in something playable/testable.
       target location at all yet. Not visually verified live - no headed
       browser available in this environment - only via `tsc`/`vite
       build` succeeding and the layout math's own tests; a real visual
-      check is worth doing before calling this done-done.
+      check is worth doing before calling this done-done. The map's
+      other half - growing as new areas are discovered, not just at
+      session zero (FR-15) - was a real gap: `add_canon_fact` existed
+      for free-text facts but nothing added a structured *location*
+      after the initial `set_campaign_canon` call.
+      `CampaignCanon.with_location` (`engine/campaign.py`) plus an
+      `add_canon_location` tool (`ai/tools.py`, same shape as
+      `add_canon_fact`) close it, with a replay fold case and a
+      `GM role` procedure nudge to call it (and `create_npc`/
+      `add_canon_fact`) instead of just narrating new things into
+      existence. No web change needed: `DistrictMap` already re-renders
+      from `canon.locations` on every state update, so a newly-added
+      location shows up automatically.
 - [x] Journal view v2: filters by type, phase, and entity (FR-32)
       (`journal-panel.tsx`, client-only - the full log was already
       broadcast, so no server change needed. Type buckets event_types

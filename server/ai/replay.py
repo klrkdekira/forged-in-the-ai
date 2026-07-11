@@ -76,6 +76,8 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
             faction_statuses[event.entity_id] = current.changed(payload["delta"], event.sequence)
         elif event.event_type == "canon_fact_added" and canon is not None:
             canon = canon.with_fact(payload["fact"])
+        elif event.event_type == "canon_location_added" and canon is not None:
+            canon = canon.with_location(payload["location"])
         elif event.event_type == "session_zero_configured":
             session_zero = SessionZeroConfig.model_validate(payload)
         elif event.event_type == "canon_set":

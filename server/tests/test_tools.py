@@ -6,6 +6,7 @@ import pytest
 from ai.tools import (
     SHEET_OPERATIONS,
     AddCanonFactArgs,
+    AddCanonLocationArgs,
     AdjustCoinArgs,
     ApplyHarmArgs,
     CreateClockArgs,
@@ -72,6 +73,7 @@ def test_tool_definitions_cover_every_registered_tool():
         "create_npc",
         "update_faction_status",
         "add_canon_fact",
+        "add_canon_location",
         "invoke_x_card",
         "set_session_zero_config",
         "set_campaign_canon",
@@ -211,6 +213,23 @@ def test_add_canon_fact_grows_the_campaign_canon():
 def test_add_canon_fact_refuses_without_canon_set():
     with pytest.raises(ValueError, match="no campaign canon"):
         _executor().add_canon_fact(_state(), AddCanonFactArgs(fact="anything"))
+
+
+def test_add_canon_location_grows_the_map():
+    # FR-15: the map grows as new locations are discovered during play.
+    state = _state().model_copy(
+        update={"canon": CampaignCanon(setting_name="Test City", locations=["The Docks"])}
+    )
+
+    result = _executor().add_canon_location(state, AddCanonLocationArgs(location="The Old Quarter"))
+
+    assert result.state.canon.locations == ["The Docks", "The Old Quarter"]
+    assert result.state.log.events[-1].event_type == "canon_location_added"
+
+
+def test_add_canon_location_refuses_without_canon_set():
+    with pytest.raises(ValueError, match="no campaign canon"):
+        _executor().add_canon_location(_state(), AddCanonLocationArgs(location="anything"))
 
 
 def test_set_session_zero_config_records_lines_veils_and_tone():

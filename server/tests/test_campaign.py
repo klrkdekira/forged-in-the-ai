@@ -22,3 +22,13 @@ def test_campaign_canon_facts_stay_in_order():
     canon = CampaignCanon(setting_name="Test City").with_fact("first").with_fact("second")
 
     assert canon.facts == ["first", "second"]
+
+
+def test_campaign_canon_grows_with_new_locations():
+    # FR-15: the map grows as new locations are discovered during play.
+    canon = CampaignCanon(setting_name="Test City", locations=["The Docks"])
+
+    grown = canon.with_location("The Old Quarter")
+
+    assert grown.locations == ["The Docks", "The Old Quarter"]
+    assert canon.locations == ["The Docks"]

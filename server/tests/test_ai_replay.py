@@ -97,6 +97,33 @@ def test_replay_state_folds_session_zero_configuration_and_canon():
     assert replayed.canon.factions == ["The Rustworks Combine"]
 
 
+def test_replay_state_folds_newly_discovered_locations_onto_canon():
+    # FR-15: the map grows during play - undo/rewind must not drop a
+    # location discovered after session zero.
+    base = _base_state()
+    log = base.log
+    log = log.append(
+        "canon",
+        "Harrow's Reach",
+        "canon_set",
+        {
+            "setting_name": "Harrow's Reach",
+            "tone": None,
+            "factions": [],
+            "locations": ["The Sunken Market"],
+            "facts": [],
+        },
+        AT,
+    )
+    log = log.append(
+        "canon", "Harrow's Reach", "canon_location_added", {"location": "The Old Quarter"}, AT
+    )
+
+    replayed = replay_state(base, log.events)
+
+    assert replayed.canon.locations == ["The Sunken Market", "The Old Quarter"]
+
+
 def test_replay_state_reproduces_a_truncated_prefix_of_the_log():
     # This is the mechanism undo/rewind is built on: replaying only a
     # prefix of the log reconstructs state as of that earlier point.
