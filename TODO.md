@@ -321,8 +321,13 @@ refer to that document. Each phase should end in something playable/testable.
       truncation is. Verified live against a real uvicorn process: mark
       stress, adjust coin, undo to just after the stress mark - coin
       reverts, stress doesn't.)
-- [ ] Table view v2: generated district/score maps (FR-29); pick canvas
-      library (Pixi vs. Konva, D4 leftover) and record an ADR
+- [ ] Table view v2: generated district/score maps (FR-29). Canvas library
+      picked: Konva.js via `react-konva` (ADR-0007, D4 leftover resolved).
+      Still open: the location/district data model itself doesn't exist
+      yet (`CampaignCanon.locations` is a flat `list[str]`, no positions
+      or adjacency; `ClaimSnapshot` carries neither either) - designing
+      that, and how session-zero's generation (FR-36) populates it, is
+      this item's remaining scope before any rendering code.
 - [x] Journal view v2: filters by type, phase, and entity (FR-32)
       (`journal-panel.tsx`, client-only - the full log was already
       broadcast, so no server change needed. Type buckets event_types

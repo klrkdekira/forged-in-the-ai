@@ -334,8 +334,8 @@ Record outcomes as short ADRs in `docs/adr/` when decided.
   capability probe and fallback (NFR-6).
 - **D4: First client. DECIDED** (ADR-0002): the React web app, with
   interactive sheets and maps (§6.7). A thin dev CLI harness remains for
-  engine development and headless tests. Canvas library for maps (Pixi vs.
-  Konva) is deferred until the map view is built.
+  engine development and headless tests. Canvas library for maps: Konva.js
+  via `react-konva` (ADR-0007).
 - **D5: Multiplayer transport** (when the phase arrives): self-hosted web vs.
   Discord bridge.
 - **D6: Sheet ingestion. LARGELY DECIDED**: for BitD, guided manual entry is
