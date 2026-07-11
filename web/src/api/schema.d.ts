@@ -53,6 +53,135 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ingestion/extract-text": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Extract Uploaded Text
+         * @description FR-21: the rulebook ingestion pipeline's first step (Phase 6) - a
+         *     user's uploaded PDF/markdown/plain text file, reduced to normalised
+         *     plain text. Returned to the caller rather than persisted: FR-22's
+         *     LLM-assisted structuring and FR-23's private-module storage are their
+         *     own later steps, not this one's job.
+         */
+        post: operations["extract_uploaded_text_api_ingestion_extract_text_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ingestion/extract-module": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Extract Module
+         * @description FR-22: the ingestion pipeline's second step - FR-21's normalised
+         *     text, LLM-structured into a best-effort `ModuleDraft` (FR-9's
+         *     content-pack shapes). Takes already-extracted text (from
+         *     `/extract-text`) rather than a re-upload, keeping the two steps
+         *     independently callable. The result is returned, not persisted or
+         *     activated in any campaign - the review/edit step and FR-23's private
+         *     storage are their own, later steps.
+         */
+        post: operations["extract_module_api_ingestion_extract_module_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ingestion/finalize-module": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finalize Module Endpoint
+         * @description FR-22: the review/edit step's validation boundary - a reviewed/
+         *     edited draft becomes a real `ContentPack` (FR-9) once it validates
+         *     here (an edit that no longer matches `ModuleDraft`'s schema is
+         *     already refused by FastAPI/pydantic before this body ever runs,
+         *     CLAUDE.md's "the engine may refuse; it never guesses"). Returned to
+         *     the caller, not persisted or associated with any campaign: FR-23's
+         *     private-module storage is the next, separate step. No licensing
+         *     check here or on save: a private module is the user's own local
+         *     data (NOTICE.md, C6) - the firewall guards distribution surfaces
+         *     (commits, the committed `packs/`), not what stays on the user's
+         *     machine.
+         */
+        post: operations["finalize_module_endpoint_api_ingestion_finalize_module_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ingestion/modules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Modules Endpoint
+         * @description FR-23: every private module currently saved - summaries only
+         *     (CLAUDE.md's schema-is-the-contract habit already does this for
+         *     `CampaignSummary`), since a module's full content can be sizeable and
+         *     the caller usually just wants to know what's available.
+         */
+        get: operations["list_modules_endpoint_api_ingestion_modules_get"];
+        put?: never;
+        /**
+         * Save Module Endpoint
+         * @description FR-23/C6: private-module storage - a finalized module (typically
+         *     `/finalize-module`'s own response, re-posted here once the user is
+         *     happy with it) saved under the user's data directory, never the
+         *     repo's committed `packs/` (`state/module_store.py`). Re-saving an
+         *     existing id overwrites it - there's no separate "update" verb, same
+         *     as `/api/campaigns` has none for its own snapshot overwrites.
+         */
+        post: operations["save_module_endpoint_api_ingestion_modules_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ingestion/modules/{module_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Module Endpoint */
+        get: operations["get_module_endpoint_api_ingestion_modules__module_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -74,6 +203,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** Body_extract_uploaded_text_api_ingestion_extract_text_post */
+        Body_extract_uploaded_text_api_ingestion_extract_text_post: {
+            /** File */
+            file: string;
+        };
         /** CampaignSummary */
         CampaignSummary: {
             /** Id */
@@ -91,15 +225,434 @@ export interface components {
              */
             updated_at: string;
         };
+        /** ContentPack */
+        ContentPack: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string;
+            /** Version */
+            version: string;
+            /** Special Abilities */
+            special_abilities?: components["schemas"]["SpecialAbility"][];
+            /** Items */
+            items?: components["schemas"]["Item"][];
+            /** Reputations */
+            reputations?: components["schemas"]["Reputation"][];
+            /** Traumas */
+            traumas?: components["schemas"]["Trauma"][];
+            /** Vices */
+            vices?: components["schemas"]["Vice"][];
+            /** Crew Upgrades */
+            crew_upgrades?: components["schemas"]["CrewUpgrade"][];
+            /** Action Outcomes */
+            action_outcomes?: components["schemas"]["PositionRoll"][];
+            /** Heat Penalties */
+            heat_penalties?: components["schemas"]["HeatPenalty"][];
+            /** Entanglements */
+            entanglements?: components["schemas"]["EntanglementEntry"][];
+            /** Magnitude Levels */
+            magnitude_levels?: components["schemas"]["MagnitudeLevel"][];
+            /** Downtime Activities */
+            downtime_activities?: components["schemas"]["DowntimeActivity"][];
+            /**
+             * Srd Sections
+             * @description Section index of the source SRD file
+             */
+            srd_sections?: components["schemas"]["SrdSection"][];
+            /** Playbooks */
+            playbooks?: components["schemas"]["PlaybookTemplate"][];
+            /** Crew Types */
+            crew_types?: components["schemas"]["CrewTypeTemplate"][];
+            /** Factions */
+            factions?: components["schemas"]["FactionSeed"][];
+            /** Tables */
+            tables?: components["schemas"]["ExtractedTable"][];
+        };
         /** CreateCampaignRequest */
         CreateCampaignRequest: {
             /** Name */
             name: string;
         };
+        /**
+         * CrewTypeTemplate
+         * @description FR-9: a crew type as content-pack data. Same C3/C4 caveat as
+         *     `PlaybookTemplate` - a real BitD crew type's assembly is core-book
+         *     content and must never be filled in here.
+         */
+        CrewTypeTemplate: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Starting Upgrade Ids */
+            starting_upgrade_ids?: string[];
+            /** Special Ability Ids */
+            special_ability_ids?: string[];
+            /** Claim Names */
+            claim_names?: string[];
+        };
+        /** CrewUpgrade */
+        CrewUpgrade: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string;
+            /**
+             * Cost
+             * @description Number of upgrade boxes required
+             * @default 1
+             */
+            cost: number;
+        };
+        /** DowntimeActivity */
+        DowntimeActivity: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Summary
+             * @description What the activity does and how to resolve it
+             */
+            summary: string;
+            /**
+             * Results
+             * @description Roll-result bands, if the activity has one
+             */
+            results?: components["schemas"]["RollResult"][];
+        };
+        /** EntanglementEntry */
+        EntanglementEntry: {
+            /**
+             * Heat Band
+             * @description '0-3', '4-5', '6'
+             */
+            heat_band: string;
+            /**
+             * Roll Result
+             * @description '1-3', '4-5', '6'
+             */
+            roll_result: string;
+            /** Entanglement */
+            entanglement: string;
+        };
+        /** ExtractModuleRequest */
+        ExtractModuleRequest: {
+            /** Text */
+            text: string;
+        };
+        /** ExtractModuleResponse */
+        ExtractModuleResponse: {
+            draft: components["schemas"]["ModuleDraft"];
+            /**
+             * Truncated
+             * @description True if the source text was cut to fit the extraction budget
+             */
+            truncated: boolean;
+        };
+        /**
+         * ExtractedTable
+         * @description FR-22: a rulebook table that doesn't match one of the SRD-shaped
+         *     tables this file already models (action outcomes, heat, entanglements,
+         *     magnitude, downtime) - free-form so an arbitrary hack's own tables
+         *     (critical injuries, gear lists, faction goals, whatever it has) still
+         *     come through instead of being dropped for not fitting a BitD shape.
+         */
+        ExtractedTable: {
+            /** Name */
+            name: string;
+            /** Columns */
+            columns?: string[];
+            /** Rows */
+            rows?: string[][];
+        };
+        /** ExtractedText */
+        ExtractedText: {
+            /** Filename */
+            filename: string;
+            /** Text */
+            text: string;
+            /** Char Count */
+            char_count: number;
+        };
+        /**
+         * FactionSeed
+         * @description FR-22: seed data for a faction a module's setting material
+         *     describes - deliberately lighter than `engine.entities.Faction` (no
+         *     clocks/assets/hold): those are live campaign state a GM fills in
+         *     during play (`create_npc`'s sibling would be a `create_faction` tool,
+         *     not built yet), not something a rulebook module holds ready-made.
+         */
+        FactionSeed: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Tier Hint
+             * @description Suggested starting tier, if the source text gives one
+             */
+            tier_hint?: number | null;
+        };
+        /** FinalizeModuleRequest */
+        FinalizeModuleRequest: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string;
+            /** Version */
+            version: string;
+            /** @description The reviewed/edited draft - whatever the user changed since /extract-module */
+            draft: components["schemas"]["ModuleDraft"];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** HeatPenalty */
+        HeatPenalty: {
+            /** Condition */
+            condition: string;
+            /** Heat Added */
+            heat_added: number;
+        };
+        /** Item */
+        Item: {
+            /**
+             * Id
+             * @description Unique identifier for the item
+             */
+            id: string;
+            /**
+             * Name
+             * @description Display name
+             */
+            name: string;
+            /**
+             * Description
+             * @description Item rules or description
+             */
+            description?: string | null;
+            /**
+             * Load
+             * @description Load cost. 0 means italicized/0 load.
+             * @default 1
+             */
+            load: number;
+            /** Tags */
+            tags?: string[];
+        };
+        /**
+         * MagnitudeLevel
+         * @description One row (0-6) of the SRD "Magnitude" master table.
+         */
+        MagnitudeLevel: {
+            /**
+             * Level
+             * @description 0-6
+             */
+            level: number;
+            /**
+             * Area
+             * @description Physical space at this level, e.g. 'A city block'
+             */
+            area: string;
+            /**
+             * Scale
+             * @description Group size at this level, e.g. 'A large gang (20)'
+             */
+            scale: string;
+            /**
+             * Duration
+             * @description Time span at this level, e.g. 'A day'
+             */
+            duration: string;
+            /**
+             * Range
+             * @description Distance at this level, e.g. 'Down the road'
+             */
+            range: string;
+            /**
+             * Quality Tier
+             * @description Quality/Tier adjective, e.g. 'Superior'
+             */
+            quality_tier: string;
+            /**
+             * Force
+             * @description Force adjective, e.g. 'Powerful'
+             */
+            force: string;
+            /**
+             * Quality Example
+             * @description Example item/entity at this quality
+             */
+            quality_example: string;
+            /**
+             * Force Example
+             * @description Example force/effect at this level
+             */
+            force_example: string;
+        };
+        /**
+         * ModuleDraft
+         * @description FR-22: an LLM's best-effort structured extraction from a rulebook's
+         *     normalised text (FR-21) - not yet a committed `ContentPack` (FR-9),
+         *     though it reuses the same nested shapes (`engine/packs.py`) so
+         *     finalising a reviewed draft (`ingestion/module_review.py`) is a
+         *     straight assembly, not a translation. The user reviews and edits this
+         *     before anything activates in a campaign (a separate step); it's never
+         *     persisted or committed by this step itself (FR-23, C6 - private-module
+         *     storage is its own job).
+         */
+        ModuleDraft: {
+            /** Playbooks */
+            playbooks?: components["schemas"]["PlaybookTemplate"][];
+            /** Crew Types */
+            crew_types?: components["schemas"]["CrewTypeTemplate"][];
+            /** Items */
+            items?: components["schemas"]["Item"][];
+            /** Special Abilities */
+            special_abilities?: components["schemas"]["SpecialAbility"][];
+            /** Factions */
+            factions?: components["schemas"]["FactionSeed"][];
+            /** Tables */
+            tables?: components["schemas"]["ExtractedTable"][];
+        };
+        /** ModuleSummary */
+        ModuleSummary: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string;
+            /** Version */
+            version: string;
+        };
+        /**
+         * PlaybookTemplate
+         * @description FR-9: a playbook as content-pack data (name, starting dots, ability
+         *     list, xp trigger, items, friends). C3/C4: a *real* Blades in the Dark
+         *     playbook's assembly is core-book content and must never be filled in
+         *     here - this shape exists to be populated either by an original example
+         *     pack, or privately by a book owner via guided entry (never committed).
+         */
+        PlaybookTemplate: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Starting Action Dots
+             * @description The playbook's 3 pre-assigned dots
+             */
+            starting_action_dots?: {
+                [key: string]: number;
+            };
+            /**
+             * Special Ability Ids
+             * @description Ability ids this playbook may choose from
+             */
+            special_ability_ids?: string[];
+            /** Xp Trigger */
+            xp_trigger: string;
+            /** Item Ids */
+            item_ids?: string[];
+            /**
+             * Contact Names
+             * @description NPCs available as a friend/rival choice
+             */
+            contact_names?: string[];
+        };
+        /** PositionRoll */
+        PositionRoll: {
+            /**
+             * Position
+             * @description controlled, risky, desperate
+             */
+            position: string;
+            /** Results */
+            results: components["schemas"]["RollResult"][];
+        };
+        /** Reputation */
+        Reputation: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+        };
+        /** RollResult */
+        RollResult: {
+            /**
+             * Level
+             * @description E.g., '1-3', '4/5', '6', 'critical'
+             */
+            level: string;
+            /** Description */
+            description: string;
+        };
+        /** SaveModuleRequest */
+        SaveModuleRequest: {
+            pack: components["schemas"]["ContentPack"];
+        };
+        /** SpecialAbility */
+        SpecialAbility: {
+            /**
+             * Id
+             * @description Unique identifier for the ability (e.g., 'battleborn')
+             */
+            id: string;
+            /**
+             * Name
+             * @description Display name
+             */
+            name: string;
+            /**
+             * Description
+             * @description Full rules text
+             */
+            description: string;
+            /**
+             * Tags
+             * @description Categories like 'combat', 'stealth'
+             */
+            tags?: string[];
+        };
+        /** SrdSection */
+        SrdSection: {
+            /** Heading */
+            heading: string;
+            /**
+             * Level
+             * @description Markdown heading depth (1 = '#', 2 = '##', ...)
+             */
+            level: number;
+            /**
+             * Line
+             * @description 1-indexed line number in the source SRD file
+             */
+            line: number;
+        };
+        /** Trauma */
+        Trauma: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string;
         };
         /** ValidationError */
         ValidationError: {
@@ -113,6 +666,15 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** Vice */
+        Vice: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string;
         };
     };
     responses: never;
@@ -194,6 +756,189 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    extract_uploaded_text_api_ingestion_extract_text_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_extract_uploaded_text_api_ingestion_extract_text_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtractedText"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    extract_module_api_ingestion_extract_module_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExtractModuleRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtractModuleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    finalize_module_endpoint_api_ingestion_finalize_module_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FinalizeModuleRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentPack"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_modules_endpoint_api_ingestion_modules_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModuleSummary"][];
+                };
+            };
+        };
+    };
+    save_module_endpoint_api_ingestion_modules_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveModuleRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentPack"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_module_endpoint_api_ingestion_modules__module_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                module_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentPack"];
                 };
             };
             /** @description Validation Error */

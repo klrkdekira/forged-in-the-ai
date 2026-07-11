@@ -510,12 +510,152 @@ refer to that document. Each phase should end in something playable/testable.
 Primary target: third-party FitD books with no SRD (D6). BitD itself is served
 by the committed SRD base pack plus guided entry from Phase 2.
 
-- [ ] Upload and text extraction: PDF/markdown/plain text to normalised text (FR-21)
-- [ ] LLM-assisted extraction into content-pack schemas: playbooks, crew
-      types, items, factions, tables (FR-22)
-- [ ] Review/edit step before a module activates in a campaign (FR-22)
-- [ ] Private-module storage in user data dir; excluded from repo, exports,
-      and sharing by default (FR-23, C6)
+- [x] Upload and text extraction: PDF/markdown/plain text to normalised text
+      (FR-21) (`ingestion/text_extraction.py`'s `extract_text`: dispatches
+      on file extension - `pypdf` for `.pdf`, straight UTF-8 decode for
+      `.md`/`.markdown`/`.txt` - then normalises (NFKC, `\r\n`/`\r` to
+      `\n`, strips control characters and trailing whitespace, collapses
+      3+ blank lines to one). Refuses any other extension
+      (`UnsupportedFormatError`) rather than guessing at a format
+      (CLAUDE.md). `POST /api/ingestion/extract-text` (`app/ingestion.py`)
+      wraps it as a multipart upload endpoint (needed adding
+      `python-multipart`, FastAPI's file-upload parser dependency, plus
+      `pypdf` itself) - returns the extracted text and its length in the
+      response rather than persisting anything: FR-22's LLM-assisted
+      structuring and FR-23's private-module storage are their own later
+      steps, this one's job stops at "clean text out of whatever was
+      uploaded". No web page calls it yet, same reasoning as this phase's
+      later steps not existing either - there's nothing to review/store/
+      retrieve against until FR-22/23 land. Covered by
+      `test_text_extraction.py` (the pure function, including a stubbed
+      `PdfReader` rather than a crafted PDF binary fixture - pypdf's
+      writer isn't a practical way to author real text content) and
+      `test_ingestion_api.py` (the endpoint, success and the unsupported-
+      extension 400). Verified `pnpm build` still succeeds against the
+      regenerated OpenAPI-derived TS schema (ADR-0006's drift check) -
+      the endpoint's request/response shapes aren't consumed by any
+      component yet, so there's nothing else to verify live.
+- [x] LLM-assisted extraction into content-pack schemas: playbooks, crew
+      types, items, factions, tables (FR-22) (`ingestion/module_extraction.py`'s
+      `extract_module_draft`: one structured completion (NFR-6) over
+      FR-21's normalised text into a `ModuleDraft` - reuses FR-9's actual
+      content-pack shapes (`PlaybookTemplate`, `CrewTypeTemplate`, `Item`,
+      `SpecialAbility` from `engine/packs.py`) rather than inventing
+      parallel ones, plus two new lightweight shapes for what FR-22 names
+      but `ContentPack` doesn't yet model: `FactionSeed` (id/name/
+      description/tier_hint - deliberately lighter than the live
+      `engine.entities.Faction`, which carries clocks/assets/hold a GM
+      only fills in during play) and `ExtractedTable` (free-form name/
+      columns/rows, since a third-party hack's own tables won't
+      necessarily match the SRD-shaped ones `ContentPack` already has -
+      heat/entanglement/magnitude/etc). The system prompt is explicit
+      that this is best-effort and must not invent content beyond what's
+      in the text (FR-22's own "extraction is best-effort; the user is
+      the final validator"). Truncates the input to a 40k-token budget
+      before sending (`_fit_text`, reusing `ai/context.py`'s
+      `estimate_tokens` rather than a second estimator) and reports
+      whether it had to, so a later step knows an incomplete draft might
+      just be a length problem, not the model's own extraction quality.
+      `POST /api/ingestion/extract-module` (`app/ingestion.py`) wraps it,
+      taking already-extracted text (from `/extract-text`) rather than a
+      re-upload, so the two pipeline steps stay independently callable.
+      Refactored `app/session_ws.py`'s `get_llm_client` dependency along
+      the way: it used to raise `WebSocketException` directly, which
+      would have been the wrong error type reused verbatim in this new
+      HTTP-only router, so the actual "read settings, build an
+      `LLMClient` or return None if unconfigured" logic moved to a shared
+      `app/llm.py::build_llm_client`, and each router keeps its own
+      transport-appropriate dependency wrapping it (`WebSocketException`
+      for the WS route, `HTTPException(503)` here) (ADR-0001). Draft
+      output is returned to the caller, not persisted or activated
+      anywhere - review/edit and private storage are their own, still
+      separate, next steps. Covered by `test_module_extraction.py`
+      (`_fit_text`, and `extract_module_draft` against a mocked LLM
+      transport, both the parsed-draft and truncation-reported paths)
+      and `test_ingestion_api.py` (the endpoint, success and the 503 when
+      no LLM backend is configured) - not verified live against a real
+      model, flagging that explicitly per this project's convention.
+
+      Also: the user attached a real BitD core rulebook PDF at the repo
+      root for local testing. It was untracked but not yet gitignored -
+      `.gitignore` gained a `*.pdf` rule (NOTICE.md's licensing firewall,
+      C3/C4: the core rulebook is copyrighted, unlike the CC-BY SRD,
+      and must never be committed) covering this file and any future
+      full-book PDF a user drops there for the same reason.
+- [x] Review/edit step before a module activates in a campaign (FR-22)
+      (`ingestion/module_review.py`'s `finalize_module`: assembles a
+      reviewed/edited `ModuleDraft` plus user-supplied pack metadata
+      (id/name/description/version - a draft has no id of its own, since
+      naming the module is the user's call, not the extraction step's)
+      into a real `ContentPack` (FR-9). "Review/edit" and "the engine may
+      refuse; it never guesses" (CLAUDE.md) come from the same mechanism:
+      an edited draft that no longer matches `ModuleDraft`'s schema is
+      refused by pydantic before `finalize_module` ever runs - there's no
+      separate validation step to build, the schema boundary already is the
+      validator FR-22 asks for ("the user is the final validator").
+      `ContentPack` gained the two fields `ModuleDraft` already had that
+      it didn't (`factions: list[FactionSeed]`, `tables:
+      list[ExtractedTable]`, moved from ingestion-only into
+      `engine/packs.py` since they're now genuinely part of the
+      content-pack schema, not just this pipeline's intermediate shape).
+      Originally this step also re-applied the licensing firewall,
+      refusing a draft containing core-book terms - the realignment pass
+      reversed that as a decided policy call: it contradicted NOTICE.md's
+      own "owners may load their own copies of core-book content locally
+      as private content packs" (C6), and would have refused the exact
+      use case Phase 6 exists for (ingesting a core book the user owns).
+      The firewall guards *distribution* surfaces - licensing-grep over
+      every commit, and `load_pack`'s check for the committed `packs/`
+      directory - not private user data: `finalize_module` doesn't check,
+      and `state/module_store.py` loads with `load_pack(...,
+      private=True)`. `POST /api/ingestion/finalize-module`
+      (`app/ingestion.py`) wraps it - takes the (edited) draft plus pack
+      metadata, returns the assembled `ContentPack`. Not persisted or
+      associated with any campaign: FR-23's private-module storage is
+      still the next, separate step. Covered by `test_module_review.py`
+      (assembly, reflecting an edit made to the draft before finalizing,
+      and core-book terms being allowed in a private module - drawing
+      the term from `FORBIDDEN_TERMS[0]` rather than hardcoding it, same
+      as `test_pack_loader.py`'s existing test, so the test file itself
+      doesn't trip licensing-grep) and `test_ingestion_api.py` (the
+      endpoint: success, the schema-validation 422, and the private
+      save/list/get round trip of a module carrying core-book terms).
+- [x] Private-module storage in user data dir; excluded from repo, exports,
+      and sharing by default (FR-23, C6) (`state/module_store.py`:
+      `save_module`/`load_module`/`list_modules` against a `modules/`
+      subdirectory of the user's own data directory (ADR-0005) - a
+      separate root from the committed `packs/` from the start, not a
+      filter applied to it later, and covered by the existing
+      `server/data/`-style gitignore the same way `app.db`/campaign `.db`
+      files already are, no new ignore rule needed. Reuses
+      `engine.pack_loader.load_pack`/`load_packs_dir` for the read side
+      with `private=True`, so a saved module gets the same schema
+      validation as any other pack file, but not the licensing-firewall
+      refusal - a private module may carry core-book content the user
+      owns (NOTICE.md, C6; the decided policy from the realignment pass:
+      the firewall guards distribution, not user data). `pack_id` (`FinalizeModuleRequest.id`/`ContentPack.id`
+      upstream) flows straight from an HTTP request body into a filename,
+      so it's validated as a safe path component (`ModuleIdError`: no
+      empty string, `.`/`..`, or path separators) before it ever reaches
+      the filesystem - a real path-traversal surface, not a theoretical
+      one, given where the id comes from. `POST /api/ingestion/modules`
+      (`app/ingestion.py`) saves (typically re-posting `/finalize-module`'s
+      own response once the user is happy with it) and echoes the pack
+      back; `GET /api/ingestion/modules` lists summaries (id/name/
+      description/version only - `ModuleSummary`, same reasoning as
+      `CampaignSummary` already listing summaries rather than full
+      campaign state); `GET /api/ingestion/modules/{id}` fetches one in
+      full, 404 for an unknown id. "Excluded from campaign exports" needed
+      no code change to verify: FR-20's recap export
+      (`ai/recap.py::render_recap`) only ever reads `player_message`/
+      `narration` events, nothing pack-shaped, so there was never a path
+      for private-module content to leak into an export in the first
+      place. Covered by `test_module_store.py` (save/load/list
+      round-tripping, and the unsafe-id refusal, parametrised over `""`,
+      `"."`, `".."`, `"../escape"`, and both path separators) and
+      `test_ingestion_api.py` (all three endpoints, plus the unsafe-id
+      400 through the actual HTTP body path, not just the storage
+      function directly).
 - [ ] Module prose joins the GM retrieval corpus alongside the SRD (FR-24)
 - [ ] Acceptance test: ingest a rulebook and play a session using its content
 

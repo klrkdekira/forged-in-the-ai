@@ -4,21 +4,22 @@ import subprocess
 import click
 
 from cli.paths import REPO_ROOT
+from engine.pack_loader import FORBIDDEN_TERMS
 
-# Kept in sync with engine.pack_loader.FORBIDDEN_TERMS (NOTICE.md "Content
-# policy"). This is the commit-time check; the loader is the runtime
-# backstop for packs specifically.
-FORBIDDEN_TERMS = ("Doskvol", "Duskwall")
+# FORBIDDEN_TERMS lives in engine.pack_loader (NOTICE.md "Content
+# policy"), the one runtime holder of the list; this is the commit-time
+# check over the same terms, the loader is the runtime backstop for
+# distribution-bound packs specifically.
 FORBIDDEN_PATTERN = re.compile("|".join(re.escape(term) for term in FORBIDDEN_TERMS))
 
 # Docs describing the content policy are allowed to name the forbidden
-# terms, as are the two places that need the term list as runtime data to
+# terms, as is the one place that holds the term list as runtime data to
 # enforce the firewall itself; code, packs, and fixtures otherwise are not.
 ALLOWLIST = re.compile(
     r"^("
     r"NOTICE\.md|CLAUDE\.md|AGENTS\.md|README\.md|CONTRIBUTING\.md|"
     r"packs/README\.md|SPECIFICATION\.md|docs/.*\.md|"
-    r"server/cli/licensing_grep\.py|server/engine/pack_loader\.py"
+    r"server/engine/pack_loader\.py"
     r")$"
 )
 

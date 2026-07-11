@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 
 from app.campaigns import router as campaigns_router
+from app.ingestion import router as ingestion_router
 from app.session_ws import router as session_ws_router
 from app.settings import get_settings
 from state.db import app_db_path
@@ -20,6 +21,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="forged-in-the-ai", lifespan=lifespan)
 app.include_router(campaigns_router)
+app.include_router(ingestion_router)
 app.include_router(session_ws_router)
 
 

@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from ai.agent import GmAgent
 from ai.llm_client import LLMClient
 from ai.tools import SHEET_OPERATIONS, GameState, ToolExecutor
+from app.llm import build_llm_client
 from app.settings import Settings, get_settings
 from engine.errors import EngineError
 from state.campaign_store import load_state, save_state, undo_to
@@ -22,13 +23,12 @@ def get_llm_client(settings: Settings = Depends(get_settings)) -> LLMClient:
     it with a client pointed at a mock transport, per ADR-0001. Refuses to
     connect at all if the backend isn't configured, rather than opening a
     session that can never call the model."""
-    if not settings.llm_base_url or not settings.llm_model:
+    client = build_llm_client(settings)
+    if client is None:
         raise WebSocketException(
             code=status.WS_1011_INTERNAL_ERROR, reason="LLM_BASE_URL/LLM_MODEL not configured"
         )
-    return LLMClient(
-        base_url=settings.llm_base_url, model=settings.llm_model, api_key=settings.llm_api_key
-    )
+    return client
 
 
 def get_campaign_db_path(campaign_id: str, settings: Settings = Depends(get_settings)) -> Path:

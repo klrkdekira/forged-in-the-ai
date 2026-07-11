@@ -10,7 +10,11 @@ A pack is a JSON file matching the `ContentPack` schema in
 mechanics collections: special abilities, items, reputations, traumas,
 vices, crew upgrades, action-outcome/heat/entanglement/magnitude/downtime
 tables, an SRD section index, and `PlaybookTemplate`/`CrewTypeTemplate`
-entries).
+entries). Phase 6's rulebook ingestion (FR-22) added two collections for
+what an uploaded book carries that the SRD-shaped fields don't:
+`FactionSeed` entries (faction name/description/tier hint, lighter than a
+live campaign faction) and free-form `ExtractedTable` entries (a hack's
+own tables that don't match the SRD-shaped ones above).
 
 `server/engine/pack_loader.py` loads packs:
 
@@ -19,9 +23,12 @@ entries).
   terms, as a runtime backstop to the `licensing-grep` commit-time check.
 - `load_packs_dir(directory)` loads every `*.json` file directly under a
   directory, in filename order. Used for both this committed directory and,
-  from Phase 6, a user's private pack directory (FR-23, C6) - the loader
-  itself doesn't distinguish committed from private packs; only where you
-  point it does.
+  from Phase 6, a user's private pack directory (FR-23, C6).
+- Both loaders take `private=True` for packs under the user's own data
+  directory: schema validation still applies, the forbidden-term refusal
+  does not. NOTICE.md allows owners to keep core-book content they own as
+  private modules - the firewall guards distribution (commits and this
+  committed directory), not user data.
 
 Two packs are committed here:
 

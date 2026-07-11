@@ -125,6 +125,33 @@ class CrewTypeTemplate(BaseModel):
     claim_names: list[str] = Field(default_factory=list)
 
 
+class FactionSeed(BaseModel):
+    """FR-22: seed data for a faction a module's setting material
+    describes - deliberately lighter than `engine.entities.Faction` (no
+    clocks/assets/hold): those are live campaign state a GM fills in
+    during play (`create_npc`'s sibling would be a `create_faction` tool,
+    not built yet), not something a rulebook module holds ready-made."""
+
+    id: str
+    name: str
+    description: str | None = None
+    tier_hint: int | None = Field(
+        None, description="Suggested starting tier, if the source text gives one"
+    )
+
+
+class ExtractedTable(BaseModel):
+    """FR-22: a rulebook table that doesn't match one of the SRD-shaped
+    tables this file already models (action outcomes, heat, entanglements,
+    magnitude, downtime) - free-form so an arbitrary hack's own tables
+    (critical injuries, gear lists, faction goals, whatever it has) still
+    come through instead of being dropped for not fitting a BitD shape."""
+
+    name: str
+    columns: list[str] = Field(default_factory=list)
+    rows: list[list[str]] = Field(default_factory=list)
+
+
 class ContentPack(BaseModel):
     id: str
     name: str
@@ -146,3 +173,5 @@ class ContentPack(BaseModel):
     )
     playbooks: list[PlaybookTemplate] = Field(default_factory=list)
     crew_types: list[CrewTypeTemplate] = Field(default_factory=list)
+    factions: list[FactionSeed] = Field(default_factory=list)
+    tables: list[ExtractedTable] = Field(default_factory=list)

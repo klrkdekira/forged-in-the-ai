@@ -221,6 +221,12 @@ __marimo__/
 # Ignore the SRD
 Blades-in-the-Dark-SRD.md
 
+# Never commit the core rulebook itself (copyrighted, unlike the CC-BY SRD
+# above) - NOTICE.md's licensing firewall (C3/C4). Any full-book PDF a user
+# drops at repo root for local testing (e.g. Phase 6 ingestion work) is
+# covered by this pattern, not just this one filename.
+*.pdf
+
 # Generated OpenAPI export (schema contract: web/src/api/schema.d.ts is the
 # committed artefact; this JSON is the ephemeral intermediate)
 server/openapi.json
