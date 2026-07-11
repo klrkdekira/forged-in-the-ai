@@ -111,6 +111,21 @@ export interface RollDecision {
   trade?: 'worse_position_better_effect' | 'better_position_worse_effect' | null
 }
 
+// FR-19: after an undo, the visible chat needs to shrink to match the
+// rewound log too, not just the mechanical state - rebuilt from the same
+// player_message/narration events the recap/journal already use, rather
+// than just clearing it (a blank panel would look like a bug, not a
+// deliberate rewind).
+function messagesFromLog(events: JournalEntry[]): ChatMessage[] {
+  return events
+    .filter((entry) => entry.event_type === 'player_message' || entry.event_type === 'narration')
+    .map((entry) =>
+      entry.event_type === 'player_message'
+        ? { kind: 'player', text: String(entry.payload.text) }
+        : { kind: 'narration', text: String(entry.payload.text), done: true },
+    )
+}
+
 // FR-18/FR-30: server-authoritative state deltas over one WebSocket
 // connection, scoped to one persisted campaign. The client only ever sends
 // player messages; every state change arrives as a tool_call/narration_done
@@ -173,6 +188,12 @@ export function useSessionSocket(campaignId: string) {
           setBusy(false)
           setMessages((prev) => [...prev, { kind: 'error', message: data.message }])
           break
+        case 'undo_done':
+          setState(data.state)
+          setBusy(false)
+          setPendingRoll(null)
+          setMessages(messagesFromLog(data.state.log.events))
+          break
       }
     }
 
@@ -194,6 +215,10 @@ export function useSessionSocket(campaignId: string) {
     socketRef.current?.send(JSON.stringify({ type: 'sheet_operation', ...operation }))
   }, [])
 
+  const sendUndo = useCallback((sequence: number) => {
+    socketRef.current?.send(JSON.stringify({ type: 'undo', sequence }))
+  }, [])
+
   return {
     connected,
     busy,
@@ -203,5 +228,6 @@ export function useSessionSocket(campaignId: string) {
     sendMessage,
     sendRollDecision,
     sendSheetOperation,
+    sendUndo,
   }
 }

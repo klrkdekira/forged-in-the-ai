@@ -25,6 +25,7 @@ export function PlayPage() {
     sendMessage,
     sendRollDecision,
     sendSheetOperation,
+    sendUndo,
   } = useSessionSocket(campaignId)
   const [draft, setDraft] = useState('')
   const [sidePanel, setSidePanel] = useState<'sheet' | 'table' | 'journal'>('sheet')
@@ -127,7 +128,11 @@ export function PlayPage() {
                 />
               )}
               {sidePanel === 'journal' && (
-                <JournalPanel entries={state.log.events} campaignId={campaignId} />
+                <JournalPanel
+                  entries={state.log.events}
+                  campaignId={campaignId}
+                  onUndo={sendUndo}
+                />
               )}
             </div>
           </div>

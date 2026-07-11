@@ -8,7 +8,7 @@ from ai.tools import GameState
 from engine.character import Character
 from engine.crew import Crew
 from engine.session import Session
-from state.campaign_store import create_campaign, load_state, save_state
+from state.campaign_store import create_campaign, load_state, save_state, undo_to
 from state.db import campaign_db_path
 
 
@@ -63,3 +63,48 @@ async def test_save_state_appends_only_the_new_event_tail(tmp_path: Path) -> Non
         assert conn.execute("SELECT count(*) FROM events").fetchone() == (1,)
     finally:
         conn.close()
+
+
+@pytest.mark.anyio
+async def test_undo_to_truncates_the_log_and_replays_the_surviving_prefix(tmp_path: Path) -> None:
+    # FR-19: undo/rewind is the log's authoritative status paying off -
+    # truncate, then replay what's left onto the campaign's base state.
+    db_path = campaign_db_path(tmp_path, "abc123")
+    state = _starter_state()
+    await create_campaign(db_path, state)
+
+    log = state.log
+    log = log.append("character", "Scoundrel", "stress_marked", {"amount": 2}, datetime.now(UTC))
+    log = log.append("character", "Scoundrel", "coin_adjusted", {"amount": 5}, datetime.now(UTC))
+    await save_state(db_path, state.model_copy(update={"log": log}))
+
+    undone = await undo_to(db_path, sequence=1)
+
+    assert undone.character.stress.marked == 2
+    assert undone.character.coin == 0
+    assert [e.sequence for e in undone.log.events] == [1]
+
+    loaded = await load_state(db_path)
+    assert loaded == undone
+
+    conn = sqlite3.connect(db_path)
+    try:
+        assert conn.execute("SELECT count(*) FROM events").fetchone() == (1,)
+    finally:
+        conn.close()
+
+
+@pytest.mark.anyio
+async def test_undo_to_zero_reverts_to_the_campaigns_base_state(tmp_path: Path) -> None:
+    db_path = campaign_db_path(tmp_path, "abc123")
+    state = _starter_state()
+    await create_campaign(db_path, state)
+
+    log = state.log.append(
+        "character", "Scoundrel", "stress_marked", {"amount": 4}, datetime.now(UTC)
+    )
+    await save_state(db_path, state.model_copy(update={"log": log}))
+
+    undone = await undo_to(db_path, sequence=0)
+
+    assert undone == state

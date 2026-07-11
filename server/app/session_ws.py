@@ -10,7 +10,7 @@ from ai.llm_client import LLMClient
 from ai.tools import SHEET_OPERATIONS, GameState, ToolExecutor
 from app.settings import Settings, get_settings
 from engine.errors import EngineError
-from state.campaign_store import load_state, save_state
+from state.campaign_store import load_state, save_state, undo_to
 from state.db import campaign_db_path
 from state.migrations import run_campaign_migrations
 
@@ -92,6 +92,22 @@ async def session_ws(
             if message.get("type") == "sheet_operation":
                 state, reply = await _apply_sheet_operation(db_path, executor, state, message)
                 await websocket.send_json(reply)
+                continue
+            if message.get("type") == "undo":
+                # FR-19: an engine operation like any other (CLAUDE.md) -
+                # bypasses the GM agent entirely, and undo_to already
+                # persists (truncates events, overwrites the snapshot)
+                # before returning, so there's nothing left to save here.
+                sequence = message.get("sequence")
+                if not isinstance(sequence, int):
+                    await websocket.send_json(
+                        {"type": "error", "message": "undo requires an integer sequence"}
+                    )
+                    continue
+                state = await undo_to(db_path, sequence)
+                await websocket.send_json(
+                    {"type": "undo_done", "state": state.model_dump(mode="json")}
+                )
                 continue
             if message.get("type") != "player_message":
                 continue

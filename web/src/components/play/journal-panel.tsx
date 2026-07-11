@@ -55,10 +55,21 @@ function summarize(entry: JournalEntry): string {
 export function JournalPanel({
   entries,
   campaignId,
+  onUndo,
 }: {
   entries: JournalEntry[]
   campaignId: string
+  onUndo: (sequence: number) => void
 }) {
+  function handleUndo(entry: JournalEntry) {
+    // FR-19: irreversible (event log truncation, not a soft flag) - the
+    // table needs to know that before agreeing, not after.
+    const confirmed = window.confirm(
+      `Undo to just after "${summarize(entry)}"? Everything after this point will be permanently erased.`,
+    )
+    if (confirmed) onUndo(entry.sequence)
+  }
+
   return (
     <div className="flex h-full flex-col gap-2 overflow-auto rounded-lg border border-border/50 bg-background/50 p-4 text-sm">
       <div className="flex items-center justify-between">
@@ -90,6 +101,13 @@ export function JournalPanel({
                 <pre className="overflow-auto px-1 pb-1 text-[0.7rem] whitespace-pre-wrap text-muted-foreground">
                   {JSON.stringify(entry.payload, null, 2)}
                 </pre>
+                <button
+                  type="button"
+                  onClick={() => handleUndo(entry)}
+                  className="px-1 pb-1 text-[0.7rem] text-muted-foreground underline underline-offset-2 hover:text-destructive"
+                >
+                  Undo to here
+                </button>
               </details>
             </li>
           ))}

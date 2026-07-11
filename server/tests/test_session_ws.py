@@ -294,6 +294,55 @@ def test_session_ws_persists_state_across_reconnects():
             assert resumed["state"]["character"]["stress"]["marked"] == 3
 
 
+def test_session_ws_undoes_to_an_earlier_event_sequence():
+    # FR-19: undo/rewind is an engine operation like sheet_operation - no
+    # LLM call, and the truncation persists (a reconnect afterwards must
+    # still see the rewound state, not the original).
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("the LLM should never be called for an undo")
+
+    app.dependency_overrides[get_llm_client] = lambda: _mock_client(handler)
+
+    with TestClient(app) as test_client:
+        campaign_id = _create_campaign(test_client)
+        with test_client.websocket_connect(f"/ws/session/{campaign_id}") as ws:
+            ws.receive_json()  # initial state
+            ws.send_json({"type": "sheet_operation", "name": "mark_stress", "args": {"amount": 2}})
+            first = ws.receive_json()
+            first_sequence = first["state"]["log"]["events"][-1]["sequence"]
+
+            ws.send_json({"type": "sheet_operation", "name": "adjust_coin", "args": {"amount": 5}})
+            ws.receive_json()  # state after the coin adjustment
+
+            ws.send_json({"type": "undo", "sequence": first_sequence})
+            undone = ws.receive_json()
+
+            assert undone["type"] == "undo_done"
+            assert undone["state"]["character"]["stress"]["marked"] == 2
+            assert undone["state"]["character"]["coin"] == 0
+
+        with test_client.websocket_connect(f"/ws/session/{campaign_id}") as ws:
+            resumed = ws.receive_json()
+            assert resumed["state"]["character"]["coin"] == 0
+
+
+def test_session_ws_reports_an_error_for_a_non_integer_undo_sequence():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("the LLM should never be called for an undo")
+
+    app.dependency_overrides[get_llm_client] = lambda: _mock_client(handler)
+
+    with TestClient(app) as test_client:
+        campaign_id = _create_campaign(test_client)
+        with test_client.websocket_connect(f"/ws/session/{campaign_id}") as ws:
+            ws.receive_json()  # initial state
+            ws.send_json({"type": "undo", "sequence": "not-a-number"})
+
+            error = ws.receive_json()
+            assert error["type"] == "error"
+            assert "integer" in error["message"]
+
+
 def test_session_ws_closes_for_an_unknown_campaign_id():
     def handler(request: httpx.Request) -> httpx.Response:
         raise AssertionError("the LLM should never be called")

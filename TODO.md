@@ -297,7 +297,30 @@ refer to that document. Each phase should end in something playable/testable.
       panel's header - a plain `<a download>` straight at the endpoint,
       no JS fetch/blob handling needed. Verified live against a real
       uvicorn process: correct headers, content, and 404.)
-- [ ] Undo/rewind via event log truncation (FR-19, supports FR-17)
+- [x] Undo/rewind via event log truncation (FR-19, supports FR-17) (this
+      is the first time state is actually *reconstructed by replay*
+      rather than mutated incrementally - `ai/replay.py`'s `replay_state`
+      folds every state-mutating event type back onto a base `GameState`,
+      reusing the exact same `engine/operations.py` functions
+      `ToolExecutor` calls live, so replay and live play can never
+      disagree about what an event means (NFR-1). Pure-record event types
+      (rolls, `player_message`/`narration`, `x_card_invoked`) are skipped -
+      nothing to fold. `state/campaign_store.py`: campaign creation now
+      writes the starting snapshot twice - once as an immutable "base"
+      row (id 0, replay's fold-from point, never overwritten) and once as
+      the existing "latest" cache (id 1); `undo_to(db_path, sequence)`
+      deletes every `events` row past `sequence` (irreversible - no
+      redo), replays the survivors onto the base, and overwrites the
+      latest snapshot. `app/session_ws.py` gets a new `undo` WS message,
+      handled the same way `sheet_operation` already is (FR-28: bypasses
+      the GM agent entirely, an engine operation like any other) - a
+      dedicated `undo_done` reply (not the generic `state` message) lets
+      the client rebuild the visible chat transcript from the rewound log
+      too, not just the mechanical state. Web: an "Undo to here" control
+      on every Journal entry, behind a confirm() given how destructive
+      truncation is. Verified live against a real uvicorn process: mark
+      stress, adjust coin, undo to just after the stress mark - coin
+      reverts, stress doesn't.)
 - [ ] Table view v2: generated district/score maps (FR-29); pick canvas
       library (Pixi vs. Konva, D4 leftover) and record an ADR
 - [ ] Journal view v2: filters by type, phase, and entity (FR-32)
