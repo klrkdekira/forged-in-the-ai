@@ -48,6 +48,26 @@ def test_replay_state_folds_a_second_character_and_its_own_stress():
     assert replayed.characters["pc-2"].name == "Vex"
     assert replayed.characters["pc-2"].stress.marked == 2
     assert replayed.characters["pc-1"].stress.marked == 0
+    # No "controller_kind" in this (older-shaped) payload - defaults to
+    # human, same as GameState.controllers having no entry at all.
+    assert replayed.controllers["seat:pc-2"].kind == "human"
+
+
+def test_replay_state_folds_a_created_characters_ai_controller_seat():
+    # FR-35: undo/rewind must not drop which seat a companion belongs to.
+    base = _base_state()
+    log = base.log.append(
+        "character",
+        "pc-2",
+        "character_created",
+        {"name": "Vex", "playbook": "Whisper", "controller_kind": "ai"},
+        AT,
+    )
+
+    replayed = replay_state(base, log.events)
+
+    assert replayed.controllers["seat:pc-2"].kind == "ai"
+    assert replayed.controllers["seat:pc-2"].character_ids == ["pc-2"]
 
 
 def test_replay_state_folds_clock_creation_and_ticks():

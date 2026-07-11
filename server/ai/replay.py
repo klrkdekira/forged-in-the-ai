@@ -2,6 +2,7 @@ from ai.tools import GameState
 from engine.campaign import CampaignCanon, SessionZeroConfig
 from engine.character import Attribute, Character
 from engine.clocks import Clock, ClockKind
+from engine.controller import Controller
 from engine.entities import Npc
 from engine.events import Event, EventLog
 from engine.operations import (
@@ -30,6 +31,7 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
     turn log), x_card_invoked (a safety-tool note, not a mutation) - are
     silently skipped."""
     characters = dict(base.characters)
+    controllers = dict(base.controllers)
     crew = base.crew
     session = base.session
     clocks = dict(base.clocks)
@@ -44,6 +46,12 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
         payload = event.payload
         if event.event_type == "character_created":
             characters[event.entity_id] = Character.model_validate(payload)
+            seat_id = f"seat:{event.entity_id}"
+            controllers[seat_id] = Controller(
+                seat_id=seat_id,
+                kind=payload.get("controller_kind", "human"),
+                character_ids=[event.entity_id],
+            )
         elif event.event_type == "stress_marked":
             characters[event.entity_id] = mark_stress(
                 characters[event.entity_id], payload["amount"]
@@ -115,6 +123,7 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
     return base.model_copy(
         update={
             "characters": characters,
+            "controllers": controllers,
             "crew": crew,
             "session": session,
             "clocks": clocks,

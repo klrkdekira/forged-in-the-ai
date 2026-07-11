@@ -193,6 +193,29 @@ def test_create_character_adds_a_second_pc():
     assert result.state.log.events[-1].event_type == "character_created"
 
 
+def test_create_character_registers_an_ai_seat_by_default():
+    # FR-35: a crewmate the GM introduces defaults to AI-controlled - no
+    # separate wiring step needed before PlayerAgent picks it up.
+    result = _executor().create_character(
+        _state(), CreateCharacterArgs(character_id="pc-2", name="Vex", playbook="Whisper")
+    )
+
+    seat = result.state.controllers["seat:pc-2"]
+    assert seat.kind == "ai"
+    assert seat.character_ids == ["pc-2"]
+
+
+def test_create_character_registers_a_human_seat_when_asked():
+    result = _executor().create_character(
+        _state(),
+        CreateCharacterArgs(
+            character_id="pc-2", name="Vex", playbook="Whisper", controller_kind="human"
+        ),
+    )
+
+    assert result.state.controllers["seat:pc-2"].kind == "human"
+
+
 def test_create_character_refuses_a_duplicate_id():
     executor = _executor()
     state = executor.create_character(

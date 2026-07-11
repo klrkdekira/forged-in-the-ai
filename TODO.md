@@ -410,11 +410,11 @@ refer to that document. Each phase should end in something playable/testable.
       fourth "Ties" tab alongside Sheet/Table/Journal in `/play`'s side
       panel. Not visually verified live, same caveat as the other Konva
       maps - no headed browser available in this environment.)
-- [ ] AI player agent v1: an AI-controlled crewmate PC, distinct from the GM
+- [x] AI player agent v1: an AI-controlled crewmate PC, distinct from the GM
       agent; action choices, stress spends, roleplay (FR-35). FR-35 is
       explicitly "future phase" in SPECIFICATION.md's own text, and once
       traced turned out to need a real prerequisite `GameState` never
-      had: more than one PC. That foundation is now in - `character`
+      had: more than one PC. That foundation went in first - `character`
       (singular) is `characters: dict[str, Character]`, keyed by a
       caller-supplied `character_id` (same convention as `clocks`/
       `npcs`), with a `create_character` tool (mirrors `create_npc`) and
@@ -434,12 +434,75 @@ refer to that document. Each phase should end in something playable/testable.
       and multi-character mutations correctly (by `character_id`, not
       by name - a small pre-existing inconsistency fixed along the way:
       character-tagged events used to log `character.name` as
-      `entity_id` where clocks/npcs always used a caller-supplied id).
-      Still not built: the AI player agent itself (a second LLM loop,
-      its own system prompt/role, turn-taking), `Controller`/seat
-      wiring (who's allowed to act for which `character_id`), and any
-      web UI for a character switcher - all deliberately deferred until
-      that follow-on work actually needs them.
+      `entity_id` where clocks/npcs always used a caller-supplied id.
+      `roll_fortune` is the one remaining exception: it has no
+      `character_id` argument at all - the mechanic is trait-agnostic -
+      but still logs the primary PC's name as its `entity_id`).
+
+      This round closed the remaining three pieces, server-side only (web
+      UI - a character switcher, visually distinguishing an AI companion's
+      messages - stays deferred, same reasoning as FR-33/34's UI polish).
+      `Controller`/seat wiring: `engine/controller.py`'s `Controller`
+      (already existed for FR-25) gained a `kind: "human" | "ai"` field
+      (default "human", so a character with no seat at all is still
+      human-controlled - unassigned never silently means AI) and an
+      `is_ai_controlled` lookup; `GameState.controllers: dict[seat_id,
+      Controller]` only needs entries for the exceptions. `create_character`
+      now takes `controller_kind` (default "ai", since a crewmate the GM
+      introduces mid-campaign is the companion case FR-35 is about) and
+      registers a seat for it in the same call, folded by `ai/replay.py`
+      from `character_created`'s payload so undo/rewind never drops which
+      seat a companion belongs to (older-shaped payloads without
+      `controller_kind` default to "human", so pre-existing campaigns
+      replay unchanged). The AI player agent itself: `ai/player_agent.py`'s
+      `PlayerAgent` - a second LLM loop, distinct from `GmAgent`, with its
+      own system prompt scoped to one character's own voice. Two jobs, both
+      wired into `ai/agent.py`'s `GmAgent.handle_player_message`: when a
+      proposed roll's character is AI-controlled, `decide_roll` (a
+      structured completion against `RollDecision`, NFR-6) replaces the
+      roll-negotiation dialog (FR-16) a human would otherwise answer over
+      WS, so the tool-calling loop never pauses for a reply that would
+      never come (a `companion_roll_decision` event reports what it chose,
+      same audit-trail spirit as `roll_proposed`); after each turn's
+      narration, `maybe_roleplay` gives every AI-controlled companion a
+      chance to add a short in-character line (defaults to staying quiet
+      - most turns don't call for one), logged as a `player_message` event
+      tagged with a `speaker` override so it joins the transcript under
+      the companion's own name, not "Player" (`ai/transcript.py`'s
+      `render_transcript` falls back to the old unconditional "Player"/"GM"
+      labels when `speaker` is absent, so every existing log entry renders
+      unchanged). Turn-taking/spotlight between controllers (FR-26) stays
+      out of scope until multiplayer (Phase 7) - a companion only ever
+      acts in response to the GM's own tool calls or narration, never
+      competing for the floor. Found and fixed a latent multi-PC gap while
+      wiring the roll path: `GmAgent`'s pool-size lookup and
+      `_resolve_roll`'s `mark_stress`/re-rolled `RollActionArgs` never
+      threaded a proposal's `character_id` through at all, so any push/
+      trade-off on a second PC's roll would have marked stress on (or
+      outright ambiguity-refused against) the wrong character - dormant
+      until this round because nothing had exercised a roll for a
+      non-primary PC before. Covered by
+      `test_player_agent.py` (`PlayerAgent` unit tests) and new
+      `test_agent.py`/`test_controller.py`/`test_ai_replay.py`/
+      `test_tools.py` cases (mocked-LLM-transport style, same as every
+      other agent test) - not verified live against a real model this
+      round, flagging that explicitly per this project's convention of
+      calling that out when it hasn't happened.
+
+      (Realignment pass, same day: three uncaught-exception paths in
+      `GmAgent.handle_player_message` could kill the WS connection - the
+      exact failure mode the Phase 4 `httpx.HTTPError` guard was added
+      for. A `roll_action` proposal with bad or ambiguous arguments
+      (e.g. no `character_id` with two PCs, newly reachable now that
+      multi-PC exists) raised out of the special-cased roll branch
+      instead of going back to the model as a tool error the way
+      `_run_tool` does for every other tool; and both new `PlayerAgent`
+      LLM calls (`decide_roll`, `maybe_roleplay`) were unguarded against
+      `httpx.HTTPError`/`StructuredOutputError`. All three now degrade:
+      the roll error is fed back to the model to retry, a failed
+      companion decision falls back to rolling as proposed (no stress,
+      no bargain), a failed roleplay call stays quiet. Two new
+      `test_agent.py` regressions cover them.)
 - [ ] Playtest: multi-session campaign, verify canon consistency (G3)
 
 ## Phase 6: Rulebook ingestion (bring your own book)

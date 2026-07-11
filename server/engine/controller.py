@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from engine.errors import EngineError
@@ -9,16 +11,31 @@ class ControllerError(EngineError):
 
 
 class Controller(BaseModel):
-    """FR-25: one human seat, controlling any number of PCs and cohorts.
-    Solo play (single-player MVP) is one Controller whose character_ids
-    covers the whole crew - not a special case, just this with one seat."""
+    """FR-25: one seat - a human or an AI player agent (FR-35) - controlling
+    any number of PCs and cohorts. Solo play (single-player MVP) is one
+    human Controller whose character_ids covers the whole crew - not a
+    special case, just this with one seat. `kind` defaults to "human":
+    a character with no Controller entry at all is human-controlled too
+    (GameState.controllers only needs to name the exceptions, i.e. AI
+    companions)."""
 
     seat_id: str
+    kind: Literal["human", "ai"] = "human"
     character_ids: list[str] = Field(default_factory=list)
     cohort_ids: list[str] = Field(default_factory=list)
 
     def controls(self, character_id: str) -> bool:
         return character_id in self.character_ids
+
+
+def is_ai_controlled(controllers: dict[str, Controller], character_id: str) -> bool:
+    """FR-35: whether an AI player agent, not a human, decides for this
+    character - looked up rather than stored on the character itself, so
+    reassigning a seat never means editing every PC it controls."""
+    return any(
+        controller.kind == "ai" and controller.controls(character_id)
+        for controller in controllers.values()
+    )
 
 
 def solo_controller(seat_id: str, character_ids: list[str], cohort_ids: list[str]) -> Controller:

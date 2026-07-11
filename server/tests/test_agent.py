@@ -8,7 +8,8 @@ import pytest
 from ai.agent import GmAgent
 from ai.llm_client import LLMClient
 from ai.tools import GameState, ToolExecutor
-from engine.character import Character
+from engine.character import Action, Character
+from engine.controller import Controller
 from engine.crew import Crew
 from engine.rolls import Effect
 from engine.session import Session
@@ -21,6 +22,22 @@ def _state() -> GameState:
         character=Character(name="Test", playbook="Test Playbook"),
         crew=Crew(name="Test Crew", crew_type="Test Type"),
         session=Session(),
+    )
+
+
+def _state_with_ai_companion() -> GameState:
+    # FR-35: pc-2 is an AI-controlled crewmate, wired the same way
+    # create_character registers one - a distinct seat, kind "ai".
+    return GameState(
+        characters={
+            "pc-1": Character(name="Anders", playbook="Cutter"),
+            "pc-2": Character(name="Vex", playbook="Whisper", action_ratings={Action.PROWL: 2}),
+        },
+        crew=Crew(name="Test Crew", crew_type="Test Type"),
+        session=Session(),
+        controllers={
+            "seat:pc-2": Controller(seat_id="seat:pc-2", kind="ai", character_ids=["pc-2"])
+        },
     )
 
 
@@ -417,3 +434,251 @@ async def test_agent_runs_session_zero_before_regular_play():
     await client.aclose()
 
     assert SESSION_ZERO_PROCEDURE.title not in requests[0]["messages"][0]["content"]
+
+
+@pytest.mark.anyio
+async def test_agent_lets_the_ai_player_decide_its_own_roll_instead_of_pausing():
+    # FR-35: pc-2 is AI-controlled - the tool-calling loop must not pause
+    # for a WS reply that would never come; PlayerAgent decides instead.
+    tool_round_calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if body.get("stream"):
+            return httpx.Response(
+                200, text='data: {"choices":[{"delta":{"content":"Noted."}}]}\n\ndata: [DONE]\n\n'
+            )
+        if body.get("tools"):
+            tool_round_calls.append(body)
+            if len(tool_round_calls) == 1:
+                return httpx.Response(
+                    200,
+                    json={
+                        "choices": [
+                            {
+                                "message": _tool_call_message(
+                                    "roll_action",
+                                    {
+                                        "action": "prowl",
+                                        "position": "risky",
+                                        "effect": "standard",
+                                        "character_id": "pc-2",
+                                    },
+                                )
+                            }
+                        ]
+                    },
+                )
+            return httpx.Response(
+                200,
+                json={"choices": [{"message": {"role": "assistant", "content": "placeholder"}}]},
+            )
+        # PlayerAgent.decide_roll's structured completion (no "tools" key)
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {"message": {"role": "assistant", "content": json.dumps({"push_dice": True})}}
+                ]
+            },
+        )
+
+    client = LLMClient(
+        base_url="http://fake-llm/v1", model="test-model", transport=httpx.MockTransport(handler)
+    )
+    agent = GmAgent(client, _executor())
+
+    events = [
+        event async for event in agent.handle_player_message(_state_with_ai_companion(), "Go, Vex.")
+    ]
+    await client.aclose()
+
+    assert not any(e.type == "roll_proposed" for e in events)
+    decided = next(e for e in events if e.type == "companion_roll_decision")
+    assert decided.payload["character_id"] == "pc-2"
+    assert decided.payload["decision"]["push_dice"] is True
+
+    done_event = next(e for e in events if e.type == "narration_done")
+    logged = done_event.payload["state"]["log"]["events"]
+    stress_events = [e for e in logged if e["event_type"] == "stress_marked"]
+    assert stress_events[-1]["entity_id"] == "pc-2"  # not pc-1, the other PC
+    assert stress_events[-1]["payload"]["amount"] == 2  # push_dice cost
+    roll_events = [e for e in logged if e["event_type"] == "action_roll"]
+    assert roll_events[-1]["entity_id"] == "pc-2"
+
+
+@pytest.mark.anyio
+async def test_agent_logs_a_companion_roleplay_line_after_narration():
+    # FR-35: an AI-controlled crewmate may add an in-character line once
+    # the GM's narration lands - queued for the *next* turn's transcript,
+    # not answered live.
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if body.get("stream"):
+            return httpx.Response(
+                200,
+                text='data: {"choices":[{"delta":{"content":"You proceed."}}]}\n\ndata: [DONE]\n\n',
+            )
+        if body.get("tools"):
+            return httpx.Response(
+                200,
+                json={"choices": [{"message": {"role": "assistant", "content": "placeholder"}}]},
+            )
+        # PlayerAgent.maybe_roleplay's structured completion
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": json.dumps({"speaks": True, "line": "Vex nods."}),
+                        }
+                    }
+                ]
+            },
+        )
+
+    client = LLMClient(
+        base_url="http://fake-llm/v1", model="test-model", transport=httpx.MockTransport(handler)
+    )
+    agent = GmAgent(client, _executor())
+
+    events = [
+        event
+        async for event in agent.handle_player_message(_state_with_ai_companion(), "We move in.")
+    ]
+    await client.aclose()
+
+    companion_event = next(e for e in events if e.type == "companion_message")
+    assert companion_event.payload == {
+        "character_id": "pc-2",
+        "name": "Vex",
+        "text": "Vex nods.",
+    }
+
+    done_event = next(e for e in events if e.type == "narration_done")
+    logged = done_event.payload["state"]["log"]["events"]
+    player_events = [e for e in logged if e["event_type"] == "player_message"]
+    assert player_events[-1]["entity_id"] == "pc-2"
+    assert player_events[-1]["payload"] == {"text": "Vex nods.", "speaker": "Vex"}
+
+
+@pytest.mark.anyio
+async def test_agent_returns_an_ambiguous_roll_action_to_the_model_instead_of_crashing():
+    # FR-25: with two PCs, a roll_action without a character_id is refused
+    # by resolve_character_id - that refusal must reach the model as a tool
+    # error it can retry (the same path every other tool's errors take),
+    # not escape the generator and kill the WS connection.
+    tool_round_calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if body.get("stream"):
+            return httpx.Response(
+                200, text='data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n'
+            )
+        tool_round_calls.append(body)
+        if len(tool_round_calls) == 1:
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [
+                        {
+                            "message": _tool_call_message(
+                                "roll_action",
+                                {"action": "prowl", "position": "risky", "effect": "standard"},
+                            )
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"role": "assistant", "content": "placeholder"}}]},
+        )
+
+    client = LLMClient(
+        base_url="http://fake-llm/v1", model="test-model", transport=httpx.MockTransport(handler)
+    )
+    agent = GmAgent(client, _executor())
+
+    events = [
+        event
+        async for event in agent.handle_player_message(_state_with_ai_companion(), "Sneak in.")
+    ]
+    await client.aclose()
+
+    tool_event = next(e for e in events if e.type == "tool_call")
+    assert "character_id is required" in tool_event.payload["result"]["error"]
+    assert not any(e.type == "roll_proposed" for e in events)
+    assert any(e.type == "narration_done" for e in events)
+
+
+@pytest.mark.anyio
+async def test_agent_rolls_as_proposed_when_the_companion_decision_call_fails():
+    # FR-35: a companion's own LLM call failing (here: garbage instead of
+    # JSON, twice, so structured_completion gives up) must not crash the
+    # turn - the roll happens as the GM proposed it, with no stress spent.
+    tool_round_calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if body.get("stream"):
+            return httpx.Response(
+                200, text='data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n'
+            )
+        if body.get("tools"):
+            tool_round_calls.append(body)
+            if len(tool_round_calls) == 1:
+                return httpx.Response(
+                    200,
+                    json={
+                        "choices": [
+                            {
+                                "message": _tool_call_message(
+                                    "roll_action",
+                                    {
+                                        "action": "prowl",
+                                        "position": "risky",
+                                        "effect": "standard",
+                                        "character_id": "pc-2",
+                                    },
+                                )
+                            }
+                        ]
+                    },
+                )
+            return httpx.Response(
+                200,
+                json={"choices": [{"message": {"role": "assistant", "content": "placeholder"}}]},
+            )
+        # Every structured completion (decide_roll, then maybe_roleplay)
+        # returns something that will never validate.
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"role": "assistant", "content": "not json at all"}}]},
+        )
+
+    client = LLMClient(
+        base_url="http://fake-llm/v1", model="test-model", transport=httpx.MockTransport(handler)
+    )
+    agent = GmAgent(client, _executor())
+
+    events = [
+        event async for event in agent.handle_player_message(_state_with_ai_companion(), "Go.")
+    ]
+    await client.aclose()
+
+    decided = next(e for e in events if e.type == "companion_roll_decision")
+    assert decided.payload["decision"]["push_dice"] is False
+    assert decided.payload["decision"]["devils_bargain"] is None
+
+    done_event = next(e for e in events if e.type == "narration_done")
+    logged = done_event.payload["state"]["log"]["events"]
+    assert not any(e["event_type"] == "stress_marked" for e in logged)
+    roll_events = [e for e in logged if e["event_type"] == "action_roll"]
+    assert roll_events[-1]["entity_id"] == "pc-2"
+    assert roll_events[-1]["payload"]["bonus_dice"] == 0
+    # maybe_roleplay hit the same failing completion and stayed quiet.
+    assert not any(e.type == "companion_message" for e in events)

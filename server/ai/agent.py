@@ -7,6 +7,8 @@ import httpx2 as httpx
 from ai.canon import render_canon
 from ai.context import assemble_turn_context
 from ai.llm_client import LLMClient
+from ai.player_agent import PlayerAgent
+from ai.structured import StructuredOutputError
 from ai.system_prompt import build_system_prompt
 from ai.tools import (
     TOOL_SPECS,
@@ -18,6 +20,7 @@ from ai.tools import (
     tool_definitions,
 )
 from ai.transcript import render_transcript
+from engine.controller import is_ai_controlled
 from engine.rolls import step_position
 
 MAX_TOOL_ROUNDS = 6
@@ -100,18 +103,61 @@ class GmAgent:
             )
             for call in response.tool_calls:
                 if call.name == "roll_action":
-                    proposal = RollActionArgs.model_validate_json(call.arguments)
-                    pool_size = state.character.action_ratings.get(proposal.action, 0)
-                    decision_payload = yield AgentTurnEvent(
-                        type="roll_proposed",
-                        payload={
-                            "action": proposal.action.value,
-                            "position": proposal.position.value,
-                            "effect": proposal.effect.name.lower(),
-                            "pool_size": pool_size,
-                        },
+                    try:
+                        proposal = RollActionArgs.model_validate_json(call.arguments)
+                        character_id = self._executor.resolve_character_id(
+                            state, proposal.character_id
+                        )
+                    except Exception as error:
+                        # Bad or ambiguous arguments (e.g. no character_id in
+                        # a multi-PC session, FR-25) go back to the model as a
+                        # tool error to retry, the same path _run_tool gives
+                        # every other tool - not raised into the WS handler,
+                        # which would kill the connection over a model mistake.
+                        result = {"error": str(error)}
+                        yield AgentTurnEvent(
+                            type="tool_call", payload={"name": call.name, "result": result}
+                        )
+                        messages.append(
+                            {"role": "tool", "tool_call_id": call.id, "content": json.dumps(result)}
+                        )
+                        continue
+                    pool_size = state.characters[character_id].action_ratings.get(
+                        proposal.action, 0
                     )
-                    decision = RollDecision.model_validate(decision_payload or {})
+                    if is_ai_controlled(state.controllers, character_id):
+                        # FR-35: no human at the table for this seat - the
+                        # PlayerAgent decides push/bargain/trade-off itself
+                        # instead of the tool-calling loop pausing for a
+                        # WS reply that would never come.
+                        try:
+                            decision = await PlayerAgent(self._client, character_id).decide_roll(
+                                state, proposal, pool_size
+                            )
+                        except (httpx.HTTPError, StructuredOutputError):
+                            # A companion's failed LLM call must not crash the
+                            # turn: fall back to rolling as proposed - the
+                            # neutral choice, no stress spent and no bargain -
+                            # same degrade-not-crash rule as _retrieve.
+                            decision = RollDecision()
+                        yield AgentTurnEvent(
+                            type="companion_roll_decision",
+                            payload={
+                                "character_id": character_id,
+                                "decision": decision.model_dump(mode="json"),
+                            },
+                        )
+                    else:
+                        decision_payload = yield AgentTurnEvent(
+                            type="roll_proposed",
+                            payload={
+                                "action": proposal.action.value,
+                                "position": proposal.position.value,
+                                "effect": proposal.effect.name.lower(),
+                                "pool_size": pool_size,
+                            },
+                        )
+                        decision = RollDecision.model_validate(decision_payload or {})
                     result, state = self._resolve_roll(state, proposal, decision)
                 else:
                     result = self._run_tool(state, call.name, call.arguments)
@@ -140,9 +186,43 @@ class GmAgent:
             yield AgentTurnEvent(type="error", payload={"message": f"LLM request failed: {error}"})
             return
 
+        narration_text = "".join(narration_chunks)
         state = self._executor.log_event(
-            state, "session", "current", "narration", {"text": "".join(narration_chunks)}
+            state, "session", "current", "narration", {"text": narration_text}
         )
+
+        # FR-35: give every AI-controlled companion a chance to add an
+        # in-character line reacting to this turn's narration - queued
+        # for the GM's *next* turn via the event log, same as a human's
+        # chat message, rather than looping the GM back into this one.
+        for seat in state.controllers.values():
+            if seat.kind != "ai":
+                continue
+            for character_id in seat.character_ids:
+                try:
+                    line = await PlayerAgent(self._client, character_id).maybe_roleplay(
+                        state, narration_text
+                    )
+                except (httpx.HTTPError, StructuredOutputError):
+                    # Staying quiet over crashing the turn: the narration is
+                    # already streamed and logged, a companion's colour line
+                    # is never worth losing the connection for.
+                    line = None
+                if line is None:
+                    continue
+                character = state.characters[character_id]
+                state = self._executor.log_event(
+                    state,
+                    "character",
+                    character_id,
+                    "player_message",
+                    {"text": line, "speaker": character.name},
+                )
+                yield AgentTurnEvent(
+                    type="companion_message",
+                    payload={"character_id": character_id, "name": character.name, "text": line},
+                )
+
         yield AgentTurnEvent(
             type="narration_done", payload={"state": state.model_dump(mode="json")}
         )
@@ -165,12 +245,19 @@ class GmAgent:
 
         stress_spent = 2 * decision.push_dice + 2 * decision.push_effect
         if stress_spent:
-            state = self._executor.mark_stress(state, MarkStressArgs(amount=stress_spent)).state
+            state = self._executor.mark_stress(
+                state, MarkStressArgs(amount=stress_spent, character_id=proposal.character_id)
+            ).state
 
         bonus_dice = int(decision.push_dice) + int(bool(decision.devils_bargain))
         roll_result = self._executor.roll_action(
             state,
-            RollActionArgs(action=proposal.action, position=position, effect=effect),
+            RollActionArgs(
+                action=proposal.action,
+                position=position,
+                effect=effect,
+                character_id=proposal.character_id,
+            ),
             bonus_dice=bonus_dice,
             devils_bargain=decision.devils_bargain,
         )

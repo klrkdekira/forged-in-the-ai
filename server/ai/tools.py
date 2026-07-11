@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, computed_field, field_validator, model_va
 from engine.campaign import CampaignCanon, SessionZeroConfig
 from engine.character import Action, Attribute, Character
 from engine.clocks import Clock, ClockKind
+from engine.controller import Controller
 from engine.crew import Crew
 from engine.entities import Npc
 from engine.errors import EngineError
@@ -41,6 +42,11 @@ class GameState(BaseModel):
     session: Session
     canon: CampaignCanon | None = None
     session_zero: SessionZeroConfig | None = None
+    controllers: dict[str, Controller] = Field(
+        default_factory=dict,
+        description="Keyed by seat_id; only AI seats need an entry (Controller.kind default "
+        "'human' - see engine.controller.is_ai_controlled)",
+    )
     clocks: dict[str, Clock] = Field(default_factory=dict)
     npcs: dict[str, Npc] = Field(default_factory=dict)
     faction_statuses: dict[str, FactionStatus] = Field(
@@ -70,7 +76,7 @@ class GameState(BaseModel):
         """The crew's primary PC, for single-PC contexts (canon/recap
         headers, the dev CLI) - never used to resolve a mutating tool
         call, which always names a specific character_id
-        (`ToolExecutor._resolve_character_id`)."""
+        (`ToolExecutor.resolve_character_id`)."""
         return next(iter(self.characters.values()))
 
 
@@ -170,6 +176,11 @@ class CreateCharacterArgs(BaseModel):
     character_id: str = Field(..., description="A stable id for this PC, e.g. 'pc-2'")
     name: str
     playbook: str
+    controller_kind: Literal["human", "ai"] = Field(
+        "ai",
+        description="'ai' for a crewmate the AI player agent runs (FR-35); 'human' for another "
+        "player's seat. The primary PC from campaign creation is always human and unaffected.",
+    )
 
 
 class UpdateFactionStatusArgs(BaseModel):
@@ -270,7 +281,7 @@ class ToolExecutor:
         log = state.log.append(entity_type, entity_id, event_type, payload, self._clock())
         return state.model_copy(update={"log": log})
 
-    def _resolve_character_id(self, state: GameState, character_id: str | None) -> str:
+    def resolve_character_id(self, state: GameState, character_id: str | None) -> str:
         """FR-25: resolves which PC a tool call affects. Refuses rather
         than guessing (CLAUDE.md) once there's more than one - an
         unspecified `character_id` is only unambiguous while there's
@@ -280,27 +291,37 @@ class ToolExecutor:
                 raise EngineError(f"no character {character_id!r} in this session")
             return character_id
         if len(state.characters) != 1:
-            raise EngineError(
-                "character_id is required once a session has more than one character"
-            )
+            raise EngineError("character_id is required once a session has more than one character")
         return next(iter(state.characters))
 
     def create_character(self, state: GameState, args: CreateCharacterArgs) -> ToolCallResult:
         """FR-25/FR-35: the only way a second PC comes into existence for
-        now - session zero, or a crewmate introduced mid-campaign."""
+        now - session zero, or a crewmate introduced mid-campaign. Also
+        registers the new PC's seat (`controller_kind`) - a companion
+        defaults to AI-controlled, so PlayerAgent picks it up as soon as
+        it exists, with no separate wiring step required."""
         if args.character_id in state.characters:
             raise EngineError(f"character {args.character_id!r} already exists in this session")
         character = Character(name=args.name, playbook=args.playbook)
+        event_payload = {
+            **character.model_dump(mode="json"),
+            "controller_kind": args.controller_kind,
+        }
         log = state.log.append(
-            "character",
-            args.character_id,
-            "character_created",
-            character.model_dump(mode="json"),
-            self._clock(),
+            "character", args.character_id, "character_created", event_payload, self._clock()
         )
         characters = {**state.characters, args.character_id: character}
+        seat_id = f"seat:{args.character_id}"
+        controllers = {
+            **state.controllers,
+            seat_id: Controller(
+                seat_id=seat_id, kind=args.controller_kind, character_ids=[args.character_id]
+            ),
+        }
         return ToolCallResult(
-            state=state.model_copy(update={"characters": characters, "log": log}),
+            state=state.model_copy(
+                update={"characters": characters, "controllers": controllers, "log": log}
+            ),
             result={"character_id": args.character_id},
         )
 
@@ -317,7 +338,7 @@ class ToolExecutor:
         agent's `_resolve_roll` before this call, never from the LLM's own
         tool-call arguments (`tool_definitions()` only ever introspects
         `RollActionArgs`, so the model never sees these as choices it makes)."""
-        character_id = self._resolve_character_id(state, args.character_id)
+        character_id = self.resolve_character_id(state, args.character_id)
         pool_size = state.characters[character_id].action_ratings.get(args.action, 0) + bonus_dice
         roll = action_roll(pool_size, args.position, args.effect, self._rng)
         payload = {
@@ -348,7 +369,7 @@ class ToolExecutor:
 
     def roll_resistance(self, state: GameState, args: RollResistanceArgs) -> ToolCallResult:
         """SRD: "Resistance and Armor"."""
-        character_id = self._resolve_character_id(state, args.character_id)
+        character_id = self.resolve_character_id(state, args.character_id)
         rating = state.characters[character_id].attribute_rating(args.attribute)
         roll = resistance_roll(rating, self._rng)
         log = state.log.append(
@@ -393,7 +414,7 @@ class ToolExecutor:
 
     def apply_harm(self, state: GameState, args: ApplyHarmArgs) -> ToolCallResult:
         """SRD: "Consequences and Harm"."""
-        character_id = self._resolve_character_id(state, args.character_id)
+        character_id = self.resolve_character_id(state, args.character_id)
         mutation = mark_harm(state.characters[character_id], args.level, args.name)
         log = state.log.append(
             "character",
@@ -407,7 +428,7 @@ class ToolExecutor:
         return ToolCallResult(state=state, result={"catastrophic": mutation.catastrophic_harm})
 
     def mark_stress(self, state: GameState, args: MarkStressArgs) -> ToolCallResult:
-        character_id = self._resolve_character_id(state, args.character_id)
+        character_id = self.resolve_character_id(state, args.character_id)
         mutation = mark_stress(state.characters[character_id], args.amount)
         log = state.log.append(
             "character",
@@ -424,7 +445,7 @@ class ToolExecutor:
         """SRD: "Recover". Part of `SHEET_OPERATIONS` (FR-28), not
         `TOOL_SPECS`: the player heals directly, the GM/model doesn't call
         this on their behalf."""
-        character_id = self._resolve_character_id(state, args.character_id)
+        character_id = self.resolve_character_id(state, args.character_id)
         character = heal_character(state.characters[character_id])
         log = state.log.append("character", character_id, "harm_healed", {}, self._clock())
         characters = {**state.characters, character_id: character}
@@ -435,7 +456,7 @@ class ToolExecutor:
     def mark_xp(self, state: GameState, args: MarkXpArgs) -> ToolCallResult:
         """SRD: "PC Advancement". `SHEET_OPERATIONS` only (FR-28) - marking
         xp is the player's own bookkeeping, not a GM/model tool call."""
-        character_id = self._resolve_character_id(state, args.character_id)
+        character_id = self.resolve_character_id(state, args.character_id)
         base = state.characters[character_id]
         if args.track == "playbook":
             character = mark_playbook_xp(base, args.amount)
@@ -456,7 +477,7 @@ class ToolExecutor:
 
     def adjust_coin(self, state: GameState, args: AdjustCoinArgs) -> ToolCallResult:
         """SRD: "Coin and Stash". `SHEET_OPERATIONS` only (FR-28)."""
-        character_id = self._resolve_character_id(state, args.character_id)
+        character_id = self.resolve_character_id(state, args.character_id)
         character = adjust_coin(state.characters[character_id], args.amount)
         log = state.log.append(
             "character",
@@ -474,7 +495,7 @@ class ToolExecutor:
     def set_item_carried(self, state: GameState, args: SetItemCarriedArgs) -> ToolCallResult:
         """SRD: "Loadout". `SHEET_OPERATIONS` only (FR-28) - toggling
         carried items is the player choosing their loadout, not a GM call."""
-        character_id = self._resolve_character_id(state, args.character_id)
+        character_id = self.resolve_character_id(state, args.character_id)
         character = set_item_carried(state.characters[character_id], args.item_id, args.carried)
         log = state.log.append(
             "character",
