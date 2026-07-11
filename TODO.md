@@ -323,7 +323,22 @@ refer to that document. Each phase should end in something playable/testable.
       reverts, stress doesn't.)
 - [ ] Table view v2: generated district/score maps (FR-29); pick canvas
       library (Pixi vs. Konva, D4 leftover) and record an ADR
-- [ ] Journal view v2: filters by type, phase, and entity (FR-32)
+- [x] Journal view v2: filters by type, phase, and entity (FR-32)
+      (`journal-panel.tsx`, client-only - the full log was already
+      broadcast, so no server change needed. Type buckets event_types
+      into FR-32's named groups (narration/rolls/consequences/downtime);
+      "downtime" is reserved but always empty since no downtime GM tool
+      is wired up yet (Phase 4 notes), and an "other" bucket not in the
+      spec's four names holds everything that doesn't fit rather than
+      silently hiding it (npc/canon/phase/safety-tool entries). Phase
+      isn't carried on each entry - `phaseAtEachSequence` derives it by
+      walking the log in order and tracking `phase_transitioned` events,
+      tagging the transition's own row with the phase it entered. Entity
+      filters on the existing `entity_type` field directly. Covered by
+      `journal-panel.test.tsx` (5 tests: unfiltered render, each filter
+      dimension, and the undo confirm still works alongside the new
+      filters) rather than a live check, since this is presentation logic
+      over data the server already sends.)
 - [ ] Relationship map view: entity graph with edge drill-down into the
       linked journal entries, showing what transpired between them (FR-34)
 - [ ] AI player agent v1: an AI-controlled crewmate PC, distinct from the GM

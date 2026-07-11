@@ -1,3 +1,5 @@
+import { useMemo, useState } from 'react'
+
 import type { JournalEntry } from '@/hooks/use-session-socket'
 
 // FR-32: a one-line human-readable summary per event type; anything not
@@ -48,10 +50,49 @@ function summarize(entry: JournalEntry): string {
   }
 }
 
-// FR-31/FR-32: a chronological turn log; every entry expands to its full
-// audit record (dice, position, effect, consequences for rolls; whatever
-// payload the event carries for anything else). Filtering by type/phase/
-// entity is v2 (TODO.md).
+// FR-32: "type (narration / rolls / consequences / downtime)". Downtime
+// activities have no GM tool wired up yet (TODO.md), so that bucket is
+// reserved but always empty for now - the filter option still exists,
+// ready for when one lands. "Other" isn't in the spec's four names, but a
+// filterable journal needs an honest catch-all rather than silently
+// hiding entries no one category fits (npc/canon/phase/safety-tool notes).
+const TYPE_CATEGORIES = {
+  narration: ['player_message', 'narration'],
+  rolls: ['action_roll', 'fortune_roll', 'resistance_roll'],
+  consequences: ['stress_marked', 'harm_marked', 'harm_healed', 'faction_status_changed', 'clock_ticked'],
+  downtime: [] as string[],
+} as const
+type TypeCategory = keyof typeof TYPE_CATEGORIES | 'other'
+
+function categoryOf(eventType: string): TypeCategory {
+  for (const [category, eventTypes] of Object.entries(TYPE_CATEGORIES)) {
+    if ((eventTypes as readonly string[]).includes(eventType)) return category as TypeCategory
+  }
+  return 'other'
+}
+
+// Tags each entry with the campaign phase active when it happened, by
+// walking the log in order and tracking phase_transitioned events -
+// entries don't carry their own phase, only transitions do.
+function phaseAtEachSequence(entries: JournalEntry[]): Map<number, string> {
+  let phase = 'free_play'
+  const bySequence = new Map<number, string>()
+  for (const entry of [...entries].sort((a, b) => a.sequence - b.sequence)) {
+    if (entry.event_type === 'phase_transitioned') phase = String(entry.payload.phase)
+    bySequence.set(entry.sequence, phase)
+  }
+  return bySequence
+}
+
+const TYPE_FILTER_LABELS: Record<'all' | TypeCategory, string> = {
+  all: 'All',
+  narration: 'Narration',
+  rolls: 'Rolls',
+  consequences: 'Consequences',
+  downtime: 'Downtime',
+  other: 'Other',
+}
+
 export function JournalPanel({
   entries,
   campaignId,
@@ -61,6 +102,27 @@ export function JournalPanel({
   campaignId: string
   onUndo: (sequence: number) => void
 }) {
+  const [typeFilter, setTypeFilter] = useState<'all' | TypeCategory>('all')
+  const [phaseFilter, setPhaseFilter] = useState('all')
+  const [entityFilter, setEntityFilter] = useState('all')
+
+  const phaseBySequence = useMemo(() => phaseAtEachSequence(entries), [entries])
+  const phases = useMemo(
+    () => Array.from(new Set(phaseBySequence.values())),
+    [phaseBySequence],
+  )
+  const entityTypes = useMemo(
+    () => Array.from(new Set(entries.map((entry) => entry.entity_type))).sort(),
+    [entries],
+  )
+
+  const visibleEntries = entries.filter((entry) => {
+    if (typeFilter !== 'all' && categoryOf(entry.event_type) !== typeFilter) return false
+    if (phaseFilter !== 'all' && phaseBySequence.get(entry.sequence) !== phaseFilter) return false
+    if (entityFilter !== 'all' && entry.entity_type !== entityFilter) return false
+    return true
+  })
+
   function handleUndo(entry: JournalEntry) {
     // FR-19: irreversible (event log truncation, not a soft flag) - the
     // table needs to know that before agreeing, not after.
@@ -85,11 +147,58 @@ export function JournalPanel({
           Export recap
         </a>
       </div>
+
+      <div className="flex flex-wrap items-center gap-1 text-[0.7rem]">
+        {(Object.keys(TYPE_FILTER_LABELS) as Array<'all' | TypeCategory>).map((category) => (
+          <button
+            key={category}
+            type="button"
+            onClick={() => setTypeFilter(category)}
+            className={`rounded-full px-2 py-0.5 ${
+              typeFilter === category
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:bg-muted/40'
+            }`}
+          >
+            {TYPE_FILTER_LABELS[category]}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex gap-2 text-[0.7rem]">
+        <select
+          value={phaseFilter}
+          onChange={(event) => setPhaseFilter(event.target.value)}
+          className="rounded-md border border-border/50 bg-background/50 px-1 py-0.5 text-muted-foreground"
+        >
+          <option value="all">All phases</option>
+          {phases.map((phase) => (
+            <option key={phase} value={phase}>
+              {phase}
+            </option>
+          ))}
+        </select>
+        <select
+          value={entityFilter}
+          onChange={(event) => setEntityFilter(event.target.value)}
+          className="rounded-md border border-border/50 bg-background/50 px-1 py-0.5 text-muted-foreground"
+        >
+          <option value="all">All entities</option>
+          {entityTypes.map((entityType) => (
+            <option key={entityType} value={entityType}>
+              {entityType}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {entries.length === 0 ? (
         <p className="text-xs text-muted-foreground">Nothing recorded yet.</p>
+      ) : visibleEntries.length === 0 ? (
+        <p className="text-xs text-muted-foreground">Nothing matches these filters.</p>
       ) : (
         <ul className="flex flex-col gap-1">
-          {entries.map((entry) => (
+          {visibleEntries.map((entry) => (
             <li key={entry.sequence}>
               <details className="group rounded-md border border-transparent open:border-border/50 open:bg-muted/30">
                 <summary className="flex cursor-pointer items-baseline gap-2 rounded-md px-1 py-0.5 text-xs hover:bg-muted/40">
