@@ -62,6 +62,25 @@ export interface ClockSnapshot {
   filled: number
 }
 
+// FR-36: session zero's generated setting - null until the GM agent
+// calls set_campaign_canon (ai/tools.py), which is why every field here
+// has to be optional at the top: canon itself may not exist yet.
+export interface CanonSnapshot {
+  setting_name: string
+  tone: string | null
+  factions: string[]
+  locations: string[]
+  facts: string[]
+}
+
+// FR-17: session zero's safety-tool agreements - null until
+// set_session_zero_config is called.
+export interface SessionZeroSnapshot {
+  lines: string[]
+  veils: string[]
+  tone: string | null
+}
+
 // FR-31/FR-32: one entity-tagged event from the append-only log - the
 // journal view's entire data source, already broadcast in every `state`
 // message (FR-19: the journal is fully reconstructible from the event log).
@@ -78,6 +97,8 @@ export interface GameStateSnapshot {
   character: CharacterSnapshot
   crew: CrewSnapshot
   clocks: Record<string, ClockSnapshot>
+  canon: CanonSnapshot | null
+  session_zero: SessionZeroSnapshot | null
   log: { events: JournalEntry[] }
   [key: string]: unknown
 }

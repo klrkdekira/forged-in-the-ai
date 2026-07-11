@@ -1,4 +1,5 @@
 from ai.tools import GameState
+from engine.campaign import CampaignCanon, SessionZeroConfig
 from engine.character import Attribute
 from engine.clocks import Clock, ClockKind
 from engine.entities import Npc
@@ -35,6 +36,7 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
     npcs = dict(base.npcs)
     faction_statuses = dict(base.faction_statuses)
     canon = base.canon
+    session_zero = base.session_zero
     ordered = sorted(events, key=lambda e: e.sequence)
 
     for event in ordered:
@@ -74,6 +76,10 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
             faction_statuses[event.entity_id] = current.changed(payload["delta"], event.sequence)
         elif event.event_type == "canon_fact_added" and canon is not None:
             canon = canon.with_fact(payload["fact"])
+        elif event.event_type == "session_zero_configured":
+            session_zero = SessionZeroConfig.model_validate(payload)
+        elif event.event_type == "canon_set":
+            canon = CampaignCanon.model_validate(payload)
 
     return base.model_copy(
         update={
@@ -84,6 +90,7 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
             "npcs": npcs,
             "faction_statuses": faction_statuses,
             "canon": canon,
+            "session_zero": session_zero,
             "log": EventLog(events=ordered),
         }
     )

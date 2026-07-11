@@ -1,18 +1,27 @@
-import type { ClockSnapshot, CrewSnapshot, SheetOperation } from '@/hooks/use-session-socket'
+import type {
+  CanonSnapshot,
+  ClockSnapshot,
+  CrewSnapshot,
+  SheetOperation,
+} from '@/hooks/use-session-socket'
 
 import { TickBoxes } from './tick-boxes'
 
 // FR-29: table view v1 - active clocks (clickable, same tick-box control as
-// the sheet panel's stress/XP) and the crew's claims. The claim map itself
-// (generated district/score imagery) is v2's job (TODO.md); claims here are
-// a plain read-only list, since nothing currently mutates them at runtime.
+// the sheet panel's stress/XP), the crew's claims, and (once session zero
+// has generated one, FR-36) the setting. The claim/district map itself
+// (generated imagery via Konva, ADR-0007) is v2's remaining job (TODO.md);
+// both claims and the setting are plain read-only text for now, since
+// nothing currently mutates a claim or a location at runtime.
 export function TableViewPanel({
   clocks,
   crew,
+  canon,
   onOperate,
 }: {
   clocks: Record<string, ClockSnapshot>
   crew: CrewSnapshot
+  canon: CanonSnapshot | null
   onOperate: (operation: SheetOperation) => void
 }) {
   const clockEntries = Object.entries(clocks)
@@ -22,6 +31,26 @@ export function TableViewPanel({
       <div>
         <h2 className="text-lg font-semibold text-foreground">{crew.name}</h2>
         <p className="text-xs text-muted-foreground">{crew.crew_type}</p>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <span className="text-xs font-semibold text-muted-foreground">Setting</span>
+        {canon ? (
+          <div className="flex flex-col gap-1 text-xs">
+            <span className="font-medium text-foreground">{canon.setting_name}</span>
+            {canon.tone && <span className="italic text-muted-foreground">{canon.tone}</span>}
+            <span className="text-muted-foreground">
+              Factions: {canon.factions.length > 0 ? canon.factions.join(', ') : 'none yet'}
+            </span>
+            <span className="text-muted-foreground">
+              Locations: {canon.locations.length > 0 ? canon.locations.join(', ') : 'none yet'}
+            </span>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Not generated yet - the GM sets this up during session zero.
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col gap-3">

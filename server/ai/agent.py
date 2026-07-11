@@ -51,8 +51,9 @@ class GmAgent:
         state = self._executor.log_event(
             state, "session", "current", "player_message", {"text": text}
         )
+        needs_session_zero = state.canon is None or state.session_zero is None
         context = assemble_turn_context(
-            system_prompt=build_system_prompt(),
+            system_prompt=build_system_prompt(needs_session_zero),
             canon_sections=render_canon(state),
             retrieved=[],
             transcript_lines=render_transcript(state.log),

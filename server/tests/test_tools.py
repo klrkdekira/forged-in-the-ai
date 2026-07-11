@@ -18,7 +18,9 @@ from ai.tools import (
     RollActionArgs,
     RollFortuneArgs,
     RollResistanceArgs,
+    SetCampaignCanonArgs,
     SetItemCarriedArgs,
+    SetSessionZeroConfigArgs,
     TickClockArgs,
     ToolExecutor,
     TransitionPhaseArgs,
@@ -71,6 +73,8 @@ def test_tool_definitions_cover_every_registered_tool():
         "update_faction_status",
         "add_canon_fact",
         "invoke_x_card",
+        "set_session_zero_config",
+        "set_campaign_canon",
     }
     assert all("parameters" in d["function"] for d in definitions)
 
@@ -207,6 +211,40 @@ def test_add_canon_fact_grows_the_campaign_canon():
 def test_add_canon_fact_refuses_without_canon_set():
     with pytest.raises(ValueError, match="no campaign canon"):
         _executor().add_canon_fact(_state(), AddCanonFactArgs(fact="anything"))
+
+
+def test_set_session_zero_config_records_lines_veils_and_tone():
+    # FR-17: session zero's safety agreements, generic tabletop safety
+    # tools rather than an SRD mechanic.
+    result = _executor().set_session_zero_config(
+        _state(),
+        SetSessionZeroConfigArgs(lines=["no animal harm"], veils=["torture"], tone="pulpy noir"),
+    )
+
+    assert result.state.session_zero.lines == ["no animal harm"]
+    assert result.state.session_zero.veils == ["torture"]
+    assert result.state.session_zero.tone == "pulpy noir"
+    assert result.state.log.events[-1].event_type == "session_zero_configured"
+
+
+def test_set_campaign_canon_creates_the_setting():
+    # FR-36: session zero's one-time setting creation, distinct from
+    # add_canon_fact which only grows canon that already exists.
+    result = _executor().set_campaign_canon(
+        _state(),
+        SetCampaignCanonArgs(
+            setting_name="Harrow's Reach",
+            tone="rain-soaked industrial",
+            factions=["The Rustworks Combine"],
+            locations=["The Sunken Market"],
+        ),
+    )
+
+    assert result.state.canon.setting_name == "Harrow's Reach"
+    assert result.state.canon.factions == ["The Rustworks Combine"]
+    assert result.state.canon.locations == ["The Sunken Market"]
+    assert result.state.log.events[-1].event_type == "canon_set"
+    assert result.result["setting_name"] == "Harrow's Reach"
 
 
 def test_invoke_x_card_logs_an_event():

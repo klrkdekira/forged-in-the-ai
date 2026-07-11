@@ -159,9 +159,22 @@ refer to that document. Each phase should end in something playable/testable.
       setting generation interview persisted as campaign canon (FR-17, FR-36)
       (`engine/campaign.py` SessionZeroConfig/CampaignCanon - neither is
       SRD content, they're generic tabletop safety tools; `add_canon_fact`/
-      `invoke_x_card` tools in `ai/tools.py`. The AI-run interview itself
-      needs a live model, so isn't testable headlessly - the schema and
-      tools it would use are)
+      `invoke_x_card` tools in `ai/tools.py`. Originally shipped as schema
+      and tools only - the AI-run interview itself needing a live model
+      to actually conduct was flagged as untestable headlessly, and
+      nothing ever created canon in the first place: `GameState.canon`
+      stayed `None` for every campaign, silently, until Table view v2
+      work went looking for setting data to render and found none. Closed
+      in Phase 5 (below): `set_session_zero_config`/`set_campaign_canon`
+      tools, a `SESSION_ZERO_PROCEDURE` conditionally in the system
+      prompt while canon/session_zero aren't set yet, `ai/canon.py`
+      rendering both into context once they are, and `ai/replay.py` fold
+      cases so undo/rewind doesn't drop them. The mechanism itself (does
+      the model see the procedure, does calling the tools update state,
+      does the procedure disappear afterwards) is fully tested headlessly
+      with a mocked LLM transport, same as every other tool
+      (`test_agent.py`); only the quality of a live interview
+      conversation needs a real model, not verified this round.)
 - [x] Controller model: one human seat controls any number of PCs/cohorts;
       solo play is the whole crew under one seat (FR-25) (`engine/controller.py`
       Controller/solo_controller; ai/tools.py's single-`character` GameState
@@ -323,11 +336,13 @@ refer to that document. Each phase should end in something playable/testable.
       reverts, stress doesn't.)
 - [ ] Table view v2: generated district/score maps (FR-29). Canvas library
       picked: Konva.js via `react-konva` (ADR-0007, D4 leftover resolved).
-      Still open: the location/district data model itself doesn't exist
-      yet (`CampaignCanon.locations` is a flat `list[str]`, no positions
-      or adjacency; `ClaimSnapshot` carries neither either) - designing
-      that, and how session-zero's generation (FR-36) populates it, is
-      this item's remaining scope before any rendering code.
+      Session zero (above) now actually populates `CampaignCanon.locations`
+      instead of leaving canon permanently `None` - Table view's new
+      "Setting" block (`table-view-panel.tsx`) shows the plain list
+      already. Still open: `CampaignCanon.locations` remains a flat
+      `list[str]` with no positions or adjacency (`ClaimSnapshot` carries
+      neither either) - designing that layout data, and the Konva
+      rendering itself, is this item's remaining scope.
 - [x] Journal view v2: filters by type, phase, and entity (FR-32)
       (`journal-panel.tsx`, client-only - the full log was already
       broadcast, so no server change needed. Type buckets event_types

@@ -83,3 +83,24 @@ SCORE_LOOP_PROCEDURE = ProcedureDoc(
 )
 
 PROCEDURES = [GM_ROLE, ACTION_ROLL_PROCEDURE, SCORE_LOOP_PROCEDURE]
+
+# FR-17/FR-36: not SRD content - generic tabletop safety tools plus
+# original setting generation, same reasoning as engine/campaign.py's
+# SessionZeroConfig/CampaignCanon. Included only while a campaign hasn't
+# completed session zero yet (ai/system_prompt.py's needs_session_zero),
+# not unconditionally like PROCEDURES above.
+SESSION_ZERO_PROCEDURE = ProcedureDoc(
+    title="Session zero",
+    srd_sections=[],
+    text=(
+        "Before any regular play: run session zero. First, ask the "
+        "player for lines (hard limits, never in the fiction) and veils "
+        "(fade-to-black topics), plus the tone they want, then call "
+        "set_session_zero_config. Then briefly interview them on the "
+        "kind of setting and crew they want, generate an original city "
+        "sketch - never a core-book setting - with a "
+        "name, 2-4 factions, and a few starting locations, and call "
+        "set_campaign_canon. Only after both calls does regular play "
+        "begin; don't run any other tool before then."
+    ),
+)

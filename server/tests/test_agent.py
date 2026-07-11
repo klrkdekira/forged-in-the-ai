@@ -344,3 +344,76 @@ async def test_agent_resumes_with_prior_turns_in_context_from_persisted_state():
     assert "Player: I pick the lock." in second_turn_prompt
     assert "GM: Noted." in second_turn_prompt
     assert "Player: What do I see?" in second_turn_prompt
+
+
+@pytest.mark.anyio
+async def test_agent_runs_session_zero_before_regular_play():
+    # FR-17/FR-36: a fresh campaign (no canon, no session_zero) should see
+    # the session-zero procedure in its system prompt, and the model
+    # completing it (set_session_zero_config, then set_campaign_canon)
+    # should make the procedure disappear from later turns.
+    from ai.procedures import SESSION_ZERO_PROCEDURE
+
+    requests = []
+    # One non-streaming response per tool round, in order: turn 1 calls
+    # set_session_zero_config then stops (no more tool calls, so the loop
+    # breaks and narrates); turn 2 calls set_campaign_canon then stops;
+    # turn 3 has nothing to call.
+    non_stream_responses = iter(
+        [
+            _tool_call_message(
+                "set_session_zero_config",
+                {"lines": ["no animal harm"], "veils": [], "tone": "noir"},
+            ),
+            {"role": "assistant", "content": "placeholder"},
+            _tool_call_message(
+                "set_campaign_canon",
+                {
+                    "setting_name": "Harrow's Reach",
+                    "factions": ["The Rustworks Combine"],
+                    "locations": ["The Sunken Market"],
+                },
+            ),
+            {"role": "assistant", "content": "placeholder"},
+            {"role": "assistant", "content": "placeholder"},
+        ]
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        requests.append(body)
+        if body.get("stream"):
+            return httpx.Response(
+                200, text='data: {"choices":[{"delta":{"content":"Noted."}}]}\n\ndata: [DONE]\n\n'
+            )
+        return httpx.Response(200, json={"choices": [{"message": next(non_stream_responses)}]})
+
+    client = LLMClient(
+        base_url="http://fake-llm/v1", model="test-model", transport=httpx.MockTransport(handler)
+    )
+    agent = GmAgent(client, _executor())
+    state = _state()
+
+    turn_1 = [event async for event in agent.handle_player_message(state, "Let's begin.")]
+    state = GameState.model_validate(
+        next(e for e in turn_1 if e.type == "narration_done").payload["state"]
+    )
+    assert SESSION_ZERO_PROCEDURE.title in requests[0]["messages"][0]["content"]
+    assert state.session_zero.lines == ["no animal harm"]
+    assert state.canon is None
+
+    requests.clear()
+    turn_2 = [event async for event in agent.handle_player_message(state, "Go on.")]
+    state = GameState.model_validate(
+        next(e for e in turn_2 if e.type == "narration_done").payload["state"]
+    )
+    # session_zero is set but canon isn't yet - still needs session zero.
+    assert SESSION_ZERO_PROCEDURE.title in requests[0]["messages"][0]["content"]
+    assert state.canon.setting_name == "Harrow's Reach"
+
+    requests.clear()
+    async for _ in agent.handle_player_message(state, "What do I see?"):
+        pass
+    await client.aclose()
+
+    assert SESSION_ZERO_PROCEDURE.title not in requests[0]["messages"][0]["content"]

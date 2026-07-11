@@ -124,6 +124,7 @@ export function PlayPage() {
                 <TableViewPanel
                   clocks={state.clocks}
                   crew={state.crew}
+                  canon={state.canon}
                   onOperate={sendSheetOperation}
                 />
               )}

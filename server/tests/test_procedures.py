@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from ai.procedures import PROCEDURES
+from ai.procedures import PROCEDURES, SESSION_ZERO_PROCEDURE
 from ai.system_prompt import build_system_prompt
 from engine.pack_loader import load_pack
 
@@ -29,3 +29,12 @@ def test_build_system_prompt_includes_every_procedure():
 def test_build_system_prompt_states_the_engine_adjudicates_principle():
     # CLAUDE.md: "The engine adjudicates, the model narrates."
     assert "tool call" in build_system_prompt()
+
+
+def test_build_system_prompt_includes_session_zero_only_when_needed():
+    # FR-17/FR-36: session zero isn't unconditional like PROCEDURES - it
+    # should disappear once a campaign has completed it, or every turn
+    # after would re-run the interview.
+    assert SESSION_ZERO_PROCEDURE.title in build_system_prompt(needs_session_zero=True)
+    assert SESSION_ZERO_PROCEDURE.title not in build_system_prompt(needs_session_zero=False)
+    assert SESSION_ZERO_PROCEDURE.title not in build_system_prompt()

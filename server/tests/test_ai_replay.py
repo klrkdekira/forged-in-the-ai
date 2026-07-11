@@ -64,6 +64,39 @@ def test_replay_state_skips_pure_record_events():
     assert len(replayed.log.events) == 1
 
 
+def test_replay_state_folds_session_zero_configuration_and_canon():
+    # FR-17/FR-36: undo/rewind must not silently drop session-zero data
+    # when replaying past it.
+    base = _base_state()
+    log = base.log
+    log = log.append(
+        "session",
+        "current",
+        "session_zero_configured",
+        {"lines": ["no animal harm"], "veils": ["torture"], "tone": "pulpy noir"},
+        AT,
+    )
+    log = log.append(
+        "canon",
+        "Harrow's Reach",
+        "canon_set",
+        {
+            "setting_name": "Harrow's Reach",
+            "tone": "rain-soaked industrial",
+            "factions": ["The Rustworks Combine"],
+            "locations": ["The Sunken Market"],
+            "facts": [],
+        },
+        AT,
+    )
+
+    replayed = replay_state(base, log.events)
+
+    assert replayed.session_zero.lines == ["no animal harm"]
+    assert replayed.canon.setting_name == "Harrow's Reach"
+    assert replayed.canon.factions == ["The Rustworks Combine"]
+
+
 def test_replay_state_reproduces_a_truncated_prefix_of_the_log():
     # This is the mechanism undo/rewind is built on: replaying only a
     # prefix of the log reconstructs state as of that earlier point.

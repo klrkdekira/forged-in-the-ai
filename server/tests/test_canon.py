@@ -1,5 +1,6 @@
 from ai.canon import render_canon
 from ai.tools import GameState
+from engine.campaign import CampaignCanon, SessionZeroConfig
 from engine.character import Character
 from engine.clocks import Clock, ClockKind
 from engine.crew import Crew
@@ -52,3 +53,30 @@ def test_render_canon_includes_faction_status_only_when_present():
     status_section = next(s for s in render_canon(state) if s.title == "Faction status")
 
     assert "-2" in status_section.text
+
+
+def test_render_canon_includes_setting_only_when_canon_is_set():
+    assert not any(s.title == "Setting" for s in render_canon(_state()))
+
+    state = _state(
+        canon=CampaignCanon(
+            setting_name="Harrow's Reach", factions=["The Rustworks Combine"], locations=["Docks"]
+        )
+    )
+    setting_section = next(s for s in render_canon(state) if s.title == "Setting")
+
+    assert "Harrow's Reach" in setting_section.text
+    assert "The Rustworks Combine" in setting_section.text
+    assert setting_section.priority == 2
+
+
+def test_render_canon_includes_safety_agreements_only_when_session_zero_is_set():
+    assert not any(s.title == "Safety agreements" for s in render_canon(_state()))
+
+    state = _state(
+        session_zero=SessionZeroConfig(lines=["no animal harm"], veils=["torture"], tone="noir")
+    )
+    safety_section = next(s for s in render_canon(state) if s.title == "Safety agreements")
+
+    assert "no animal harm" in safety_section.text
+    assert "torture" in safety_section.text

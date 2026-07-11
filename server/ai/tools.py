@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from engine.campaign import CampaignCanon
+from engine.campaign import CampaignCanon, SessionZeroConfig
 from engine.character import Action, Attribute, Character
 from engine.clocks import Clock, ClockKind
 from engine.crew import Crew
@@ -35,6 +35,7 @@ class GameState(BaseModel):
     crew: Crew
     session: Session
     canon: CampaignCanon | None = None
+    session_zero: SessionZeroConfig | None = None
     clocks: dict[str, Clock] = Field(default_factory=dict)
     npcs: dict[str, Npc] = Field(default_factory=dict)
     faction_statuses: dict[str, FactionStatus] = Field(
@@ -130,6 +131,23 @@ class UpdateFactionStatusArgs(BaseModel):
 
 class AddCanonFactArgs(BaseModel):
     fact: str = Field(..., description="A new established fact about the setting")
+
+
+class SetSessionZeroConfigArgs(BaseModel):
+    lines: list[str] = Field(default_factory=list, description="Hard limits: never in the fiction")
+    veils: list[str] = Field(
+        default_factory=list, description="Fade-to-black topics: implied, not detailed"
+    )
+    tone: str | None = None
+
+
+class SetCampaignCanonArgs(BaseModel):
+    setting_name: str = Field(
+        ..., description="An original city/setting name - never a core-book setting"
+    )
+    tone: str | None = None
+    factions: list[str] = Field(default_factory=list)
+    locations: list[str] = Field(default_factory=list)
 
 
 class InvokeXCardArgs(BaseModel):
@@ -392,6 +410,42 @@ class ToolExecutor:
             result={"status": updated.status},
         )
 
+    def set_session_zero_config(
+        self, state: GameState, args: SetSessionZeroConfigArgs
+    ) -> ToolCallResult:
+        """FR-17: session zero's safety-tool agreements (lines, veils,
+        tone) - generic tabletop safety tools, not an SRD mechanic."""
+        session_zero = SessionZeroConfig(lines=args.lines, veils=args.veils, tone=args.tone)
+        log = state.log.append(
+            "session",
+            "current",
+            "session_zero_configured",
+            session_zero.model_dump(mode="json"),
+            self._clock(),
+        )
+        return ToolCallResult(
+            state=state.model_copy(update={"session_zero": session_zero, "log": log}),
+            result={"acknowledged": True},
+        )
+
+    def set_campaign_canon(self, state: GameState, args: SetCampaignCanonArgs) -> ToolCallResult:
+        """FR-36: session zero's setting generation - an original city
+        sketch (never a core-book setting, C3), the one-time creation of
+        canon. `add_canon_fact` is for growing it afterwards, not this."""
+        canon = CampaignCanon(
+            setting_name=args.setting_name,
+            tone=args.tone,
+            factions=args.factions,
+            locations=args.locations,
+        )
+        log = state.log.append(
+            "canon", args.setting_name, "canon_set", canon.model_dump(mode="json"), self._clock()
+        )
+        return ToolCallResult(
+            state=state.model_copy(update={"canon": canon, "log": log}),
+            result={"setting_name": args.setting_name},
+        )
+
     def add_canon_fact(self, state: GameState, args: AddCanonFactArgs) -> ToolCallResult:
         """FR-36: the session-zero-generated setting grows as new facts
         are established during play."""
@@ -443,6 +497,14 @@ TOOL_SPECS: dict[str, tuple[type[BaseModel], str]] = {
     ),
     "add_canon_fact": (AddCanonFactArgs, "Record a new established fact about the setting."),
     "invoke_x_card": (InvokeXCardArgs, "Safety tool: stop and redirect the current scene."),
+    "set_session_zero_config": (
+        SetSessionZeroConfigArgs,
+        "Session zero: record agreed lines, veils, and tone before play starts.",
+    ),
+    "set_campaign_canon": (
+        SetCampaignCanonArgs,
+        "Session zero: create the original campaign setting (never a core-book setting).",
+    ),
 }
 
 

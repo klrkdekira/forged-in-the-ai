@@ -9,10 +9,32 @@ def render_canon(state: GameState) -> list[CanonSection]:
     for `assemble_turn_context`. Character and crew are highest priority
     (always kept); clocks and NPCs are dropped first if the canon budget
     is tight."""
-    sections = [
-        CanonSection(title="Character", text=render_character(state.character), priority=2),
-        CanonSection(title="Crew", text=render_crew(state.crew), priority=2),
-    ]
+    sections = []
+
+    if state.session_zero is not None:
+        lines = [
+            f"Lines: {', '.join(state.session_zero.lines) or 'none stated'}",
+            f"Veils: {', '.join(state.session_zero.veils) or 'none stated'}",
+        ]
+        if state.session_zero.tone:
+            lines.append(f"Tone: {state.session_zero.tone}")
+        sections.append(CanonSection(title="Safety agreements", text="\n".join(lines), priority=2))
+
+    if state.canon is not None:
+        canon_lines = [f"**{state.canon.setting_name}**"]
+        if state.canon.tone:
+            canon_lines.append(f"*{state.canon.tone}*")
+        canon_lines.append(f"Factions: {', '.join(state.canon.factions) or 'none yet'}")
+        canon_lines.append(f"Locations: {', '.join(state.canon.locations) or 'none yet'}")
+        if state.canon.facts:
+            canon_lines.append("Established facts:")
+            canon_lines.extend(f"- {fact}" for fact in state.canon.facts)
+        sections.append(CanonSection(title="Setting", text="\n".join(canon_lines), priority=2))
+
+    sections.append(
+        CanonSection(title="Character", text=render_character(state.character), priority=2)
+    )
+    sections.append(CanonSection(title="Crew", text=render_crew(state.crew), priority=2))
 
     if state.clocks:
         clock_lines = [
