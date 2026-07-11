@@ -17,6 +17,7 @@ from ai.tools import (
     ToolExecutor,
     tool_definitions,
 )
+from ai.transcript import render_transcript
 from engine.rolls import step_position
 
 MAX_TOOL_ROUNDS = 6
@@ -39,17 +40,22 @@ class GmAgent:
     def __init__(self, client: LLMClient, executor: ToolExecutor) -> None:
         self._client = client
         self._executor = executor
-        self._transcript: list[str] = []
 
     async def handle_player_message(
         self, state: GameState, text: str
     ) -> AsyncIterator[AgentTurnEvent]:
-        self._transcript.append(f"Player: {text}")
+        # FR-31: logged as a structured event, not held on this instance -
+        # a resumed campaign's transcript is derived from state.log below,
+        # the same way a live one's is (FR-18's recap is just that: no
+        # separate step needed once the event log carries the whole turn).
+        state = self._executor.log_event(
+            state, "session", "current", "player_message", {"text": text}
+        )
         context = assemble_turn_context(
             system_prompt=build_system_prompt(),
             canon_sections=render_canon(state),
             retrieved=[],
-            transcript_lines=self._transcript,
+            transcript_lines=render_transcript(state.log),
         )
         messages = [
             {
@@ -133,7 +139,9 @@ class GmAgent:
             yield AgentTurnEvent(type="error", payload={"message": f"LLM request failed: {error}"})
             return
 
-        self._transcript.append(f"GM: {''.join(narration_chunks)}")
+        state = self._executor.log_event(
+            state, "session", "current", "narration", {"text": "".join(narration_chunks)}
+        )
         yield AgentTurnEvent(
             type="narration_done", payload={"state": state.model_dump(mode="json")}
         )

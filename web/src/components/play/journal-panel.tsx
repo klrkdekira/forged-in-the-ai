@@ -7,6 +7,10 @@ import type { JournalEntry } from '@/hooks/use-session-socket'
 function summarize(entry: JournalEntry): string {
   const p = entry.payload
   switch (entry.event_type) {
+    case 'player_message':
+      return `Player: ${p.text}`
+    case 'narration':
+      return `GM: ${p.text}`
     case 'action_roll':
       return `${entry.entity_id} rolled ${p.action} (${p.band})`
     case 'fortune_roll':

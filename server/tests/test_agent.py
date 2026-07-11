@@ -266,3 +266,81 @@ async def test_agent_skips_tool_round_when_the_model_answers_directly():
 
     assert not any(e.type == "tool_call" for e in events)
     assert "".join(e.payload["text"] for e in events if e.type == "narration_chunk") == "Sure."
+
+
+@pytest.mark.anyio
+async def test_agent_logs_the_player_message_and_narration_as_structured_events():
+    # FR-31: every turn is a structured event, not just its dice - the
+    # journal (and FR-18's resume recap below) needs the player's input
+    # and the GM's narration too.
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if body.get("stream"):
+            return httpx.Response(
+                200,
+                text='data: {"choices":[{"delta":{"content":"You see a door."}}]}\n\n'
+                "data: [DONE]\n\n",
+            )
+        return httpx.Response(
+            200, json={"choices": [{"message": {"role": "assistant", "content": "placeholder"}}]}
+        )
+
+    client = LLMClient(
+        base_url="http://fake-llm/v1", model="test-model", transport=httpx.MockTransport(handler)
+    )
+    agent = GmAgent(client, _executor())
+
+    events = [event async for event in agent.handle_player_message(_state(), "I look around.")]
+    await client.aclose()
+
+    done_event = next(e for e in events if e.type == "narration_done")
+    logged = done_event.payload["state"]["log"]["events"]
+
+    player_events = [e for e in logged if e["event_type"] == "player_message"]
+    narration_events = [e for e in logged if e["event_type"] == "narration"]
+    assert player_events[-1]["entity_type"] == "session"
+    assert player_events[-1]["entity_id"] == "current"
+    assert player_events[-1]["payload"]["text"] == "I look around."
+    assert narration_events[-1]["payload"]["text"] == "You see a door."
+
+
+@pytest.mark.anyio
+async def test_agent_resumes_with_prior_turns_in_context_from_persisted_state():
+    # FR-18: resuming a campaign restores the AI's context via a
+    # structured recap - here, a second GmAgent instance (standing in for
+    # a fresh WS connection after a reconnect) picks up the transcript
+    # from the persisted state's event log, not from anything held on the
+    # agent instance.
+    requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        requests.append(body)
+        if body.get("stream"):
+            return httpx.Response(
+                200, text='data: {"choices":[{"delta":{"content":"Noted."}}]}\n\ndata: [DONE]\n\n'
+            )
+        return httpx.Response(
+            200, json={"choices": [{"message": {"role": "assistant", "content": "placeholder"}}]}
+        )
+
+    client = LLMClient(
+        base_url="http://fake-llm/v1", model="test-model", transport=httpx.MockTransport(handler)
+    )
+    first_agent = GmAgent(client, _executor())
+    first_turn = [
+        event async for event in first_agent.handle_player_message(_state(), "I pick the lock.")
+    ]
+    persisted_state = next(e for e in first_turn if e.type == "narration_done").payload["state"]
+
+    second_agent = GmAgent(client, _executor())
+    async for _ in second_agent.handle_player_message(
+        GameState.model_validate(persisted_state), "What do I see?"
+    ):
+        pass
+    await client.aclose()
+
+    second_turn_prompt = requests[-1]["messages"][-1]["content"]
+    assert "Player: I pick the lock." in second_turn_prompt
+    assert "GM: Noted." in second_turn_prompt
+    assert "Player: What do I see?" in second_turn_prompt

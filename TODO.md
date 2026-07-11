@@ -261,7 +261,31 @@ refer to that document. Each phase should end in something playable/testable.
       still resolves without a global "current campaign" store. Verified
       live against a real uvicorn process, not just TestClient: create,
       reconnect, and unknown-campaign rejection all round-trip correctly.)
-- [ ] Structured recap generation on resume (FR-18)
+- [x] Structured recap generation on resume (FR-18) (found and fixed a
+      correctness gap along the way: FR-31 requires GM narration and
+      player input to be structured events too, but `GmAgent` only ever
+      held them in an in-memory `_transcript` list on the agent instance
+      - never persisted, and dropped on every reconnect, so the Journal
+      view never showed chat and a resumed campaign had no memory of its
+      own narration. `ToolExecutor.log_event` (`ai/tools.py`) lets the
+      agent log `player_message`/`narration` events the same way tool
+      calls already do; `ai/transcript.py`'s `render_transcript` derives
+      the context-assembly transcript from `state.log` instead of the
+      old `_transcript` field, which is now gone. Since a resumed
+      campaign's `GameState` (loaded from its snapshot) carries the same
+      log a live one does, `assemble_turn_context` already assembles the
+      "recap" as a side effect - no separate recap-building step needed,
+      just a durable source for the transcript it always budgeted for
+      (`ai/context.py`'s `_fit_transcript` docstring had flagged this as
+      pending since Phase 4). `journal-panel.tsx`'s `summarize()` gained
+      the two new event types. Covered by two new tests in
+      `test_agent.py`: one asserting the events land in the log, one
+      spanning two separate `GmAgent` instances (standing in for a
+      reconnect) to prove the second's LLM request actually contains the
+      first's transcript. Not verified live against a real LLM backend
+      this round, only via mocked-transport tests - flagging that
+      explicitly since every other Phase 4/5 entry above did get a live
+      check.)
 - [ ] Session recap export (FR-20)
 - [ ] Undo/rewind via event log truncation (FR-19, supports FR-17)
 - [ ] Table view v2: generated district/score maps (FR-29); pick canvas

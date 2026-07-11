@@ -166,6 +166,16 @@ class ToolExecutor:
         self._rng = rng
         self._clock = clock
 
+    def log_event(
+        self, state: GameState, entity_type: str, entity_id: str, event_type: str, payload: dict
+    ) -> GameState:
+        """FR-31: lets the GM agent record player input and narration as
+        structured events too, not just mechanical tool calls - the
+        journal, and FR-18's resume recap, need the whole turn, not just
+        its dice."""
+        log = state.log.append(entity_type, entity_id, event_type, payload, self._clock())
+        return state.model_copy(update={"log": log})
+
     def roll_action(
         self,
         state: GameState,
