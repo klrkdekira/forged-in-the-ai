@@ -124,6 +124,48 @@ def test_replay_state_folds_newly_discovered_locations_onto_canon():
     assert replayed.canon.locations == ["The Sunken Market", "The Old Quarter"]
 
 
+def test_replay_state_folds_relationship_updates_and_accumulates_history():
+    # FR-33/FR-34: undo/rewind must not drop a relationship, and a second
+    # update to the same edge must extend its history, not replace it.
+    base = _base_state()
+    log = base.log
+    log = log.append(
+        "relationship",
+        "character:Scoundrel:npc:n1",
+        "relationship_updated",
+        {
+            "subject_type": "character",
+            "subject_id": "Scoundrel",
+            "object_type": "npc",
+            "object_id": "n1",
+            "kind": "ally",
+            "status": "owes a favour",
+        },
+        AT,
+    )
+    log = log.append(
+        "relationship",
+        "character:Scoundrel:npc:n1",
+        "relationship_updated",
+        {
+            "subject_type": "character",
+            "subject_id": "Scoundrel",
+            "object_type": "npc",
+            "object_id": "n1",
+            "kind": "rival",
+            "status": "betrayed the crew",
+        },
+        AT,
+    )
+
+    replayed = replay_state(base, log.events)
+
+    edge = replayed.relationships["character:Scoundrel:npc:n1"]
+    assert edge.kind.value == "rival"
+    assert edge.status == "betrayed the crew"
+    assert edge.history == [1, 2]
+
+
 def test_replay_state_reproduces_a_truncated_prefix_of_the_log():
     # This is the mechanism undo/rewind is built on: replaying only a
     # prefix of the log reconstructs state as of that earlier point.

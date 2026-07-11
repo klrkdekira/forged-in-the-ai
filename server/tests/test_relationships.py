@@ -17,6 +17,25 @@ def test_relationship_tracks_the_event_that_caused_a_change():
     assert relationship.history == []
 
 
+def test_relationship_updated_changes_kind_status_and_records_the_event():
+    # FR-33: the AI records relationship changes as they happen in the
+    # fiction - a betrayal, a favour owed, a new contact.
+    relationship = Relationship(
+        subject_type="npc",
+        subject_id="n1",
+        object_type="npc",
+        object_id="n2",
+        kind=RelationshipKind.ALLY,
+    )
+
+    betrayed = relationship.updated(RelationshipKind.RIVAL, "betrayed the crew", sequence=4)
+
+    assert betrayed.kind is RelationshipKind.RIVAL
+    assert betrayed.status == "betrayed the crew"
+    assert betrayed.history == [4]
+    assert relationship.kind is RelationshipKind.ALLY  # unchanged
+
+
 def test_faction_status_defaults_to_neutral():
     # SRD: "Faction Status" - "zero (neutral) being the default"
     status = FactionStatus(crew_id="c1", faction_id="f1")

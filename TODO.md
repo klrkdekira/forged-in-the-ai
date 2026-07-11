@@ -383,8 +383,33 @@ refer to that document. Each phase should end in something playable/testable.
       dimension, and the undo confirm still works alongside the new
       filters) rather than a live check, since this is presentation logic
       over data the server already sends.)
-- [ ] Relationship map view: entity graph with edge drill-down into the
+- [x] Relationship map view: entity graph with edge drill-down into the
       linked journal entries, showing what transpired between them (FR-34)
+      (found the same shape of gap as the canon/session-zero one: FR-33
+      names an `update_relationship` tool in its own spec text, but only
+      `update_faction_status` - the special-cased crew-to-faction edge -
+      was ever built; the generic `Relationship` model
+      (`engine/relationships.py`, ally/rival/debt/romance/vendetta between
+      any two entities) had no field on `GameState` and no tool at all.
+      Closed first: `GameState.relationships` (keyed by
+      `"<subject_type>:<subject_id>:<object_type>:<object_id>"`),
+      `Relationship.updated()` (kind/status/history, same shape as
+      `FactionStatus.changed`), an `update_relationship` tool, a replay
+      fold case, and a "Relationships" canon section. Then the view
+      itself: `lib/relationship-graph.ts`'s `buildRelationshipGraph`
+      (pure, unit-tested) merges `FactionStatus` edges and generic
+      `Relationship` edges into one node/edge set; `relationship-map.tsx`
+      renders it with Konva - character/crew fixed near centre, every
+      other entity in a computed ring (`lib/map-layout.ts`, same as the
+      district/claim maps), edges as `Line`s between whichever two node
+      positions they connect. Selecting a node shows its label; selecting
+      an edge shows its journal history (`history: list[int]` sequence
+      numbers matched against the log, reusing `journal-panel.tsx`'s
+      `summarize()` - pulled out to `lib/journal-summarize.ts` so both
+      files could share it without an oxlint fast-refresh warning). A
+      fourth "Ties" tab alongside Sheet/Table/Journal in `/play`'s side
+      panel. Not visually verified live, same caveat as the other Konva
+      maps - no headed browser available in this environment.)
 - [ ] AI player agent v1: an AI-controlled crewmate PC, distinct from the GM
       agent; action choices, stress spends, roleplay (FR-35)
 - [ ] Playtest: multi-session campaign, verify canon consistency (G3)

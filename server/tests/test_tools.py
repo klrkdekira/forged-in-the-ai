@@ -26,6 +26,7 @@ from ai.tools import (
     ToolExecutor,
     TransitionPhaseArgs,
     UpdateFactionStatusArgs,
+    UpdateRelationshipArgs,
     tool_definitions,
 )
 from engine.campaign import CampaignCanon
@@ -33,6 +34,7 @@ from engine.character import Action, Attribute, Character, CharacterItem
 from engine.clocks import ClockKind
 from engine.crew import Crew
 from engine.errors import EngineError
+from engine.relationships import RelationshipKind
 from engine.rolls import Effect, Position
 from engine.session import CampaignPhase, Session
 
@@ -72,6 +74,7 @@ def test_tool_definitions_cover_every_registered_tool():
         "transition_phase",
         "create_npc",
         "update_faction_status",
+        "update_relationship",
         "add_canon_fact",
         "add_canon_location",
         "invoke_x_card",
@@ -199,6 +202,54 @@ def test_update_faction_status_accumulates_across_calls():
 
     assert result.result["status"] == -2
     assert result.state.faction_statuses["f1"].history == [1, 2]
+
+
+def test_update_relationship_creates_a_new_edge():
+    # FR-33: recorded the moment it happens in the fiction.
+    result = _executor().update_relationship(
+        _state(),
+        UpdateRelationshipArgs(
+            subject_type="character",
+            subject_id="Test",
+            object_type="npc",
+            object_id="n1",
+            kind=RelationshipKind.ALLY,
+            status="owes a favour",
+        ),
+    )
+
+    key = "character:Test:npc:n1"
+    assert result.state.relationships[key].kind is RelationshipKind.ALLY
+    assert result.state.relationships[key].status == "owes a favour"
+    assert result.state.log.events[-1].event_type == "relationship_updated"
+
+
+def test_update_relationship_changes_kind_on_the_same_edge():
+    executor = _executor()
+    args = UpdateRelationshipArgs(
+        subject_type="character",
+        subject_id="Test",
+        object_type="npc",
+        object_id="n1",
+        kind=RelationshipKind.ALLY,
+    )
+    state = executor.update_relationship(_state(), args).state
+
+    betrayed = executor.update_relationship(
+        state,
+        UpdateRelationshipArgs(
+            subject_type="character",
+            subject_id="Test",
+            object_type="npc",
+            object_id="n1",
+            kind=RelationshipKind.RIVAL,
+            status="betrayed the crew",
+        ),
+    )
+
+    key = "character:Test:npc:n1"
+    assert betrayed.state.relationships[key].kind is RelationshipKind.RIVAL
+    assert betrayed.state.relationships[key].history == [1, 2]
 
 
 def test_add_canon_fact_grows_the_campaign_canon():

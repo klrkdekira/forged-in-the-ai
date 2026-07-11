@@ -93,12 +93,42 @@ export interface JournalEntry {
   occurred_at: string
 }
 
+// FR-34: nodes for the relationship map - NPCs, factions (as a status
+// with the crew), and generic relationship edges between any two
+// entities (identified by "<type>:<id>" strings on either side).
+export interface NpcSnapshot {
+  id: string
+  name: string
+  tags: string[]
+  faction_id: string | null
+}
+
+export interface FactionStatusSnapshot {
+  crew_id: string
+  faction_id: string
+  status: number
+  history: number[]
+}
+
+export interface RelationshipSnapshot {
+  subject_type: string
+  subject_id: string
+  object_type: string
+  object_id: string
+  kind: 'ally' | 'rival' | 'debt' | 'romance' | 'vendetta'
+  status: string | null
+  history: number[]
+}
+
 export interface GameStateSnapshot {
   character: CharacterSnapshot
   crew: CrewSnapshot
   clocks: Record<string, ClockSnapshot>
   canon: CanonSnapshot | null
   session_zero: SessionZeroSnapshot | null
+  npcs: Record<string, NpcSnapshot>
+  faction_statuses: Record<string, FactionStatusSnapshot>
+  relationships: Record<string, RelationshipSnapshot>
   log: { events: JournalEntry[] }
   [key: string]: unknown
 }

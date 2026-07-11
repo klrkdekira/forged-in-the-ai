@@ -21,7 +21,7 @@ from engine.operations import (
     mark_stress,
     set_item_carried,
 )
-from engine.relationships import FactionStatus
+from engine.relationships import FactionStatus, Relationship, RelationshipKind
 from engine.rolls import Effect, Position, action_roll, fortune_roll, resistance_roll
 from engine.session import CampaignPhase, Session
 
@@ -40,6 +40,10 @@ class GameState(BaseModel):
     npcs: dict[str, Npc] = Field(default_factory=dict)
     faction_statuses: dict[str, FactionStatus] = Field(
         default_factory=dict, description="Keyed by faction_id"
+    )
+    relationships: dict[str, Relationship] = Field(
+        default_factory=dict,
+        description="Keyed by '<subject_type>:<subject_id>:<object_type>:<object_id>'",
     )
     log: EventLog = Field(default_factory=EventLog)
 
@@ -127,6 +131,17 @@ class CreateNpcArgs(BaseModel):
 class UpdateFactionStatusArgs(BaseModel):
     faction_id: str
     delta: int = Field(..., description="Change to apply, e.g. -1 or -2 after a hostile score")
+
+
+class UpdateRelationshipArgs(BaseModel):
+    subject_type: str = Field(..., description="e.g. 'character', 'crew', 'npc'")
+    subject_id: str
+    object_type: str = Field(..., description="e.g. 'npc', 'faction', 'crew'")
+    object_id: str
+    kind: RelationshipKind
+    status: str | None = Field(
+        None, description="Free-form detail, e.g. 'owes a favour after the Docks job'"
+    )
 
 
 class AddCanonFactArgs(BaseModel):
@@ -414,6 +429,42 @@ class ToolExecutor:
             result={"status": updated.status},
         )
 
+    def update_relationship(self, state: GameState, args: UpdateRelationshipArgs) -> ToolCallResult:
+        """FR-33/FR-34: a typed edge between any two entities - a
+        betrayal, a favour owed, a new contact - recorded the moment it
+        happens in the fiction, not guessed at from narration later."""
+        key = f"{args.subject_type}:{args.subject_id}:{args.object_type}:{args.object_id}"
+        current = state.relationships.get(
+            key,
+            Relationship(
+                subject_type=args.subject_type,
+                subject_id=args.subject_id,
+                object_type=args.object_type,
+                object_id=args.object_id,
+                kind=args.kind,
+            ),
+        )
+        log = state.log.append(
+            "relationship",
+            key,
+            "relationship_updated",
+            {
+                "subject_type": args.subject_type,
+                "subject_id": args.subject_id,
+                "object_type": args.object_type,
+                "object_id": args.object_id,
+                "kind": args.kind.value,
+                "status": args.status,
+            },
+            self._clock(),
+        )
+        updated = current.updated(args.kind, args.status, log.events[-1].sequence)
+        relationships = {**state.relationships, key: updated}
+        return ToolCallResult(
+            state=state.model_copy(update={"relationships": relationships, "log": log}),
+            result={"kind": updated.kind.value, "status": updated.status},
+        )
+
     def set_session_zero_config(
         self, state: GameState, args: SetSessionZeroConfigArgs
     ) -> ToolCallResult:
@@ -516,6 +567,11 @@ TOOL_SPECS: dict[str, tuple[type[BaseModel], str]] = {
     "update_faction_status": (
         UpdateFactionStatusArgs,
         "Change the crew's status with a faction (-3 to +3).",
+    ),
+    "update_relationship": (
+        UpdateRelationshipArgs,
+        "Record or change a relationship between two entities (ally, rival, debt, "
+        "romance, vendetta).",
     ),
     "add_canon_fact": (AddCanonFactArgs, "Record a new established fact about the setting."),
     "add_canon_location": (

@@ -30,6 +30,17 @@ class Relationship(BaseModel):
     def with_event(self, sequence: int) -> "Relationship":
         return self.model_copy(update={"history": [*self.history, sequence]})
 
+    def updated(
+        self, kind: "RelationshipKind", status: str | None, sequence: int
+    ) -> "Relationship":
+        """FR-33: the AI records relationship changes as they happen in
+        the fiction - a betrayal, a favour owed, a new contact - by
+        setting kind/status again, same as `with_event` but for when the
+        relationship itself changed, not just something referencing it."""
+        return self.model_copy(
+            update={"kind": kind, "status": status, "history": [*self.history, sequence]}
+        )
+
 
 class FactionStatus(BaseModel):
     """SPECIFICATION.md §5: "Faction status with the crew (-3 to +3) as a

@@ -60,4 +60,14 @@ def render_canon(state: GameState) -> list[CanonSection]:
             CanonSection(title="Faction status", text="\n".join(status_lines), priority=1)
         )
 
+    if state.relationships:
+        relationship_lines = [
+            f"- {r.subject_id} -> {r.object_id}: {r.kind.value}"
+            + (f" ({r.status})" if r.status else "")
+            for r in state.relationships.values()
+        ]
+        sections.append(
+            CanonSection(title="Relationships", text="\n".join(relationship_lines), priority=1)
+        )
+
     return sections

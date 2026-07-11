@@ -10,6 +10,7 @@ import { useSessionSocket } from '@/hooks/use-session-socket'
 import { CharacterSheetPanel } from './character-sheet-panel'
 import { ChatMessageView } from './chat-message-view'
 import { JournalPanel } from './journal-panel'
+import { RelationshipMap } from './relationship-map'
 import { RollNegotiationDialog } from './roll-negotiation-dialog'
 import { TableViewPanel } from './table-view-panel'
 
@@ -28,7 +29,9 @@ export function PlayPage() {
     sendUndo,
   } = useSessionSocket(campaignId)
   const [draft, setDraft] = useState('')
-  const [sidePanel, setSidePanel] = useState<'sheet' | 'table' | 'journal'>('sheet')
+  const [sidePanel, setSidePanel] = useState<'sheet' | 'table' | 'journal' | 'relationships'>(
+    'sheet',
+  )
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -115,6 +118,15 @@ export function PlayPage() {
               >
                 Journal
               </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={sidePanel === 'relationships' ? 'default' : 'ghost'}
+                className="flex-1"
+                onClick={() => setSidePanel('relationships')}
+              >
+                Ties
+              </Button>
             </div>
             <div className="flex-1 overflow-hidden">
               {sidePanel === 'sheet' && (
@@ -133,6 +145,16 @@ export function PlayPage() {
                   entries={state.log.events}
                   campaignId={campaignId}
                   onUndo={sendUndo}
+                />
+              )}
+              {sidePanel === 'relationships' && (
+                <RelationshipMap
+                  character={state.character}
+                  crew={state.crew}
+                  npcs={state.npcs}
+                  factionStatuses={state.faction_statuses}
+                  relationships={state.relationships}
+                  journalEntries={state.log.events}
                 />
               )}
             </div>

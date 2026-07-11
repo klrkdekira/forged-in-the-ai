@@ -13,7 +13,7 @@ from engine.operations import (
     mark_stress,
     set_item_carried,
 )
-from engine.relationships import FactionStatus
+from engine.relationships import FactionStatus, Relationship, RelationshipKind
 from engine.session import CampaignPhase
 
 
@@ -35,6 +35,7 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
     clocks = dict(base.clocks)
     npcs = dict(base.npcs)
     faction_statuses = dict(base.faction_statuses)
+    relationships = dict(base.relationships)
     canon = base.canon
     session_zero = base.session_zero
     ordered = sorted(events, key=lambda e: e.sequence)
@@ -82,6 +83,20 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
             session_zero = SessionZeroConfig.model_validate(payload)
         elif event.event_type == "canon_set":
             canon = CampaignCanon.model_validate(payload)
+        elif event.event_type == "relationship_updated":
+            current = relationships.get(
+                event.entity_id,
+                Relationship(
+                    subject_type=payload["subject_type"],
+                    subject_id=payload["subject_id"],
+                    object_type=payload["object_type"],
+                    object_id=payload["object_id"],
+                    kind=RelationshipKind(payload["kind"]),
+                ),
+            )
+            relationships[event.entity_id] = current.updated(
+                RelationshipKind(payload["kind"]), payload["status"], event.sequence
+            )
 
     return base.model_copy(
         update={
@@ -91,6 +106,7 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
             "clocks": clocks,
             "npcs": npcs,
             "faction_statuses": faction_statuses,
+            "relationships": relationships,
             "canon": canon,
             "session_zero": session_zero,
             "log": EventLog(events=ordered),

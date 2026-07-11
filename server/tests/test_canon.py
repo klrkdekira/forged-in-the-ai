@@ -5,7 +5,7 @@ from engine.character import Character
 from engine.clocks import Clock, ClockKind
 from engine.crew import Crew
 from engine.entities import Npc
-from engine.relationships import FactionStatus
+from engine.relationships import FactionStatus, Relationship, RelationshipKind
 from engine.session import Session
 
 
@@ -80,3 +80,24 @@ def test_render_canon_includes_safety_agreements_only_when_session_zero_is_set()
 
     assert "no animal harm" in safety_section.text
     assert "torture" in safety_section.text
+
+
+def test_render_canon_includes_relationships_only_when_present():
+    assert not any(s.title == "Relationships" for s in render_canon(_state()))
+
+    state = _state(
+        relationships={
+            "character:Test Character:npc:n1": Relationship(
+                subject_type="character",
+                subject_id="Test Character",
+                object_type="npc",
+                object_id="n1",
+                kind=RelationshipKind.RIVAL,
+                status="betrayed the crew",
+            )
+        }
+    )
+    relationships_section = next(s for s in render_canon(state) if s.title == "Relationships")
+
+    assert "Test Character -> n1: rival" in relationships_section.text
+    assert "betrayed the crew" in relationships_section.text
