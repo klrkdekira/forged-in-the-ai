@@ -132,6 +132,53 @@ async def test_agent_stops_after_too_many_tool_rounds():
 
 
 @pytest.mark.anyio
+async def test_agent_reports_an_error_instead_of_crashing_when_the_llm_call_fails():
+    # Discovered live: a slow/unreachable backend raised httpx.HTTPError
+    # straight out of handle_player_message, uncaught - session_ws.py's
+    # driving loop had no handler for it either, so it crashed the WS
+    # connection outright, leaving the client stuck showing
+    # "Disconnected" with no explanation and no way to recover short of
+    # reloading the page.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={"error": "backend unavailable"})
+
+    client = LLMClient(
+        base_url="http://fake-llm/v1", model="test-model", transport=httpx.MockTransport(handler)
+    )
+    agent = GmAgent(client, _executor())
+
+    events = [event async for event in agent.handle_player_message(_state(), "hi")]
+    await client.aclose()
+
+    assert events[-1].type == "error"
+    assert "LLM request failed" in events[-1].payload["message"]
+    assert not any(e.type == "narration_done" for e in events)
+
+
+@pytest.mark.anyio
+async def test_agent_reports_an_error_instead_of_crashing_when_streaming_narration_fails():
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if body.get("stream"):
+            return httpx.Response(500, json={"error": "backend unavailable"})
+        return httpx.Response(
+            200, json={"choices": [{"message": {"role": "assistant", "content": "placeholder"}}]}
+        )
+
+    client = LLMClient(
+        base_url="http://fake-llm/v1", model="test-model", transport=httpx.MockTransport(handler)
+    )
+    agent = GmAgent(client, _executor())
+
+    events = [event async for event in agent.handle_player_message(_state(), "hi")]
+    await client.aclose()
+
+    assert events[-1].type == "error"
+    assert "LLM request failed" in events[-1].payload["message"]
+    assert not any(e.type == "narration_done" for e in events)
+
+
+@pytest.mark.anyio
 async def test_agent_pauses_a_roll_action_for_the_players_decision():
     # FR-16: the GM agent proposes position/effect (Action Roll steps 1-4)
     # but pauses before rolling so the player can add bonus dice or trade

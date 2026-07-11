@@ -2,6 +2,8 @@ import json
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
+import httpx2 as httpx
+
 from ai.canon import render_canon
 from ai.context import assemble_turn_context
 from ai.llm_client import LLMClient
@@ -60,7 +62,18 @@ class GmAgent:
         ]
 
         for _ in range(MAX_TOOL_ROUNDS):
-            response = await self._client.chat(messages, tools=tool_definitions())
+            try:
+                response = await self._client.chat(messages, tools=tool_definitions())
+            except httpx.HTTPError as error:
+                # A slow/unreachable backend must not crash the WS
+                # connection outright (discovered live: an uncaught
+                # ReadTimeout here left the client stuck showing
+                # "Disconnected" with no explanation and no way to
+                # recover short of a full page reload).
+                yield AgentTurnEvent(
+                    type="error", payload={"message": f"LLM request failed: {error}"}
+                )
+                return
             if not response.tool_calls:
                 break
 
@@ -112,9 +125,13 @@ class GmAgent:
         # was done calling tools, not what the user should actually read
         # (NFR-3 wants real streamed narration, not a repeat of that text).
         narration_chunks = []
-        async for chunk in self._client.stream_chat(messages):
-            narration_chunks.append(chunk)
-            yield AgentTurnEvent(type="narration_chunk", payload={"text": chunk})
+        try:
+            async for chunk in self._client.stream_chat(messages):
+                narration_chunks.append(chunk)
+                yield AgentTurnEvent(type="narration_chunk", payload={"text": chunk})
+        except httpx.HTTPError as error:
+            yield AgentTurnEvent(type="error", payload={"message": f"LLM request failed: {error}"})
+            return
 
         self._transcript.append(f"GM: {''.join(narration_chunks)}")
         yield AgentTurnEvent(
