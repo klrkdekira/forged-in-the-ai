@@ -286,7 +286,17 @@ refer to that document. Each phase should end in something playable/testable.
       this round, only via mocked-transport tests - flagging that
       explicitly since every other Phase 4/5 entry above did get a live
       check.)
-- [ ] Session recap export (FR-20)
+- [x] Session recap export (FR-20) (`ai/recap.py`'s `render_recap`: "the
+      story so far" as markdown, built from the same `player_message`/
+      `narration` events FR-18's resume recap already relies on - deliberately
+      just the narrated story, not a mechanical audit dump (the Journal
+      view/FR-31 already covers that in full detail). `GET
+      /api/campaigns/{campaign_id}/recap` (`app/campaigns.py`) serves it
+      as a download (`Content-Disposition: attachment`), 404s for an
+      unknown campaign. Web: an "Export recap" link in the Journal
+      panel's header - a plain `<a download>` straight at the endpoint,
+      no JS fetch/blob handling needed. Verified live against a real
+      uvicorn process: correct headers, content, and 404.)
 - [ ] Undo/rewind via event log truncation (FR-19, supports FR-17)
 - [ ] Table view v2: generated district/score maps (FR-29); pick canvas
       library (Pixi vs. Konva, D4 leftover) and record an ADR

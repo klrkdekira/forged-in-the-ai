@@ -1,4 +1,5 @@
 import asyncio
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -7,7 +8,7 @@ from fastapi.testclient import TestClient
 from app.campaigns import _new_game_state
 from app.main import app
 from app.settings import get_settings
-from state.campaign_store import load_state
+from state.campaign_store import load_state, save_state
 from state.db import campaign_db_path
 
 
@@ -45,3 +46,33 @@ def test_list_campaigns_returns_every_created_campaign() -> None:
     assert response.status_code == 200
     ids = {row["id"] for row in response.json()}
     assert {first["id"], second["id"]} <= ids
+
+
+def test_export_recap_returns_the_story_so_far_as_a_markdown_download(tmp_path: Path) -> None:
+    with TestClient(app) as client:
+        campaign = client.post("/api/campaigns", json={"name": "The Reckoning"}).json()
+
+        db_path = campaign_db_path(tmp_path, campaign["id"])
+        state = asyncio.run(load_state(db_path))
+        log = state.log.append(
+            "session", "current", "player_message", {"text": "I pick the lock."}, datetime.now(UTC)
+        )
+        log = log.append(
+            "session", "current", "narration", {"text": "It clicks open."}, datetime.now(UTC)
+        )
+        asyncio.run(save_state(db_path, state.model_copy(update={"log": log})))
+
+        response = client.get(f"/api/campaigns/{campaign['id']}/recap")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/markdown")
+    assert "attachment" in response.headers["content-disposition"]
+    assert "I pick the lock." in response.text
+    assert "It clicks open." in response.text
+
+
+def test_export_recap_404s_for_an_unknown_campaign() -> None:
+    with TestClient(app) as client:
+        response = client.get("/api/campaigns/does-not-exist/recap")
+
+    assert response.status_code == 404

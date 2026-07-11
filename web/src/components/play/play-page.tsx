@@ -126,7 +126,9 @@ export function PlayPage() {
                   onOperate={sendSheetOperation}
                 />
               )}
-              {sidePanel === 'journal' && <JournalPanel entries={state.log.events} />}
+              {sidePanel === 'journal' && (
+                <JournalPanel entries={state.log.events} campaignId={campaignId} />
+              )}
             </div>
           </div>
         )}

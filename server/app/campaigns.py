@@ -1,16 +1,19 @@
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import select
 
+from ai.recap import render_recap
 from ai.tools import GameState
 from app.settings import Settings, get_settings
 from engine.character import Character
 from engine.crew import Crew
 from engine.session import Session
 from state.campaign_store import create_campaign as write_campaign_files
+from state.campaign_store import load_state
 from state.db import app_db_path, campaign_db_path, make_engine, make_session_factory
 from state.models import CampaignIndex
 
@@ -79,3 +82,19 @@ async def create_campaign(
 
     await write_campaign_files(campaign_db_path(settings.data_dir, campaign_id), _new_game_state())
     return summary
+
+
+@router.get("/{campaign_id}/recap")
+async def export_recap(campaign_id: str, settings: Settings = Depends(get_settings)) -> Response:
+    """FR-20: a human-readable "story so far", exported from the
+    campaign's own event log (ai/recap.py) as a downloadable markdown
+    file - no separate export pipeline, the log already carries it."""
+    state = await load_state(campaign_db_path(settings.data_dir, campaign_id))
+    if state is None:
+        raise HTTPException(status_code=404, detail=f"unknown campaign {campaign_id!r}")
+
+    return Response(
+        content=render_recap(state),
+        media_type="text/markdown",
+        headers={"Content-Disposition": f'attachment; filename="{campaign_id}-recap.md"'},
+    )

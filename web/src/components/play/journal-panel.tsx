@@ -52,10 +52,28 @@ function summarize(entry: JournalEntry): string {
 // audit record (dice, position, effect, consequences for rolls; whatever
 // payload the event carries for anything else). Filtering by type/phase/
 // entity is v2 (TODO.md).
-export function JournalPanel({ entries }: { entries: JournalEntry[] }) {
+export function JournalPanel({
+  entries,
+  campaignId,
+}: {
+  entries: JournalEntry[]
+  campaignId: string
+}) {
   return (
     <div className="flex h-full flex-col gap-2 overflow-auto rounded-lg border border-border/50 bg-background/50 p-4 text-sm">
-      <span className="text-xs font-semibold text-muted-foreground">Journal</span>
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-muted-foreground">Journal</span>
+        {/* FR-20: "the story so far" as a downloadable markdown file,
+            built server-side from the same narration/player_message
+            events the journal is already rendering here. */}
+        <a
+          href={`/api/campaigns/${campaignId}/recap`}
+          download
+          className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+        >
+          Export recap
+        </a>
+      </div>
       {entries.length === 0 ? (
         <p className="text-xs text-muted-foreground">Nothing recorded yet.</p>
       ) : (
