@@ -48,9 +48,7 @@ async def test_save_state_appends_only_the_new_event_tail(tmp_path: Path) -> Non
     await create_campaign(db_path, state)
 
     state = state.model_copy(
-        update={
-            "log": state.log.append("character", "Scoundrel", "test_event", {}, datetime.now(UTC))
-        }
+        update={"log": state.log.append("character", "pc-1", "test_event", {}, datetime.now(UTC))}
     )
     await save_state(db_path, state)
     await save_state(db_path, state)  # same log again - must not duplicate
@@ -74,8 +72,8 @@ async def test_undo_to_truncates_the_log_and_replays_the_surviving_prefix(tmp_pa
     await create_campaign(db_path, state)
 
     log = state.log
-    log = log.append("character", "Scoundrel", "stress_marked", {"amount": 2}, datetime.now(UTC))
-    log = log.append("character", "Scoundrel", "coin_adjusted", {"amount": 5}, datetime.now(UTC))
+    log = log.append("character", "pc-1", "stress_marked", {"amount": 2}, datetime.now(UTC))
+    log = log.append("character", "pc-1", "coin_adjusted", {"amount": 5}, datetime.now(UTC))
     await save_state(db_path, state.model_copy(update={"log": log}))
 
     undone = await undo_to(db_path, sequence=1)
@@ -100,9 +98,7 @@ async def test_undo_to_zero_reverts_to_the_campaigns_base_state(tmp_path: Path) 
     state = _starter_state()
     await create_campaign(db_path, state)
 
-    log = state.log.append(
-        "character", "Scoundrel", "stress_marked", {"amount": 4}, datetime.now(UTC)
-    )
+    log = state.log.append("character", "pc-1", "stress_marked", {"amount": 4}, datetime.now(UTC))
     await save_state(db_path, state.model_copy(update={"log": log}))
 
     undone = await undo_to(db_path, sequence=0)

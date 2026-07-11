@@ -1,6 +1,6 @@
 from ai.tools import GameState
 from engine.campaign import CampaignCanon, SessionZeroConfig
-from engine.character import Attribute
+from engine.character import Attribute, Character
 from engine.clocks import Clock, ClockKind
 from engine.entities import Npc
 from engine.events import Event, EventLog
@@ -29,7 +29,7 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
     resistance_roll (pure dice records), player_message/narration (FR-31's
     turn log), x_card_invoked (a safety-tool note, not a mutation) - are
     silently skipped."""
-    character = base.character
+    characters = dict(base.characters)
     crew = base.crew
     session = base.session
     clocks = dict(base.clocks)
@@ -42,22 +42,36 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
 
     for event in ordered:
         payload = event.payload
-        if event.event_type == "stress_marked":
-            character = mark_stress(character, payload["amount"]).character
+        if event.event_type == "character_created":
+            characters[event.entity_id] = Character.model_validate(payload)
+        elif event.event_type == "stress_marked":
+            characters[event.entity_id] = mark_stress(
+                characters[event.entity_id], payload["amount"]
+            ).character
         elif event.event_type == "harm_marked":
-            character = mark_harm(character, payload["level"], payload["name"]).character
+            characters[event.entity_id] = mark_harm(
+                characters[event.entity_id], payload["level"], payload["name"]
+            ).character
         elif event.event_type == "harm_healed":
-            character = heal_character(character)
+            characters[event.entity_id] = heal_character(characters[event.entity_id])
         elif event.event_type == "xp_marked":
             if payload["track"] == "playbook":
-                character = mark_playbook_xp(character, payload["amount"])
+                characters[event.entity_id] = mark_playbook_xp(
+                    characters[event.entity_id], payload["amount"]
+                )
             else:
                 attribute = Attribute(payload["track"])
-                character = mark_attribute_xp(character, attribute, payload["amount"])
+                characters[event.entity_id] = mark_attribute_xp(
+                    characters[event.entity_id], attribute, payload["amount"]
+                )
         elif event.event_type == "coin_adjusted":
-            character = adjust_coin(character, payload["amount"])
+            characters[event.entity_id] = adjust_coin(
+                characters[event.entity_id], payload["amount"]
+            )
         elif event.event_type == "item_carried_set":
-            character = set_item_carried(character, payload["item_id"], payload["carried"])
+            characters[event.entity_id] = set_item_carried(
+                characters[event.entity_id], payload["item_id"], payload["carried"]
+            )
         elif event.event_type == "clock_created":
             clocks[event.entity_id] = Clock(
                 name=payload["name"],
@@ -100,7 +114,7 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
 
     return base.model_copy(
         update={
-            "character": character,
+            "characters": characters,
             "crew": crew,
             "session": session,
             "clocks": clocks,

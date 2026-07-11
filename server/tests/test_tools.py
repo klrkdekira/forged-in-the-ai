@@ -9,6 +9,7 @@ from ai.tools import (
     AddCanonLocationArgs,
     AdjustCoinArgs,
     ApplyHarmArgs,
+    CreateCharacterArgs,
     CreateClockArgs,
     CreateNpcArgs,
     GameState,
@@ -73,6 +74,7 @@ def test_tool_definitions_cover_every_registered_tool():
         "mark_stress",
         "transition_phase",
         "create_npc",
+        "create_character",
         "update_faction_status",
         "update_relationship",
         "add_canon_fact",
@@ -178,6 +180,59 @@ def test_create_npc_adds_it_to_state():
 
     assert result.state.npcs["n1"].name == "Test NPC"
     assert result.state.log.events[-1].event_type == "npc_created"
+
+
+def test_create_character_adds_a_second_pc():
+    # FR-25/FR-35: the only way a second PC comes into existence for now.
+    result = _executor().create_character(
+        _state(), CreateCharacterArgs(character_id="pc-2", name="Vex", playbook="Whisper")
+    )
+
+    assert result.state.characters["pc-2"].name == "Vex"
+    assert "pc-1" in result.state.characters  # the original PC, untouched
+    assert result.state.log.events[-1].event_type == "character_created"
+
+
+def test_create_character_refuses_a_duplicate_id():
+    executor = _executor()
+    state = executor.create_character(
+        _state(), CreateCharacterArgs(character_id="pc-2", name="Vex", playbook="Whisper")
+    ).state
+
+    with pytest.raises(EngineError, match="already exists"):
+        executor.create_character(
+            state, CreateCharacterArgs(character_id="pc-2", name="Someone Else", playbook="Cutter")
+        )
+
+
+def test_mark_stress_refuses_without_character_id_once_there_are_two_pcs():
+    # CLAUDE.md: "the engine may refuse; it never guesses" - with two PCs,
+    # an unspecified character_id is genuinely ambiguous.
+    executor = _executor()
+    state = executor.create_character(
+        _state(), CreateCharacterArgs(character_id="pc-2", name="Vex", playbook="Whisper")
+    ).state
+
+    with pytest.raises(EngineError, match="character_id is required"):
+        executor.mark_stress(state, MarkStressArgs(amount=1))
+
+
+def test_mark_stress_with_an_explicit_character_id_affects_only_that_pc():
+    executor = _executor()
+    state = executor.create_character(
+        _state(), CreateCharacterArgs(character_id="pc-2", name="Vex", playbook="Whisper")
+    ).state
+
+    result = executor.mark_stress(state, MarkStressArgs(amount=2, character_id="pc-2"))
+
+    assert result.state.characters["pc-2"].stress.marked == 2
+    assert result.state.characters["pc-1"].stress.marked == 0
+    assert result.state.log.events[-1].entity_id == "pc-2"
+
+
+def test_mark_stress_refuses_an_unknown_character_id():
+    with pytest.raises(EngineError, match="no character"):
+        _executor().mark_stress(_state(), MarkStressArgs(amount=1, character_id="nope"))
 
 
 def test_update_faction_status_starts_from_neutral_and_applies_delta():

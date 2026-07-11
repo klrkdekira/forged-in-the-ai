@@ -411,7 +411,35 @@ refer to that document. Each phase should end in something playable/testable.
       panel. Not visually verified live, same caveat as the other Konva
       maps - no headed browser available in this environment.)
 - [ ] AI player agent v1: an AI-controlled crewmate PC, distinct from the GM
-      agent; action choices, stress spends, roleplay (FR-35)
+      agent; action choices, stress spends, roleplay (FR-35). FR-35 is
+      explicitly "future phase" in SPECIFICATION.md's own text, and once
+      traced turned out to need a real prerequisite `GameState` never
+      had: more than one PC. That foundation is now in - `character`
+      (singular) is `characters: dict[str, Character]`, keyed by a
+      caller-supplied `character_id` (same convention as `clocks`/
+      `npcs`), with a `create_character` tool (mirrors `create_npc`) and
+      every PC-mutating tool (`mark_stress`, `apply_harm`, `roll_action`,
+      `mark_xp`, `adjust_coin`, `set_item_carried`, `heal_character`,
+      `roll_resistance`) taking an optional `character_id` - required
+      once a session has more than one PC, refusing rather than guessing
+      which one an ambiguous call means (CLAUDE.md). Every existing call
+      site (dozens of tests, `app/campaigns.py`'s campaign creation,
+      `cli/session.py`'s dev harness) keeps constructing
+      `GameState(character=..., ...)` unchanged - a `model_validator`
+      wraps it into `characters={"pc-1": ...}`, and a `@computed_field`
+      `character` property (the first/primary PC) keeps `ai/canon.py`/
+      `ai/recap.py`'s headers and the web client's existing single-PC
+      display working with zero further changes, verified live against
+      a real uvicorn process. `ai/replay.py` folds `character_created`
+      and multi-character mutations correctly (by `character_id`, not
+      by name - a small pre-existing inconsistency fixed along the way:
+      character-tagged events used to log `character.name` as
+      `entity_id` where clocks/npcs always used a caller-supplied id).
+      Still not built: the AI player agent itself (a second LLM loop,
+      its own system prompt/role, turn-taking), `Controller`/seat
+      wiring (who's allowed to act for which `character_id`), and any
+      web UI for a character switcher - all deliberately deferred until
+      that follow-on work actually needs them.
 - [ ] Playtest: multi-session campaign, verify canon consistency (G3)
 
 ## Phase 6: Rulebook ingestion (bring your own book)

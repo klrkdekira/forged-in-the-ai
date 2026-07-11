@@ -20,13 +20,34 @@ def _base_state() -> GameState:
 def test_replay_state_folds_stress_and_harm_onto_the_base_character():
     base = _base_state()
     log = base.log
-    log = log.append("character", "Scoundrel", "stress_marked", {"amount": 3}, AT)
-    log = log.append("character", "Scoundrel", "harm_marked", {"level": 2, "name": "Stabbed"}, AT)
+    log = log.append("character", "pc-1", "stress_marked", {"amount": 3}, AT)
+    log = log.append("character", "pc-1", "harm_marked", {"level": 2, "name": "Stabbed"}, AT)
 
     replayed = replay_state(base, log.events)
 
     assert replayed.character.stress.marked == 3
     assert replayed.character.harm.entries[-1].name == "Stabbed"
+
+
+def test_replay_state_folds_a_second_character_and_its_own_stress():
+    # FR-25/FR-35: undo/rewind must not drop a second PC, or fold its
+    # stress onto the wrong character.
+    base = _base_state()
+    log = base.log
+    log = log.append(
+        "character",
+        "pc-2",
+        "character_created",
+        {"name": "Vex", "playbook": "Whisper"},
+        AT,
+    )
+    log = log.append("character", "pc-2", "stress_marked", {"amount": 2}, AT)
+
+    replayed = replay_state(base, log.events)
+
+    assert replayed.characters["pc-2"].name == "Vex"
+    assert replayed.characters["pc-2"].stress.marked == 2
+    assert replayed.characters["pc-1"].stress.marked == 0
 
 
 def test_replay_state_folds_clock_creation_and_ticks():
@@ -171,8 +192,8 @@ def test_replay_state_reproduces_a_truncated_prefix_of_the_log():
     # prefix of the log reconstructs state as of that earlier point.
     base = _base_state()
     log = base.log
-    log = log.append("character", "Scoundrel", "stress_marked", {"amount": 2}, AT)
-    log = log.append("character", "Scoundrel", "coin_adjusted", {"amount": 5}, AT)
+    log = log.append("character", "pc-1", "stress_marked", {"amount": 2}, AT)
+    log = log.append("character", "pc-1", "coin_adjusted", {"amount": 5}, AT)
 
     prefix = [e for e in log.events if e.sequence == 1]
     replayed = replay_state(base, prefix)
