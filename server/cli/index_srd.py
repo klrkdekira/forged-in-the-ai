@@ -5,13 +5,13 @@ import click
 from app.settings import get_settings
 from cli.paths import SRD_PATH
 from state.db import app_db_path, make_engine, make_session_factory
-from state.migrations import run_migrations
+from state.migrations import run_app_migrations
 from state.srd_index import chunk_srd, index_srd_chunks
 
 
 async def _index(srd_text: str) -> int:
     db_path = app_db_path(get_settings().data_dir)
-    run_migrations(db_path)
+    run_app_migrations(db_path)
     engine = make_engine(db_path)
     try:
         session_factory = make_session_factory(engine)

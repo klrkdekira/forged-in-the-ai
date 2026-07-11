@@ -242,7 +242,25 @@ refer to that document. Each phase should end in something playable/testable.
 
 ## Phase 5: Persistence & campaign continuity
 
-- [ ] Campaign save/load from event log and snapshots (FR-18, FR-19, NFR-5)
+- [x] Campaign save/load from event log and snapshots (FR-18, FR-19, NFR-5)
+      (`state/campaign_store.py`: `save_state`/`load_state` against a
+      per-campaign `campaign-<id>.db`, own Alembic lineage in
+      `alembic_campaign/` separate from app.db's - `events` (the log,
+      kept for future audit/undo) and a single-row `snapshots` cache, per
+      ADR-0005. `app/campaigns.py` adds `GET`/`POST /api/campaigns`
+      (app.db's `CampaignIndex` directory) so a campaign exists before any
+      WS connection can reach it. `app/session_ws.py`'s route is now
+      `/ws/session/{campaign_id}`; a `get_campaign_db_path` dependency
+      refuses unknown ids before accept, same pattern as the existing
+      `get_llm_client` check. State is always persisted before the client
+      is told about a mutation, not after - otherwise a client
+      disconnecting the instant it sees an update can race ahead of the
+      write. Web: `/play/$campaignId` (was `/play`), a campaign
+      picker/creator wired up on `/` (the dead buttons FR-18 had left
+      there), and a `useLastCampaignId` localStorage hook so sidebar nav
+      still resolves without a global "current campaign" store. Verified
+      live against a real uvicorn process, not just TestClient: create,
+      reconnect, and unknown-campaign rejection all round-trip correctly.)
 - [ ] Structured recap generation on resume (FR-18)
 - [ ] Session recap export (FR-20)
 - [ ] Undo/rewind via event log truncation (FR-19, supports FR-17)

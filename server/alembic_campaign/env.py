@@ -13,13 +13,15 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# This lineage is for app.db (ADR-0005); campaign-*.db has its own base and
-# lineage under alembic_campaign/. sqlalchemy.url is set programmatically
-# per file by state.migrations.run_app_migrations rather than read from
+# This lineage is for campaign-<id>.db files (ADR-0005): one file per
+# campaign, event log plus latest state snapshot. Separate from alembic/'s
+# AppBase lineage since these tables must never appear in app.db.
+# sqlalchemy.url is set programmatically per file by
+# state.migrations.run_campaign_migrations rather than read from
 # alembic.ini.
-from state.models import AppBase  # noqa: E402
+from state.models import CampaignBase  # noqa: E402
 
-target_metadata = AppBase.metadata
+target_metadata = CampaignBase.metadata
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

@@ -111,10 +111,11 @@ export interface RollDecision {
   trade?: 'worse_position_better_effect' | 'better_position_worse_effect' | null
 }
 
-// FR-30: server-authoritative state deltas over one WebSocket connection.
-// The client only ever sends player messages; every state change arrives
-// as a tool_call/narration_done event from the server.
-export function useSessionSocket() {
+// FR-18/FR-30: server-authoritative state deltas over one WebSocket
+// connection, scoped to one persisted campaign. The client only ever sends
+// player messages; every state change arrives as a tool_call/narration_done
+// event from the server.
+export function useSessionSocket(campaignId: string) {
   const [connected, setConnected] = useState(false)
   const [busy, setBusy] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -123,8 +124,12 @@ export function useSessionSocket() {
   const socketRef = useRef<WebSocket | null>(null)
 
   useEffect(() => {
+    setMessages([])
+    setState(null)
+    setPendingRoll(null)
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const socket = new WebSocket(`${protocol}//${window.location.host}/ws/session`)
+    const socket = new WebSocket(`${protocol}//${window.location.host}/ws/session/${campaignId}`)
     socketRef.current = socket
 
     socket.onopen = () => setConnected(true)
@@ -172,7 +177,7 @@ export function useSessionSocket() {
     }
 
     return () => socket.close()
-  }, [])
+  }, [campaignId])
 
   const sendMessage = useCallback((text: string) => {
     setMessages((prev) => [...prev, { kind: 'player', text }])

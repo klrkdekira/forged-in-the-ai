@@ -1,5 +1,6 @@
 import random
 from datetime import UTC, datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, WebSocketException, status
 from pydantic import ValidationError
@@ -8,10 +9,10 @@ from ai.agent import GmAgent
 from ai.llm_client import LLMClient
 from ai.tools import SHEET_OPERATIONS, GameState, ToolExecutor
 from app.settings import Settings, get_settings
-from engine.character import Character
-from engine.crew import Crew
 from engine.errors import EngineError
-from engine.session import Session
+from state.campaign_store import load_state, save_state
+from state.db import campaign_db_path
+from state.migrations import run_campaign_migrations
 
 router = APIRouter()
 
@@ -30,58 +31,67 @@ def get_llm_client(settings: Settings = Depends(get_settings)) -> LLMClient:
     )
 
 
-def _new_game_state() -> GameState:
-    """FR-30: single-player MVP starts a fresh in-memory session per
-    connection. FR-36's session-zero setting generation and Phase 5's
-    persistence replace this placeholder."""
-    return GameState(
-        character=Character(name="Scoundrel", playbook="Original Playbook"),
-        crew=Crew(name="The Crew", crew_type="Original Crew Type"),
-        session=Session(),
-    )
+def get_campaign_db_path(campaign_id: str, settings: Settings = Depends(get_settings)) -> Path:
+    """FR-18: refuses the connection outright for an unknown campaign_id -
+    a WS connection never invents a campaign, `POST /api/campaigns` (see
+    app/campaigns.py) is the only place one is created. Migrates on every
+    open (ADR-0005), same as app.db's lifespan-time migration."""
+    db_path = campaign_db_path(settings.data_dir, campaign_id)
+    if not db_path.exists():
+        raise WebSocketException(
+            code=status.WS_1008_POLICY_VIOLATION, reason=f"unknown campaign {campaign_id!r}"
+        )
+    run_campaign_migrations(db_path)
+    return db_path
 
 
 async def _apply_sheet_operation(
-    websocket: WebSocket, executor: ToolExecutor, state: GameState, message: dict
-) -> GameState:
+    db_path: Path, executor: ToolExecutor, state: GameState, message: dict
+) -> tuple[GameState, dict]:
     """FR-28: the sheet panel's own engine-operation calls - stress, harm,
     XP, coin, and load ticks - bypass the GM agent entirely (CLAUDE.md:
-    "the UI acts through engine-operation endpoints"). Replies with a
-    `state` message (the same one used for the initial snapshot) rather
-    than a `tool_call`, since there's no LLM turn around this."""
+    "the UI acts through engine-operation endpoints"). Returns the message
+    to send rather than sending it directly, so the caller can persist
+    first (a mutation must be saved before the client is told about it -
+    otherwise a client that disconnects the instant it sees the update can
+    race ahead of the write and the mutation never lands, FR-18)."""
     name = message.get("name")
     args_model = SHEET_OPERATIONS.get(name)
     if args_model is None:
-        await websocket.send_json({"type": "error", "message": f"unknown sheet operation {name!r}"})
-        return state
+        return state, {"type": "error", "message": f"unknown sheet operation {name!r}"}
 
     try:
         args = args_model.model_validate(message.get("args", {}))
         result = getattr(executor, name)(state, args)
     except (ValidationError, EngineError) as error:
-        await websocket.send_json({"type": "error", "message": str(error)})
-        return state
+        return state, {"type": "error", "message": str(error)}
 
-    await websocket.send_json({"type": "state", "state": result.state.model_dump(mode="json")})
-    return result.state
+    await save_state(db_path, result.state)
+    return result.state, {"type": "state", "state": result.state.model_dump(mode="json")}
 
 
-@router.websocket("/ws/session")
-async def session_ws(websocket: WebSocket, client: LLMClient = Depends(get_llm_client)) -> None:
-    """FR-30: server-authoritative state deltas from the event log,
-    single-player first. Every state change comes from a tool call
-    (FR-12); the client only ever sends player messages."""
+@router.websocket("/ws/session/{campaign_id}")
+async def session_ws(
+    websocket: WebSocket,
+    client: LLMClient = Depends(get_llm_client),
+    db_path: Path = Depends(get_campaign_db_path),
+) -> None:
+    """FR-18/FR-30: server-authoritative state deltas from the event log,
+    single-player first, backed by the campaign's own SQLite file. Every
+    state change comes from a tool call (FR-12); the client only ever
+    sends player messages."""
     await websocket.accept()
     executor = ToolExecutor(rng=random.Random(), clock=lambda: datetime.now(UTC))
     agent = GmAgent(client, executor)
-    state = _new_game_state()
+    state = await load_state(db_path)
 
     try:
         await websocket.send_json({"type": "state", "state": state.model_dump(mode="json")})
         while True:
             message = await websocket.receive_json()
             if message.get("type") == "sheet_operation":
-                state = await _apply_sheet_operation(websocket, executor, state, message)
+                state, reply = await _apply_sheet_operation(db_path, executor, state, message)
+                await websocket.send_json(reply)
                 continue
             if message.get("type") != "player_message":
                 continue
@@ -94,6 +104,11 @@ async def session_ws(websocket: WebSocket, client: LLMClient = Depends(get_llm_c
                 except StopAsyncIteration:
                     break
                 to_send = None
+                if event.type == "narration_done":
+                    # Persisted before the client is told, same reasoning
+                    # as _apply_sheet_operation's ordering.
+                    state = GameState.model_validate(event.payload["state"])
+                    await save_state(db_path, state)
                 await websocket.send_json({"type": event.type, **event.payload})
                 if event.type == "roll_proposed":
                     # FR-16: pause the tool-calling loop for the player's
@@ -105,8 +120,6 @@ async def session_ws(websocket: WebSocket, client: LLMClient = Depends(get_llm_c
                         if decision_message.get("type") == "roll_decision"
                         else {}
                     )
-                elif event.type == "narration_done":
-                    state = GameState.model_validate(event.payload["state"])
     except WebSocketDisconnect:
         pass
     finally:

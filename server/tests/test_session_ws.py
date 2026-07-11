@@ -31,6 +31,25 @@ def _mock_client(handler) -> LLMClient:
     )
 
 
+def _create_campaign(test_client: TestClient) -> str:
+    response = test_client.post("/api/campaigns", json={"name": "Test Campaign"})
+    return response.json()["id"]
+
+
+@pytest.fixture(autouse=True)
+def _tmp_data_dir(tmp_path, monkeypatch: pytest.MonkeyPatch):
+    # The lifespan's own migration call, and the WS route's campaign-file
+    # lookup, both read get_settings() directly rather than via Depends
+    # (the WS dependency still needs Depends for test overrides to reach
+    # it, but the underlying Settings has to be the same tmp_path either
+    # way), so this has to be an env var + cache clear, not
+    # app.dependency_overrides.
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
 @pytest.fixture(autouse=True)
 def _clear_overrides():
     yield
@@ -54,19 +73,21 @@ def test_session_ws_sends_initial_state_then_streams_narration():
 
     app.dependency_overrides[get_llm_client] = lambda: _mock_client(handler)
 
-    with TestClient(app) as test_client, test_client.websocket_connect("/ws/session") as ws:
-        initial = ws.receive_json()
-        assert initial["type"] == "state"
-        assert initial["state"]["character"]["name"] == "Scoundrel"
+    with TestClient(app) as test_client:
+        campaign_id = _create_campaign(test_client)
+        with test_client.websocket_connect(f"/ws/session/{campaign_id}") as ws:
+            initial = ws.receive_json()
+            assert initial["type"] == "state"
+            assert initial["state"]["character"]["name"] == "Scoundrel"
 
-        ws.send_json({"type": "player_message", "text": "I look around."})
+            ws.send_json({"type": "player_message", "text": "I look around."})
 
-        chunk = ws.receive_json()
-        assert chunk == {"type": "narration_chunk", "text": "Go ahead."}
+            chunk = ws.receive_json()
+            assert chunk == {"type": "narration_chunk", "text": "Go ahead."}
 
-        done = ws.receive_json()
-        assert done["type"] == "narration_done"
-        assert done["state"]["character"]["name"] == "Scoundrel"
+            done = ws.receive_json()
+            assert done["type"] == "narration_done"
+            assert done["state"]["character"]["name"] == "Scoundrel"
 
 
 def test_session_ws_runs_a_tool_call_before_narrating():
@@ -93,14 +114,16 @@ def test_session_ws_runs_a_tool_call_before_narrating():
 
     app.dependency_overrides[get_llm_client] = lambda: _mock_client(handler)
 
-    with TestClient(app) as test_client, test_client.websocket_connect("/ws/session") as ws:
-        ws.receive_json()  # initial state
-        ws.send_json({"type": "player_message", "text": "I search the room."})
+    with TestClient(app) as test_client:
+        campaign_id = _create_campaign(test_client)
+        with test_client.websocket_connect(f"/ws/session/{campaign_id}") as ws:
+            ws.receive_json()  # initial state
+            ws.send_json({"type": "player_message", "text": "I search the room."})
 
-        tool_event = ws.receive_json()
-        assert tool_event["type"] == "tool_call"
-        assert tool_event["name"] == "roll_fortune"
-        assert "band" in tool_event["result"]
+            tool_event = ws.receive_json()
+            assert tool_event["type"] == "tool_call"
+            assert tool_event["name"] == "roll_fortune"
+            assert "band" in tool_event["result"]
 
 
 def test_session_ws_pauses_for_a_roll_decision_then_resolves_it():
@@ -137,21 +160,23 @@ def test_session_ws_pauses_for_a_roll_decision_then_resolves_it():
 
     app.dependency_overrides[get_llm_client] = lambda: _mock_client(handler)
 
-    with TestClient(app) as test_client, test_client.websocket_connect("/ws/session") as ws:
-        ws.receive_json()  # initial state
-        ws.send_json({"type": "player_message", "text": "I sneak past the guards."})
+    with TestClient(app) as test_client:
+        campaign_id = _create_campaign(test_client)
+        with test_client.websocket_connect(f"/ws/session/{campaign_id}") as ws:
+            ws.receive_json()  # initial state
+            ws.send_json({"type": "player_message", "text": "I sneak past the guards."})
 
-        proposed = ws.receive_json()
-        assert proposed["type"] == "roll_proposed"
-        assert proposed["position"] == "risky"
-        assert proposed["effect"] == "standard"
+            proposed = ws.receive_json()
+            assert proposed["type"] == "roll_proposed"
+            assert proposed["position"] == "risky"
+            assert proposed["effect"] == "standard"
 
-        ws.send_json({"type": "roll_decision", "decision": {"push_effect": True}})
+            ws.send_json({"type": "roll_decision", "decision": {"push_effect": True}})
 
-        tool_event = ws.receive_json()
-        assert tool_event["type"] == "tool_call"
-        assert tool_event["name"] == "roll_action"
-        assert tool_event["result"]["effect"] == 3  # standard, pushed +1
+            tool_event = ws.receive_json()
+            assert tool_event["type"] == "tool_call"
+            assert tool_event["name"] == "roll_action"
+            assert tool_event["result"]["effect"] == 3  # standard, pushed +1
 
 
 def test_session_ws_applies_a_sheet_operation_without_the_llm():
@@ -162,13 +187,15 @@ def test_session_ws_applies_a_sheet_operation_without_the_llm():
 
     app.dependency_overrides[get_llm_client] = lambda: _mock_client(handler)
 
-    with TestClient(app) as test_client, test_client.websocket_connect("/ws/session") as ws:
-        ws.receive_json()  # initial state
-        ws.send_json({"type": "sheet_operation", "name": "mark_stress", "args": {"amount": 3}})
+    with TestClient(app) as test_client:
+        campaign_id = _create_campaign(test_client)
+        with test_client.websocket_connect(f"/ws/session/{campaign_id}") as ws:
+            ws.receive_json()  # initial state
+            ws.send_json({"type": "sheet_operation", "name": "mark_stress", "args": {"amount": 3}})
 
-        state_update = ws.receive_json()
-        assert state_update["type"] == "state"
-        assert state_update["state"]["character"]["stress"]["marked"] == 3
+            state_update = ws.receive_json()
+            assert state_update["type"] == "state"
+            assert state_update["state"]["character"]["stress"]["marked"] == 3
 
 
 def test_session_ws_reports_an_error_for_an_illegal_sheet_operation():
@@ -177,13 +204,15 @@ def test_session_ws_reports_an_error_for_an_illegal_sheet_operation():
 
     app.dependency_overrides[get_llm_client] = lambda: _mock_client(handler)
 
-    with TestClient(app) as test_client, test_client.websocket_connect("/ws/session") as ws:
-        ws.receive_json()  # initial state
-        ws.send_json({"type": "sheet_operation", "name": "adjust_coin", "args": {"amount": -1}})
+    with TestClient(app) as test_client:
+        campaign_id = _create_campaign(test_client)
+        with test_client.websocket_connect(f"/ws/session/{campaign_id}") as ws:
+            ws.receive_json()  # initial state
+            ws.send_json({"type": "sheet_operation", "name": "adjust_coin", "args": {"amount": -1}})
 
-        error = ws.receive_json()
-        assert error["type"] == "error"
-        assert "cannot spend" in error["message"]
+            error = ws.receive_json()
+            assert error["type"] == "error"
+            assert "cannot spend" in error["message"]
 
 
 def test_session_ws_ticks_a_clock_the_gm_created_via_a_sheet_operation():
@@ -222,36 +251,72 @@ def test_session_ws_ticks_a_clock_the_gm_created_via_a_sheet_operation():
 
     app.dependency_overrides[get_llm_client] = lambda: _mock_client(handler)
 
-    with TestClient(app) as test_client, test_client.websocket_connect("/ws/session") as ws:
-        ws.receive_json()  # initial state
-        ws.send_json({"type": "player_message", "text": "We case the joint."})
+    with TestClient(app) as test_client:
+        campaign_id = _create_campaign(test_client)
+        with test_client.websocket_connect(f"/ws/session/{campaign_id}") as ws:
+            ws.receive_json()  # initial state
+            ws.send_json({"type": "player_message", "text": "We case the joint."})
 
-        ws.receive_json()  # tool_call: create_clock
-        ws.receive_json()  # narration_chunk
-        ws.receive_json()  # narration_done
+            ws.receive_json()  # tool_call: create_clock
+            ws.receive_json()  # narration_chunk
+            ws.receive_json()  # narration_done
 
-        ws.send_json(
-            {
-                "type": "sheet_operation",
-                "name": "tick_clock",
-                "args": {"clock_id": "alert", "amount": 2},
-            }
-        )
-        state_update = ws.receive_json()
+            ws.send_json(
+                {
+                    "type": "sheet_operation",
+                    "name": "tick_clock",
+                    "args": {"clock_id": "alert", "amount": 2},
+                }
+            )
+            state_update = ws.receive_json()
 
-        assert state_update["type"] == "state"
-        assert state_update["state"]["clocks"]["alert"]["filled"] == 2
+            assert state_update["type"] == "state"
+            assert state_update["state"]["clocks"]["alert"]["filled"] == 2
+
+
+def test_session_ws_persists_state_across_reconnects():
+    # FR-18: the whole point of a campaign_id - a second connection to the
+    # same campaign resumes where the first left off.
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("the LLM should never be called for a sheet operation")
+
+    app.dependency_overrides[get_llm_client] = lambda: _mock_client(handler)
+
+    with TestClient(app) as test_client:
+        campaign_id = _create_campaign(test_client)
+        with test_client.websocket_connect(f"/ws/session/{campaign_id}") as ws:
+            ws.receive_json()  # initial state
+            ws.send_json({"type": "sheet_operation", "name": "mark_stress", "args": {"amount": 3}})
+            ws.receive_json()  # state
+
+        with test_client.websocket_connect(f"/ws/session/{campaign_id}") as ws:
+            resumed = ws.receive_json()
+            assert resumed["state"]["character"]["stress"]["marked"] == 3
+
+
+def test_session_ws_closes_for_an_unknown_campaign_id():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("the LLM should never be called")
+
+    app.dependency_overrides[get_llm_client] = lambda: _mock_client(handler)
+
+    with TestClient(app) as test_client:
+        with pytest.raises(WebSocketDisconnect):
+            with test_client.websocket_connect("/ws/session/does-not-exist"):
+                pass
 
 
 def test_session_ws_closes_when_the_llm_is_not_configured(monkeypatch):
-    monkeypatch.setenv("LLM_BASE_URL", "")
-    monkeypatch.setenv("LLM_MODEL", "")
-    get_settings.cache_clear()
+    with TestClient(app) as test_client:
+        campaign_id = _create_campaign(test_client)
 
-    try:
-        with TestClient(app) as test_client:
-            with pytest.raises(WebSocketDisconnect):
-                with test_client.websocket_connect("/ws/session"):
-                    pass
-    finally:
+        monkeypatch.setenv("LLM_BASE_URL", "")
+        monkeypatch.setenv("LLM_MODEL", "")
         get_settings.cache_clear()
+
+        try:
+            with pytest.raises(WebSocketDisconnect):
+                with test_client.websocket_connect(f"/ws/session/{campaign_id}"):
+                    pass
+        finally:
+            get_settings.cache_clear()

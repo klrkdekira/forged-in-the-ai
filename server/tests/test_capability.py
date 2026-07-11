@@ -6,7 +6,7 @@ import pytest
 from ai.capability import get_or_probe_tool_calling, probe_tool_calling
 from ai.llm_client import LLMClient
 from state.db import app_db_path, make_engine, make_session_factory
-from state.migrations import run_migrations
+from state.migrations import run_app_migrations
 
 
 def _tool_calling_handler(request: httpx.Request) -> httpx.Response:
@@ -69,7 +69,7 @@ async def test_get_or_probe_caches_result(tmp_path: Path) -> None:
         return _tool_calling_handler(request)
 
     db_path = app_db_path(tmp_path)
-    run_migrations(db_path)
+    run_app_migrations(db_path)
     engine = make_engine(db_path)
     session_factory = make_session_factory(engine)
     client = LLMClient("http://fake-llm/v1", "m", transport=httpx.MockTransport(counting_handler))

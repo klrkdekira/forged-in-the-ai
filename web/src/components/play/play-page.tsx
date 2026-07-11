@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 
+import { useParams } from '@tanstack/react-router'
+
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useLastCampaignId } from '@/hooks/use-last-campaign-id'
 import { useSessionSocket } from '@/hooks/use-session-socket'
 
 import { CharacterSheetPanel } from './character-sheet-panel'
@@ -11,6 +14,8 @@ import { RollNegotiationDialog } from './roll-negotiation-dialog'
 import { TableViewPanel } from './table-view-panel'
 
 export function PlayPage() {
+  const { campaignId } = useParams({ from: '/play/$campaignId' })
+  useLastCampaignId(campaignId)
   const {
     connected,
     busy,
@@ -20,7 +25,7 @@ export function PlayPage() {
     sendMessage,
     sendRollDecision,
     sendSheetOperation,
-  } = useSessionSocket()
+  } = useSessionSocket(campaignId)
   const [draft, setDraft] = useState('')
   const [sidePanel, setSidePanel] = useState<'sheet' | 'table' | 'journal'>('sheet')
   const bottomRef = useRef<HTMLDivElement>(null)

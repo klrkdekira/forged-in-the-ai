@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from state.db import app_db_path, make_engine, make_session_factory
-from state.migrations import run_migrations
+from state.migrations import run_app_migrations
 from state.srd_index import SrdChunkRecord, chunk_srd, index_srd_chunks, search_srd
 
 _SAMPLE_SRD = """\
@@ -39,7 +39,7 @@ def test_chunk_srd_skips_headings_with_no_body():
 @pytest.mark.anyio
 async def test_index_and_search_srd_chunks(tmp_path: Path) -> None:
     db_path = app_db_path(tmp_path)
-    run_migrations(db_path)
+    run_app_migrations(db_path)
     engine = make_engine(db_path)
     try:
         session_factory = make_session_factory(engine)
@@ -56,7 +56,7 @@ async def test_index_and_search_srd_chunks(tmp_path: Path) -> None:
 @pytest.mark.anyio
 async def test_search_srd_returns_nothing_for_an_unmatched_query(tmp_path: Path) -> None:
     db_path = app_db_path(tmp_path)
-    run_migrations(db_path)
+    run_app_migrations(db_path)
     engine = make_engine(db_path)
     try:
         session_factory = make_session_factory(engine)
@@ -73,7 +73,7 @@ async def test_search_srd_returns_nothing_for_an_unmatched_query(tmp_path: Path)
 @pytest.mark.anyio
 async def test_index_srd_chunks_replaces_previous_contents(tmp_path: Path) -> None:
     db_path = app_db_path(tmp_path)
-    run_migrations(db_path)
+    run_app_migrations(db_path)
     engine = make_engine(db_path)
     try:
         session_factory = make_session_factory(engine)

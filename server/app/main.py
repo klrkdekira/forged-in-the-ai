@@ -5,19 +5,21 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 
+from app.campaigns import router as campaigns_router
 from app.session_ws import router as session_ws_router
 from app.settings import get_settings
 from state.db import app_db_path
-from state.migrations import run_migrations
+from state.migrations import run_app_migrations
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    run_migrations(app_db_path(get_settings().data_dir))
+    run_app_migrations(app_db_path(get_settings().data_dir))
     yield
 
 
 app = FastAPI(title="forged-in-the-ai", lifespan=lifespan)
+app.include_router(campaigns_router)
 app.include_router(session_ws_router)
 
 
