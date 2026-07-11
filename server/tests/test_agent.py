@@ -1,6 +1,7 @@
 import json
 import random
 from datetime import UTC, datetime
+from pathlib import Path
 
 import httpx2 as httpx
 import pytest
@@ -13,6 +14,9 @@ from engine.controller import Controller
 from engine.crew import Crew
 from engine.rolls import Effect
 from engine.session import Session
+from state.db import app_db_path, make_engine, make_session_factory
+from state.migrations import run_app_migrations
+from state.srd_index import chunk_srd, index_srd_chunks
 
 AT = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -682,3 +686,67 @@ async def test_agent_rolls_as_proposed_when_the_companion_decision_call_fails():
     assert roll_events[-1]["payload"]["bonus_dice"] == 0
     # maybe_roleplay hit the same failing completion and stayed quiet.
     assert not any(e.type == "companion_message" for e in events)
+
+
+@pytest.mark.anyio
+async def test_agent_retrieves_matching_chunks_into_the_prompt(tmp_path: Path) -> None:
+    # FR-13/FR-24: retrieval was built (state/srd_index.py) but never
+    # actually queried by the GM agent loop - this is that wiring.
+    db_path = app_db_path(tmp_path)
+    run_app_migrations(db_path)
+    engine = make_engine(db_path)
+    session_factory = make_session_factory(engine)
+    async with session_factory() as session:
+        await index_srd_chunks(
+            session, chunk_srd("# Armor\n\nMark an armor box to reduce a consequence.\n")
+        )
+
+    requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        requests.append(body)
+        if body.get("stream"):
+            return httpx.Response(
+                200, text='data: {"choices":[{"delta":{"content":"Noted."}}]}\n\ndata: [DONE]\n\n'
+            )
+        return httpx.Response(
+            200, json={"choices": [{"message": {"role": "assistant", "content": "placeholder"}}]}
+        )
+
+    client = LLMClient(
+        base_url="http://fake-llm/v1", model="test-model", transport=httpx.MockTransport(handler)
+    )
+    agent = GmAgent(client, _executor(), session_factory)
+
+    async for _ in agent.handle_player_message(_state(), "I check my armor."):
+        pass
+    await client.aclose()
+    await engine.dispose()
+
+    system_message = requests[0]["messages"][0]["content"]
+    assert "Mark an armor box" in system_message
+
+
+@pytest.mark.anyio
+async def test_agent_skips_retrieval_with_no_session_factory_configured():
+    # The default - no regression for every other test in this file that
+    # constructs a GmAgent without one.
+    def handler(request: httpx.Request) -> httpx.Response:
+        if json.loads(request.content).get("stream"):
+            return httpx.Response(
+                200, text='data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n'
+            )
+        return httpx.Response(
+            200, json={"choices": [{"message": {"role": "assistant", "content": "placeholder"}}]}
+        )
+
+    client = LLMClient(
+        base_url="http://fake-llm/v1", model="test-model", transport=httpx.MockTransport(handler)
+    )
+    agent = GmAgent(client, _executor())
+
+    events = [event async for event in agent.handle_player_message(_state(), "hi")]
+    await client.aclose()
+
+    assert any(e.type == "narration_done" for e in events)

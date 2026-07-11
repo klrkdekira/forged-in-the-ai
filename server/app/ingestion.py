@@ -8,7 +8,9 @@ from engine.packs import ContentPack
 from ingestion.module_extraction import ModuleDraft, extract_module_draft
 from ingestion.module_review import finalize_module
 from ingestion.text_extraction import UnsupportedFormatError, extract_text
+from state.db import app_db_path, make_engine, make_session_factory
 from state.module_store import ModuleIdError, list_modules, load_module, save_module
+from state.srd_index import chunk_module_prose, index_module_chunks
 
 router = APIRouter(prefix="/api/ingestion", tags=["ingestion"])
 
@@ -59,6 +61,11 @@ class ModuleSummary(BaseModel):
 
 class SaveModuleRequest(BaseModel):
     pack: ContentPack
+    source_text: str | None = Field(
+        None,
+        description="The module's normalised source text (FR-21) - indexed for GM retrieval "
+        "(FR-24) alongside the SRD if given; the saved pack itself is unaffected either way",
+    )
 
 
 @router.post("/extract-text", response_model=ExtractedText)
@@ -126,11 +133,25 @@ async def save_module_endpoint(
     happy with it) saved under the user's data directory, never the
     repo's committed `packs/` (`state/module_store.py`). Re-saving an
     existing id overwrites it - there's no separate "update" verb, same
-    as `/api/campaigns` has none for its own snapshot overwrites."""
+    as `/api/campaigns` has none for its own snapshot overwrites.
+
+    FR-24: if `source_text` is given, it's chunked and indexed into the
+    same retrieval corpus the SRD lives in (`state/srd_index.py`) under
+    this module's own source tag - the GM agent's live retrieval
+    (`ai/agent.py`) then ranks it alongside the SRD on later turns."""
     try:
         save_module(settings.data_dir, body.pack)
     except ModuleIdError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+
+    if body.source_text:
+        engine = make_engine(app_db_path(settings.data_dir))
+        try:
+            async with make_session_factory(engine)() as session:
+                chunks = chunk_module_prose(body.pack.id, body.source_text)
+                await index_module_chunks(session, body.pack.id, chunks)
+        finally:
+            await engine.dispose()
 
     return body.pack
 

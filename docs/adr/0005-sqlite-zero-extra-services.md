@@ -48,3 +48,15 @@ the export is the user-owned portable artefact.
   with Alembic keeps a Postgres migration path open if that day comes.
 - The JSONL export/import round-trip needs a test from Phase 1 to hold the
   portability guarantee.
+
+## Update (2026-07-11, Phase 6)
+
+The user-data layout gained one root beyond the database files: private
+modules (FR-23, C6) are JSON pack files under `<data_dir>/modules/`, one
+per pack id (`server/state/module_store.py`), alongside `app.db` and the
+`campaign-<id>.db` files. Uploaded rulebook originals are not persisted at
+all, which is narrower than the "uploaded rulebooks are files on the
+user-data volume" line above: extraction (FR-21) returns text to the
+caller, and a module's retrieval prose lives as chunks in `app.db`'s FTS5
+table (tagged with a `source` column per module), so the finalized pack
+file and its index rows are the only on-disk artefacts a book leaves.

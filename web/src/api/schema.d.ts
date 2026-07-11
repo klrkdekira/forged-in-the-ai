@@ -157,6 +157,11 @@ export interface paths {
          *     repo's committed `packs/` (`state/module_store.py`). Re-saving an
          *     existing id overwrites it - there's no separate "update" verb, same
          *     as `/api/campaigns` has none for its own snapshot overwrites.
+         *
+         *     FR-24: if `source_text` is given, it's chunked and indexed into the
+         *     same retrieval corpus the SRD lives in (`state/srd_index.py`) under
+         *     this module's own source tag - the GM agent's live retrieval
+         *     (`ai/agent.py`) then ranks it alongside the SRD on later turns.
          */
         post: operations["save_module_endpoint_api_ingestion_modules_post"];
         delete?: never;
@@ -606,6 +611,11 @@ export interface components {
         /** SaveModuleRequest */
         SaveModuleRequest: {
             pack: components["schemas"]["ContentPack"];
+            /**
+             * Source Text
+             * @description The module's normalised source text (FR-21) - indexed for GM retrieval (FR-24) alongside the SRD if given; the saved pack itself is unaffected either way
+             */
+            source_text?: string | null;
         };
         /** SpecialAbility */
         SpecialAbility: {

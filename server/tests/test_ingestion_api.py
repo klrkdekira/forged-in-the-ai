@@ -10,6 +10,8 @@ from app.ingestion import get_llm_client
 from app.main import app
 from app.settings import get_settings
 from engine.pack_loader import FORBIDDEN_TERMS
+from state.db import app_db_path, make_engine, make_session_factory
+from state.srd_index import search_srd
 
 
 @pytest.fixture(autouse=True)
@@ -213,3 +215,25 @@ def test_get_module_endpoint_404s_for_an_unknown_module():
         response = client.get("/api/ingestion/modules/nope")
 
     assert response.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_save_module_endpoint_indexes_source_text_for_retrieval():
+    # FR-24: module prose joins the retrieval corpus when source_text is
+    # given - checked here via the search function directly, since this
+    # router has no search endpoint of its own.
+    body = _save_module_body(id="my-hack")
+    body["source_text"] = "A house rule about grappling hooks."
+
+    with TestClient(app) as client:
+        response = client.post("/api/ingestion/modules", json=body)
+        assert response.status_code == 200
+
+        engine = make_engine(app_db_path(get_settings().data_dir))
+        try:
+            async with make_session_factory(engine)() as session:
+                hits = await search_srd(session, "grappling")
+        finally:
+            await engine.dispose()
+
+    assert any(hit.source == "module:my-hack" for hit in hits)

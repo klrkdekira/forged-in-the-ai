@@ -11,11 +11,16 @@ from app.session_ws import router as session_ws_router
 from app.settings import get_settings
 from state.db import app_db_path
 from state.migrations import run_app_migrations
+from state.srd_bootstrap import ensure_srd_indexed
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    run_app_migrations(app_db_path(get_settings().data_dir))
+    settings = get_settings()
+    db_path = app_db_path(settings.data_dir)
+    run_app_migrations(db_path)
+    if settings.srd_autoindex:
+        await ensure_srd_indexed(db_path)
     yield
 
 

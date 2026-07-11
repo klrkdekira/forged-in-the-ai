@@ -26,6 +26,30 @@ def test_assemble_turn_context_keeps_everything_under_budget():
     assert not context.dropped
 
 
+def test_assemble_turn_context_tags_module_retrieval_hits_by_source():
+    # FR-24: a module chunk is distinguishable from the SRD, so the GM
+    # doesn't cite a third-party hack's best-effort text as if it were
+    # the SRD itself (NFR-2).
+    context = assemble_turn_context(
+        system_prompt="",
+        canon_sections=[],
+        retrieved=[
+            SrdSearchHit(heading="Armor", line=609, body="Mark an armor box.", rank=-1.0),
+            SrdSearchHit(
+                heading="my-hack (part 1)",
+                line=1,
+                body="A house rule.",
+                rank=-1.0,
+                source="module:my-hack",
+            ),
+        ],
+        transcript_lines=[],
+    )
+
+    assert "### Armor\n" in context.retrieval
+    assert "### my-hack (part 1) (from module my-hack)\n" in context.retrieval
+
+
 def test_assemble_turn_context_drops_lower_priority_canon_when_over_budget():
     # FR-15: higher-priority canon sections are kept first.
     budget = ContextBudget(system_and_procedures=100, canon=12, retrieval=100, transcript=100)

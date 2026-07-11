@@ -8,6 +8,12 @@ class Settings(BaseSettings):
     # ADR-0004: DATA_DIR is the user-data volume mount point in compose.yml.
     data_dir: Path = Path("./data")
 
+    # FR-13: fetch and index the SRD at startup if app.db has no SRD
+    # chunks. Off by default (dev uses `make index-srd` against the local
+    # copy, and tests must never touch the network); the container image
+    # sets SRD_AUTOINDEX=1, since it has neither a local SRD nor the CLI.
+    srd_autoindex: bool = False
+
     # ADR-0001: OpenAI-compatible endpoint, configured by base URL/model/key.
     llm_base_url: str | None = None
     llm_model: str | None = None

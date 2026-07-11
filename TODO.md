@@ -656,7 +656,88 @@ by the committed SRD base pack plus guided entry from Phase 2.
       `test_ingestion_api.py` (all three endpoints, plus the unsafe-id
       400 through the actual HTTP body path, not just the storage
       function directly).
-- [ ] Module prose joins the GM retrieval corpus alongside the SRD (FR-24)
+- [x] Module prose joins the GM retrieval corpus alongside the SRD (FR-24).
+      Traced this one further than expected: `state/srd_index.py`'s SRD
+      retrieval (Phase 4's FTS5/BM25 index) had `search_srd` fully built
+      and tested in isolation, but `ai/agent.py`'s `GmAgent` always
+      called `assemble_turn_context(..., retrieved=[], ...)` - the live
+      GM loop never actually queried it, every turn, since Phase 4. A
+      corpus nothing ever reads doesn't become more useful by adding
+      module content to it, so closing FR-24 properly meant fixing that
+      gap first, then adding modules on top of a retrieval path that
+      actually runs.
+
+      Schema: `srd_chunks` (the FTS5 virtual table) gained a `source`
+      column (`"srd"` or `"module:<pack_id>"`) - a new Alembic migration
+      (`875bd2cd871d`), not an `ALTER TABLE ADD COLUMN`, since this
+      SQLite build refuses to alter FTS5 virtual tables at all ("virtual
+      tables may not be altered"); safe to drop-and-recreate since the
+      table is a derived cache (`make index-srd`/saving a module
+      repopulates it), never a source of truth. `index_srd_chunks`
+      (SRD-only) and the new `index_module_chunks` (one module's own
+      chunks) each replace only their own `source`'s rows, so re-running
+      either never drops the other's content or another module's -
+      `search_srd` itself needed no change at all: one BM25 query over
+      the whole table already ranks every source together, which is the
+      actual "joins the corpus" part of FR-24, not two separately-scored
+      result sets glued together after the fact. `chunk_module_prose`
+      groups paragraphs up to a size cap with a synthetic heading,
+      instead of `chunk_srd`'s heading-based splitting - an arbitrary
+      uploaded book's normalised text (FR-21) has no reliable markdown
+      heading structure once it's out of a PDF. `build_match_query`
+      turns free text (a player's own message) into a safe FTS5 MATCH
+      expression by quoting and OR-joining word tokens, sidestepping
+      FTS5's query syntax entirely rather than trying to escape every
+      special character free text might contain.
+
+      Live wiring: `GmAgent` takes an optional `retrieval_sessions`
+      (an `async_sessionmaker` against app.db, where the SRD/module index
+      lives - a separate file from the campaign's own db, ADR-0005) and
+      queries it with the player's message every turn, degrading to no
+      retrieval (not a crashed turn) if none is configured or the query
+      matches nothing. `app/session_ws.py` constructs one per WS
+      connection, disposed alongside the LLM client. `ai/context.py`'s
+      retrieval rendering now tags a module hit's heading with its
+      module id (`"(from module my-hack)"`) so the GM doesn't cite a
+      third-party hack's best-effort text as if it were the SRD itself
+      (NFR-2's citation habit is specifically about the SRD).
+
+      Ingestion side: `POST /api/ingestion/modules` gained an optional
+      `source_text` field (the module's FR-21 normalised text) - when
+      given, it's chunked and indexed right away via
+      `index_module_chunks`, so a finalized-and-saved module is
+      immediately part of what the GM can retrieve, no separate
+      "publish"/"activate" step. Not stored as its own file: the FTS5
+      index *is* the durable, chunked representation of that prose for
+      retrieval purposes, so keeping a second raw-text copy in
+      `modules/` would just be redundant storage for no further use
+      anything makes of it yet.
+
+      Verified live: `make index-srd` against the real local SRD copy
+      runs the new migration cleanly (275 chunks, all tagged
+      `source='srd'`) - first in a scratch data dir, then re-verified by
+      the realignment pass against the real dev `server/data/app.db`
+      (the migration drops and recreates the FTS table, so any existing
+      app.db has an empty index until `make index-srd` re-runs; done
+      here). Covered by `test_srd_index.py` (chunking,
+      `build_match_query`, and the cross-source ranked
+      search/non-interference tests), `test_context.py` (the module-hit
+      labelling), `test_agent.py` (retrieval actually reaching the
+      prompt, and the no-session-factory default staying a no-op), and
+      `test_ingestion_api.py` (source_text indexing through the real
+      HTTP save path).
+
+      Container deployments (realignment decision): the image has no
+      local SRD copy and no dev CLI, so its retrieval corpus would have
+      been silently empty forever. `state/srd_bootstrap.py`'s
+      `ensure_srd_indexed` fetches the SRD (CC-BY) from its official
+      source and indexes it at startup when app.db has no SRD chunks -
+      gated behind `SRD_AUTOINDEX` (default off: dev uses `make
+      index-srd`, tests never touch the network), set to 1 in the
+      image's runtime stage. A failed download degrades to no retrieval
+      and retries next start; a populated index makes it a no-op.
+      Covered by `test_srd_bootstrap.py` (indexes when empty, skips when
+      populated, degrades offline).
 - [ ] Acceptance test: ingest a rulebook and play a session using its content
 
 ## Phase 7: Multiplayer

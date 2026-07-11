@@ -2,13 +2,7 @@ import click
 import httpx2 as httpx
 
 from cli.paths import SRD_PATH
-
-# bladesinthedark.com/downloads links this GitHub repo as the source of the
-# SRD text (CC-BY 3.0, One Seven Design); pinned to main.
-SRD_URL = (
-    "https://raw.githubusercontent.com/amazingrando/"
-    "blades-in-the-dark-srd-content/main/Blades-in-the-Dark-SRD.md"
-)
+from state.srd_bootstrap import SRD_URL
 
 
 def download_srd(client: httpx.Client) -> bytes:

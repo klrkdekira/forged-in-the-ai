@@ -3,6 +3,8 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
 import httpx2 as httpx
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ai.canon import render_canon
 from ai.context import assemble_turn_context
@@ -22,6 +24,7 @@ from ai.tools import (
 from ai.transcript import render_transcript
 from engine.controller import is_ai_controlled
 from engine.rolls import step_position
+from state.srd_index import SrdSearchHit, build_match_query, search_srd
 
 MAX_TOOL_ROUNDS = 6
 
@@ -40,9 +43,35 @@ class GmAgent:
     - the model never edits state directly, only through the same
     ToolExecutor the dev CLI harness uses - then streams the narration."""
 
-    def __init__(self, client: LLMClient, executor: ToolExecutor) -> None:
+    def __init__(
+        self,
+        client: LLMClient,
+        executor: ToolExecutor,
+        retrieval_sessions: async_sessionmaker[AsyncSession] | None = None,
+    ) -> None:
         self._client = client
         self._executor = executor
+        self._retrieval_sessions = retrieval_sessions
+
+    async def _retrieve(self, query: str) -> list[SrdSearchHit]:
+        """FR-13/FR-24: lexical retrieval over the SRD-plus-modules corpus
+        (`state/srd_index.py`), keyed on the player's own message. No
+        retrieval backend configured, or nothing to search for, both mean
+        "nothing retrieved" rather than an error - this is a context-
+        assembly nicety, not something a turn should fail over."""
+        if self._retrieval_sessions is None:
+            return []
+        match_query = build_match_query(query)
+        if not match_query:
+            return []
+        async with self._retrieval_sessions() as session:
+            try:
+                return await search_srd(session, match_query)
+            except OperationalError:
+                # e.g. the FTS5 table doesn't exist yet in this app.db
+                # (migrations not run) - degrade to no retrieval, don't
+                # crash the turn over a context-assembly nicety.
+                return []
 
     async def handle_player_message(
         self, state: GameState, text: str
@@ -55,10 +84,11 @@ class GmAgent:
             state, "session", "current", "player_message", {"text": text}
         )
         needs_session_zero = state.canon is None or state.session_zero is None
+        retrieved = await self._retrieve(text)
         context = assemble_turn_context(
             system_prompt=build_system_prompt(needs_session_zero),
             canon_sections=render_canon(state),
-            retrieved=[],
+            retrieved=retrieved,
             transcript_lines=render_transcript(state.log),
         )
         messages = [

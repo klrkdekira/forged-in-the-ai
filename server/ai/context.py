@@ -67,12 +67,22 @@ def _fit_canon(sections: list[CanonSection], budget: int) -> tuple[str, list[str
     return "\n\n".join(f"## {s.title}\n{s.text}" for s in kept_in_order), dropped
 
 
+def _hit_label(hit: SrdSearchHit) -> str:
+    """FR-24: a module chunk is tagged so the GM can tell "my own hack's
+    text" apart from "the SRD" when citing rules (CLAUDE.md's NFR-2 SRD-
+    citation habit is specifically about the SRD, not a third-party
+    module's own best-effort content)."""
+    if hit.source == "srd":
+        return hit.heading
+    return f"{hit.heading} (from module {hit.source.removeprefix('module:')})"
+
+
 def _fit_retrieval(hits: list[SrdSearchHit], budget: int) -> tuple[str, list[str]]:
     kept: list[str] = []
     dropped: list[str] = []
     used = 0
     for hit in hits:  # already rank-ordered, best first
-        text = f"### {hit.heading}\n{hit.body}"
+        text = f"### {_hit_label(hit)}\n{hit.body}"
         cost = estimate_tokens(text)
         if used + cost <= budget:
             kept.append(text)

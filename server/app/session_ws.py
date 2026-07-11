@@ -12,7 +12,7 @@ from app.llm import build_llm_client
 from app.settings import Settings, get_settings
 from engine.errors import EngineError
 from state.campaign_store import load_state, save_state, undo_to
-from state.db import campaign_db_path
+from state.db import app_db_path, campaign_db_path, make_engine, make_session_factory
 from state.migrations import run_campaign_migrations
 
 router = APIRouter()
@@ -75,6 +75,7 @@ async def session_ws(
     websocket: WebSocket,
     client: LLMClient = Depends(get_llm_client),
     db_path: Path = Depends(get_campaign_db_path),
+    settings: Settings = Depends(get_settings),
 ) -> None:
     """FR-18/FR-30: server-authoritative state deltas from the event log,
     single-player first, backed by the campaign's own SQLite file. Every
@@ -82,7 +83,12 @@ async def session_ws(
     sends player messages."""
     await websocket.accept()
     executor = ToolExecutor(rng=random.Random(), clock=lambda: datetime.now(UTC))
-    agent = GmAgent(client, executor)
+    # FR-13/FR-24: the SRD-plus-modules retrieval index lives in app.db,
+    # a separate file from this campaign's own db_path (ADR-0005) - its
+    # own short-lived engine/session factory, disposed with the
+    # connection rather than reused across connections.
+    retrieval_engine = make_engine(app_db_path(settings.data_dir))
+    agent = GmAgent(client, executor, make_session_factory(retrieval_engine))
     state = await load_state(db_path)
 
     try:
@@ -140,3 +146,4 @@ async def session_ws(
         pass
     finally:
         await client.aclose()
+        await retrieval_engine.dispose()
