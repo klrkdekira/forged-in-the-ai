@@ -36,6 +36,34 @@ def test_create_campaign_returns_a_summary_and_writes_a_loadable_snapshot(tmp_pa
     assert loaded == _new_game_state()
 
 
+def test_create_campaign_uses_an_imported_character_and_crew(tmp_path: Path) -> None:
+    # FR-8/G2: players bring their existing character (and crew) sheets.
+    character = {"name": "Anders", "playbook": "Cutter", "alias": "The Ghost"}
+    crew = {"name": "The Fifth Foxglove", "crew_type": "Assassins", "tier": 1}
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/campaigns",
+            json={"name": "Imported Game", "character": character, "crew": crew},
+        )
+        campaign_id = response.json()["id"]
+
+    loaded = asyncio.run(load_state(campaign_db_path(tmp_path, campaign_id)))
+    assert loaded.character.name == "Anders"
+    assert loaded.character.alias == "The Ghost"
+    assert loaded.crew.name == "The Fifth Foxglove"
+    assert loaded.crew.tier == 1
+
+
+def test_create_campaign_without_an_import_uses_the_fixed_starter(tmp_path: Path) -> None:
+    with TestClient(app) as client:
+        campaign_id = client.post("/api/campaigns", json={"name": "Default"}).json()["id"]
+
+    loaded = asyncio.run(load_state(campaign_db_path(tmp_path, campaign_id)))
+    assert loaded.character.name == "Scoundrel"
+    assert loaded.crew.name == "The Crew"
+
+
 def test_list_campaigns_returns_every_created_campaign() -> None:
     with TestClient(app) as client:
         first = client.post("/api/campaigns", json={"name": "First"}).json()

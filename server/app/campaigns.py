@@ -3,7 +3,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from ai.recap import render_recap
@@ -31,15 +31,25 @@ class CampaignSummary(BaseModel):
 
 class CreateCampaignRequest(BaseModel):
     name: str
+    character: Character | None = Field(
+        None,
+        description="FR-8: an imported character sheet (an uploaded JSON file, or a saved "
+        "guided-entry file via GET /api/characters); a fixed starter is used if omitted",
+    )
+    crew: Crew | None = Field(
+        None,
+        description="FR-8/G2: an imported crew sheet (an uploaded JSON file); a fixed starter "
+        "is used if omitted",
+    )
 
 
-def _new_game_state() -> GameState:
-    """FR-30/FR-36 MVP simplification: one fixed starter character/crew
-    until session-zero and guided-entry feed a campaign's real starting
-    sheet in here instead."""
+def _new_game_state(character: Character | None = None, crew: Crew | None = None) -> GameState:
+    """FR-8: an imported character/crew sheet if the campaign picker's
+    import step supplied one, else the FR-30/FR-36 MVP's fixed starter -
+    a fallback now, not the only option."""
     return GameState(
-        character=Character(name="Scoundrel", playbook="Original Playbook"),
-        crew=Crew(name="The Crew", crew_type="Original Crew Type"),
+        character=character or Character(name="Scoundrel", playbook="Original Playbook"),
+        crew=crew or Crew(name="The Crew", crew_type="Original Crew Type"),
         session=Session(),
     )
 
@@ -80,7 +90,10 @@ async def create_campaign(
     finally:
         await engine.dispose()
 
-    await write_campaign_files(campaign_db_path(settings.data_dir, campaign_id), _new_game_state())
+    await write_campaign_files(
+        campaign_db_path(settings.data_dir, campaign_id),
+        _new_game_state(body.character, body.crew),
+    )
     return summary
 
 

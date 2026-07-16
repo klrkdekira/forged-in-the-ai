@@ -53,6 +53,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/characters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Characters Endpoint
+         * @description FR-8: saved guided-entry characters (`cli/guided_entry.py`) the
+         *     campaign picker's import step can select from, rather than requiring
+         *     the owner to re-upload the JSON file it already wrote.
+         */
+        get: operations["list_characters_endpoint_api_characters_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/characters/{character_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Character Endpoint */
+        get: operations["get_character_endpoint_api_characters__character_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ingestion/extract-text": {
         parameters: {
             query?: never;
@@ -230,6 +269,56 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * Action
+         * @description SRD: "Action Ratings" - the 12 actions, grouped under an attribute.
+         * @enum {string}
+         */
+        Action: "hunt" | "study" | "survey" | "tinker" | "finesse" | "prowl" | "skirmish" | "wreck" | "attune" | "command" | "consort" | "sway";
+        /**
+         * ArmorTrack
+         * @description SRD: "Armor" / "Special Armor" - three boxes (standard, heavy,
+         *     special); mark one to reduce or avoid a consequence instead of rolling
+         *     to resist. Restored when choosing load for the next score.
+         */
+        ArmorTrack: {
+            /**
+             * Has Armor
+             * @default false
+             */
+            has_armor: boolean;
+            /**
+             * Has Heavy Armor
+             * @default false
+             */
+            has_heavy_armor: boolean;
+            /**
+             * Has Special Armor
+             * @default false
+             */
+            has_special_armor: boolean;
+            /**
+             * Armor Used
+             * @default false
+             */
+            armor_used: boolean;
+            /**
+             * Heavy Armor Used
+             * @default false
+             */
+            heavy_armor_used: boolean;
+            /**
+             * Special Armor Used
+             * @default false
+             */
+            special_armor_used: boolean;
+        };
+        /**
+         * Attribute
+         * @description SRD: "Attribute Ratings" - Insight, Prowess, Resolve.
+         * @enum {string}
+         */
+        Attribute: "insight" | "prowess" | "resolve";
         /** Body_extract_uploaded_text_api_ingestion_extract_text_post */
         Body_extract_uploaded_text_api_ingestion_extract_text_post: {
             /** File */
@@ -251,6 +340,154 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /**
+         * Character
+         * @description FR-7: field-for-field with the official sheet. `playbook` and
+         *     `special_ability_ids` are references (a name, and ids into the SRD/pack
+         *     ability bank) - never an assembled playbook's specific dots/friends/
+         *     items, which is core-book content (NOTICE.md) when it's a real BitD
+         *     playbook; this schema only holds a specific player's own character.
+         */
+        Character: {
+            /** Name */
+            name: string;
+            /** Alias */
+            alias?: string | null;
+            /** Look */
+            look?: string | null;
+            /** Heritage */
+            heritage?: string | null;
+            /** Heritage Detail */
+            heritage_detail?: string | null;
+            /** Background */
+            background?: string | null;
+            /** Background Detail */
+            background_detail?: string | null;
+            /** Playbook */
+            playbook: string;
+            /** Action Ratings */
+            action_ratings?: {
+                [key: string]: number;
+            };
+            /** Special Ability Ids */
+            special_ability_ids?: string[];
+            stress?: components["schemas"]["StressTrack"];
+            trauma?: components["schemas"]["TraumaTrack"];
+            harm?: components["schemas"]["HarmTrack"];
+            armor?: components["schemas"]["ArmorTrack"];
+            /** Vice */
+            vice?: string | null;
+            /** Vice Detail */
+            vice_detail?: string | null;
+            /** Vice Purveyor */
+            vice_purveyor?: string | null;
+            /**
+             * Coin
+             * @default 0
+             */
+            coin: number;
+            /**
+             * Stash
+             * @default 0
+             */
+            stash: number;
+            /**
+             * Load
+             * @default 0
+             */
+            load: number;
+            /** Items */
+            items?: components["schemas"]["CharacterItem"][];
+            /** Friend */
+            friend?: string | null;
+            /** Rival */
+            rival?: string | null;
+            playbook_xp?: components["schemas"]["XpTrack"];
+            /** Attribute Xp */
+            attribute_xp?: {
+                [key: string]: components["schemas"]["XpTrack"];
+            };
+        };
+        /** CharacterItem */
+        CharacterItem: {
+            /** Item Id */
+            item_id: string;
+            /**
+             * Carried
+             * @description Selected in the current load
+             * @default false
+             */
+            carried: boolean;
+        };
+        /** CharacterSummary */
+        CharacterSummary: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Playbook */
+            playbook: string;
+        };
+        /** Claim */
+        Claim: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Controlled
+             * @default false
+             */
+            controlled: boolean;
+            /**
+             * Is Turf
+             * @default false
+             */
+            is_turf: boolean;
+        };
+        /**
+         * Cohort
+         * @description SRD: "Cohorts" - a gang or expert; up to two types, edges, and flaws.
+         */
+        Cohort: {
+            /**
+             * Types
+             * @description Up to two, e.g. 'Thugs'
+             */
+            types?: string[];
+            /**
+             * Is Expert
+             * @default false
+             */
+            is_expert: boolean;
+            /**
+             * Quality
+             * @default 0
+             */
+            quality: number;
+            /**
+             * Scale
+             * @default 0
+             */
+            scale: number;
+            /** Edges */
+            edges?: string[];
+            /** Flaws */
+            flaws?: string[];
+            harm?: components["schemas"]["CohortHarmTrack"];
+        };
+        /**
+         * CohortHarmLevel
+         * @description SRD: "Cohort harm & Healing" - a cohort has one flat harm track,
+         *     unlike a PC's per-level slots.
+         * @enum {string}
+         */
+        CohortHarmLevel: "none" | "weakened" | "impaired" | "broken" | "dead";
+        /** CohortHarmTrack */
+        CohortHarmTrack: {
+            /** @default none */
+            level: components["schemas"]["CohortHarmLevel"];
         };
         /** ContentPack */
         ContentPack: {
@@ -302,6 +539,56 @@ export interface components {
         CreateCampaignRequest: {
             /** Name */
             name: string;
+            /** @description FR-8: an imported character sheet (an uploaded JSON file, or a saved guided-entry file via GET /api/characters); a fixed starter is used if omitted */
+            character?: components["schemas"]["Character"] | null;
+            /** @description FR-8/G2: an imported crew sheet (an uploaded JSON file); a fixed starter is used if omitted */
+            crew?: components["schemas"]["Crew"] | null;
+        };
+        /**
+         * Crew
+         * @description FR-7: crew sheet, field-for-field. `crew_type` and
+         *     `special_ability_ids` are references, never a real BitD crew type's
+         *     assembled upgrades/claim map (core-book content, NOTICE.md) - this
+         *     schema holds a specific crew's own sheet.
+         */
+        Crew: {
+            /** Name */
+            name: string;
+            /** Crew Type */
+            crew_type: string;
+            /**
+             * Tier
+             * @default 0
+             */
+            tier: number;
+            /** @default strong */
+            hold: components["schemas"]["Hold"];
+            rep?: components["schemas"]["RepTrack"];
+            heat?: components["schemas"]["HeatTrack"];
+            /**
+             * Wanted Level
+             * @default 0
+             */
+            wanted_level: number;
+            /**
+             * Coin
+             * @default 0
+             */
+            coin: number;
+            /**
+             * Stash
+             * @default 0
+             */
+            stash: number;
+            /** Claims */
+            claims?: components["schemas"]["Claim"][];
+            /** Upgrade Ids */
+            upgrade_ids?: string[];
+            /** Cohorts */
+            cohorts?: components["schemas"]["Cohort"][];
+            /** Special Ability Ids */
+            special_ability_ids?: string[];
+            xp?: components["schemas"]["XpTrack"];
         };
         /**
          * CrewTypeTemplate
@@ -446,6 +733,27 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** HarmEntry */
+        HarmEntry: {
+            /** Level */
+            level: number;
+            /** Name */
+            name: string;
+        };
+        /**
+         * HarmTrack
+         * @description SRD: "Consequences and Harm" - level 1 and 2 each have two slots,
+         *     level 3 has one; a level that's already full cascades up. Overflowing
+         *     level 3, or being marked with level 4 harm directly, is fatal unless
+         *     resisted (a catastrophic, permanent consequence).
+         */
+        HarmTrack: {
+            /**
+             * Entries
+             * @default []
+             */
+            entries: components["schemas"]["HarmEntry"][];
+        };
         /** HeatPenalty */
         HeatPenalty: {
             /** Condition */
@@ -453,6 +761,24 @@ export interface components {
             /** Heat Added */
             heat_added: number;
         };
+        /**
+         * HeatTrack
+         * @description SRD: "Heat" - heat 0-9; reaching 9 gains a wanted level and clears
+         *     heat, with any excess rolling over rather than being lost.
+         */
+        HeatTrack: {
+            /**
+             * Heat
+             * @default 0
+             */
+            heat: number;
+        };
+        /**
+         * Hold
+         * @description SRD: "Hold" - W(eak) or S(trong); a crew begins strong at Tier 0.
+         * @enum {string}
+         */
+        Hold: "weak" | "strong";
         /** Item */
         Item: {
             /**
@@ -616,6 +942,23 @@ export interface components {
             /** Results */
             results: components["schemas"]["RollResult"][];
         };
+        /**
+         * RepTrack
+         * @description SRD: "Development" / "Turf" - 12 rep develops the crew, reduced by
+         *     1 per turf held (turf caps at 6, so the floor is 6 rep).
+         */
+        RepTrack: {
+            /**
+             * Rep
+             * @default 0
+             */
+            rep: number;
+            /**
+             * Turf
+             * @default 0
+             */
+            turf: number;
+        };
         /** Reputation */
         Reputation: {
             /** Id */
@@ -682,6 +1025,18 @@ export interface components {
              */
             line: number;
         };
+        /**
+         * StressTrack
+         * @description SRD: "Stress" / "Trauma" - marking the last (ninth) box triggers
+         *     trauma; the character returns from it at zero stress.
+         */
+        StressTrack: {
+            /**
+             * Marked
+             * @default 0
+             */
+            marked: number;
+        };
         /** Trauma */
         Trauma: {
             /** Id */
@@ -690,6 +1045,17 @@ export interface components {
             name: string;
             /** Description */
             description: string;
+        };
+        /**
+         * TraumaTrack
+         * @description SRD: "Trauma" - conditions are permanent; a fourth retires the PC.
+         */
+        TraumaTrack: {
+            /**
+             * Conditions
+             * @default []
+             */
+            conditions: string[];
         };
         /** ValidationError */
         ValidationError: {
@@ -712,6 +1078,23 @@ export interface components {
             name: string;
             /** Description */
             description: string;
+        };
+        /**
+         * XpTrack
+         * @description SRD: "Advancement" - playbook and attribute xp tracks; FR-5's
+         *     trigger detection is Phase 3 scope, this is just the counter.
+         */
+        XpTrack: {
+            /**
+             * Marked
+             * @default 0
+             */
+            marked: number;
+            /**
+             * Segments
+             * @default 8
+             */
+            segments: number;
         };
     };
     responses: never;
@@ -793,6 +1176,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_characters_endpoint_api_characters_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CharacterSummary"][];
+                };
+            };
+        };
+    };
+    get_character_endpoint_api_characters__character_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                character_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Character"];
                 };
             };
             /** @description Validation Error */

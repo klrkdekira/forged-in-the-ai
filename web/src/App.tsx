@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 
 import { apiClient } from '@/api/client'
+import type { components } from '@/api/schema'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -45,6 +46,23 @@ export default function App() {
   )
 }
 
+type Character = components['schemas']['Character']
+type Crew = components['schemas']['Crew']
+
+// Uploaded sheets are trusted only as far as the server's own Pydantic
+// validation goes (ADR-0006: the server schema is the validator, this
+// client-side cast is just so TS doesn't fight an inherently-external blob).
+async function readJsonFile<T>(file: File): Promise<T> {
+  const text = await file.text()
+  return JSON.parse(text) as T
+}
+
+// FR-8/G2: players bring their existing character (and crew) sheets rather
+// than always starting from the fixed MVP starter - either a saved
+// guided-entry file (cli/guided_entry.py's own output, listed via
+// GET /api/characters) or a directly uploaded JSON export. There's no
+// saved-file list for crews (no guided crew entry flow exists), so a crew
+// is upload-only.
 function NewCampaignDialog({
   open,
   onOpenChange,
@@ -54,11 +72,37 @@ function NewCampaignDialog({
 }) {
   const navigate = useNavigate()
   const [name, setName] = useState('')
+  const [savedCharacterId, setSavedCharacterId] = useState('')
+  const [characterFile, setCharacterFile] = useState<File | null>(null)
+  const [crewFile, setCrewFile] = useState<File | null>(null)
+  const [importError, setImportError] = useState<string | null>(null)
+
+  const savedCharacters = useQuery({
+    queryKey: ['characters'],
+    queryFn: async () => {
+      const { data, error } = await apiClient.GET('/api/characters')
+      if (error) throw error
+      return data
+    },
+    enabled: open,
+  })
 
   const createCampaign = useMutation({
     mutationFn: async (campaignName: string) => {
+      let character: Character | undefined
+      if (characterFile) {
+        character = await readJsonFile<Character>(characterFile)
+      } else if (savedCharacterId) {
+        const { data, error } = await apiClient.GET('/api/characters/{character_id}', {
+          params: { path: { character_id: savedCharacterId } },
+        })
+        if (error) throw error
+        character = data
+      }
+      const crew = crewFile ? await readJsonFile<Crew>(crewFile) : undefined
+
       const { data, error } = await apiClient.POST('/api/campaigns', {
-        body: { name: campaignName },
+        body: { name: campaignName, character, crew },
       })
       if (error) throw error
       return data
@@ -66,7 +110,16 @@ function NewCampaignDialog({
     onSuccess: (campaign) => {
       onOpenChange(false)
       setName('')
+      setSavedCharacterId('')
+      setCharacterFile(null)
+      setCrewFile(null)
+      setImportError(null)
       navigate({ to: '/play/$campaignId', params: { campaignId: campaign.id } })
+    },
+    onError: () => {
+      setImportError(
+        'Could not create the campaign - check that any uploaded files are valid character/crew JSON.',
+      )
     },
   })
 
@@ -74,6 +127,7 @@ function NewCampaignDialog({
     event.preventDefault()
     const trimmed = name.trim()
     if (!trimmed) return
+    setImportError(null)
     createCampaign.mutate(trimmed)
   }
 
@@ -83,7 +137,9 @@ function NewCampaignDialog({
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>New Campaign</DialogTitle>
-            <DialogDescription>Name your campaign to start a fresh crew.</DialogDescription>
+            <DialogDescription>
+              Name your campaign, and optionally import an existing character and crew.
+            </DialogDescription>
           </DialogHeader>
           <Input
             autoFocus
@@ -92,7 +148,58 @@ function NewCampaignDialog({
             placeholder="Campaign name"
             className="mt-4"
           />
-          <DialogFooter>
+
+          <div className="mt-4 flex flex-col gap-1">
+            <span className="text-xs font-semibold text-muted-foreground">
+              Character (optional)
+            </span>
+            <select
+              value={savedCharacterId}
+              onChange={(event) => {
+                setSavedCharacterId(event.target.value)
+                if (event.target.value) setCharacterFile(null)
+              }}
+              className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
+              disabled={!!characterFile}
+            >
+              <option value="">Start fresh (no import)</option>
+              {savedCharacters.data?.map((character) => (
+                <option key={character.id} value={character.id}>
+                  {character.name} ({character.playbook})
+                </option>
+              ))}
+            </select>
+            <label className="text-xs text-muted-foreground">
+              or upload a character JSON file
+              <input
+                type="file"
+                accept="application/json"
+                className="mt-1 block text-xs"
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null
+                  setCharacterFile(file)
+                  if (file) setSavedCharacterId('')
+                }}
+              />
+            </label>
+          </div>
+
+          <div className="mt-4 flex flex-col gap-1">
+            <span className="text-xs font-semibold text-muted-foreground">Crew (optional)</span>
+            <label className="text-xs text-muted-foreground">
+              upload a crew JSON file
+              <input
+                type="file"
+                accept="application/json"
+                className="mt-1 block text-xs"
+                onChange={(event) => setCrewFile(event.target.files?.[0] ?? null)}
+              />
+            </label>
+          </div>
+
+          {importError && <p className="mt-3 text-xs text-destructive">{importError}</p>}
+
+          <DialogFooter className="mt-4">
             <Button type="submit" disabled={!name.trim() || createCampaign.isPending}>
               Create
             </Button>

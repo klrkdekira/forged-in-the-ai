@@ -1052,14 +1052,39 @@ stay open as well; most of them are blocked on items here.
       `test_procedures.py`'s existing citation-drift check. Not verified
       live against a real model, per this project's convention of flagging
       that explicitly when it hasn't happened.
-- [ ] **Character import at campaign creation (FR-8, G2).**
-      `app/campaigns.py` hardcodes a fixed starter character and crew (an
-      FR-30/FR-36 MVP simplification), so neither loading a JSON sheet nor
-      the guided-entry output (Phase 2, saved under `server/data/characters/`)
-      can actually enter a web campaign. Extend campaign creation to accept a
-      character (and crew) payload validated against the engine schemas, and
-      give the campaign picker an import step that uploads a JSON sheet or
-      selects a saved guided-entry file.
+- [x] **Character import at campaign creation (FR-8, G2).**
+      `CreateCampaignRequest` (`app/campaigns.py`) gained optional
+      `character`/`crew` fields, typed as the real engine schemas
+      (`Character`/`Crew`) - free validation via FastAPI/pydantic, no
+      separate check needed. `_new_game_state` takes them as a fallback
+      pair now rather than always building the fixed FR-30/FR-36 MVP
+      starter; omitting either keeps that starter for just that one
+      (importing a character with no crew, or vice versa, both work).
+
+      Saved guided-entry files (`cli/guided_entry.py`, written under
+      `DATA_DIR/characters/`) were readable by nothing before this - a new
+      `state/character_store.py` (`list_characters`/`load_character`,
+      same shape as `state/module_store.py`: id is the filename stem,
+      unsafe ids refused) plus `app/characters.py`
+      (`GET /api/characters` for summaries, `GET /api/characters/{id}`
+      for the full sheet) expose them.
+
+      Web: `NewCampaignDialog` (`App.tsx`) gained an import step - a
+      `<select>` of saved guided-entry characters (fetched only while the
+      dialog is open) or a direct JSON file upload for either the
+      character or the crew (crew has no saved-file list, since no guided
+      *crew* entry flow exists to produce one). An uploaded file's parsed
+      JSON is typed via a single cast to the schema-generated
+      `Character`/`Crew` type at the read boundary - the server's own
+      validation is still what actually decides whether it's accepted
+      (ADR-0006), same trust model as every other hand-typed WS payload in
+      this client.
+
+      Covered by `test_character_store.py`, `test_characters_api.py`, and
+      new `test_campaigns_api.py` cases (imported character/crew reaching
+      the saved snapshot; the no-import path still gets the fixed
+      starter); `pnpm build`/`tsc -b` succeeds. Not verified live in a
+      headed browser, same caveat as the other UI items below.
 - [x] **CC-BY attribution in the UI (C1).** Rather than a hand-copied
       constant that could drift from NOTICE.md, the server serves the file
       itself: `Settings.notice_path` (`app/settings.py`, default
