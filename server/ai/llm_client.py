@@ -43,6 +43,19 @@ class LLMClient:
             base_url=base_url.rstrip("/"), headers=headers, transport=transport, timeout=timeout
         )
 
+    @property
+    def model(self) -> str:
+        return self._model
+
+    @property
+    def base_url(self) -> str:
+        """The client's own identity, for the capability probe's cache key
+        (`ai/capability.py`) - reading this off the client itself rather
+        than separately from Settings, since a caller (a test's dependency
+        override, most notably) can inject a client that isn't the one
+        Settings would have built."""
+        return str(self._http.base_url)
+
     async def aclose(self) -> None:
         await self._http.aclose()
 

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, WebSocke
 from pydantic import ValidationError
 
 from ai.agent import GmAgent
+from ai.capability import get_or_probe_tool_calling
 from ai.llm_client import LLMClient
 from ai.tools import SHEET_OPERATIONS, GameState, ToolExecutor
 from app.llm import build_llm_client
@@ -93,7 +94,17 @@ async def session_ws(
     # own short-lived engine/session factory, disposed with the
     # connection rather than reused across connections.
     retrieval_engine = make_engine(app_db_path(settings.data_dir))
-    agent = GmAgent(client, executor, make_session_factory(retrieval_engine))
+    retrieval_sessions = make_session_factory(retrieval_engine)
+    # NFR-6: probed once per (base_url, model) and cached in app.db - a
+    # weak tool-caller told to use `tools=` anyway will sometimes print its
+    # own ad hoc tool-call syntax as plain narration instead of the tool
+    # ever actually running (discovered live); GmAgent falls back to a
+    # structured-completion tool choice instead when this is False.
+    async with retrieval_sessions() as probe_session:
+        supports_tool_calling = await get_or_probe_tool_calling(
+            probe_session, client, client.base_url, client.model
+        )
+    agent = GmAgent(client, executor, retrieval_sessions, supports_tool_calling)
     state = await load_state(db_path)
 
     try:

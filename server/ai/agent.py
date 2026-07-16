@@ -3,14 +3,15 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
 import httpx2 as httpx
+from pydantic import BaseModel, Field
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ai.canon import render_canon
 from ai.context import assemble_turn_context
-from ai.llm_client import LLMClient
+from ai.llm_client import ChatResponse, LLMClient, ToolCall
 from ai.player_agent import PlayerAgent
-from ai.structured import StructuredOutputError
+from ai.structured import StructuredOutputError, structured_completion
 from ai.system_prompt import build_system_prompt
 from ai.tools import (
     TOOL_SPECS,
@@ -37,6 +38,22 @@ class AgentTurnEvent:
     payload: dict
 
 
+class ToolChoice(BaseModel):
+    """NFR-6 fallback schema: the same round-by-round decision a native
+    `tool_calls` response encodes (which tool, if any, and what
+    arguments), expressed as plain JSON for a backend/model whose tool
+    calling isn't reliable (`ai/capability.py`'s probe). Without this, a
+    weak tool-caller told to use `tools=` anyway will sometimes print its
+    own ad hoc tool-call syntax as plain content - which then sails
+    straight through to the player as if it were narration, and the tool
+    it meant to call never actually runs (discovered live)."""
+
+    tool: str | None = Field(
+        None, description="Exact tool name to call, or null if you're ready to narrate instead"
+    )
+    arguments: dict = Field(default_factory=dict)
+
+
 class GmAgent:
     """FR-11/FR-12/FR-30: the GM agent loop. Assembles context, calls the
     LLM with the tool surface, and executes any tool calls the model makes
@@ -48,10 +65,55 @@ class GmAgent:
         client: LLMClient,
         executor: ToolExecutor,
         retrieval_sessions: async_sessionmaker[AsyncSession] | None = None,
+        supports_tool_calling: bool = True,
     ) -> None:
         self._client = client
         self._executor = executor
         self._retrieval_sessions = retrieval_sessions
+        self._supports_tool_calling = supports_tool_calling
+
+    async def _get_response(self, messages: list[dict]) -> ChatResponse:
+        """NFR-6: native `tools=` when the backend's tool-calling is known
+        to work (probed once per (base_url, model) and cached,
+        `ai/capability.py`); otherwise a structured-completion fallback
+        asking for a `ToolChoice` instead. Either path returns the same
+        shape, so the rest of the tool-calling loop below doesn't need to
+        know which one produced it."""
+        if self._supports_tool_calling:
+            return await self._client.chat(messages, tools=tool_definitions())
+
+        tool_menu = "\n".join(
+            f"- {name} ({description}) - arguments schema: "
+            f"{json.dumps(args_model.model_json_schema())}"
+            for name, (args_model, description) in TOOL_SPECS.items()
+        )
+        fallback_messages = [
+            {
+                "role": "system",
+                "content": (
+                    "Available tools:\n"
+                    f"{tool_menu}\n\n"
+                    "Set tool to the exact name of one to call it with matching arguments, "
+                    "or to null if you're ready to narrate instead of calling another tool."
+                ),
+            },
+            *messages,
+        ]
+        try:
+            choice = await structured_completion(self._client, fallback_messages, ToolChoice)
+        except StructuredOutputError:
+            # The model failed to produce a valid choice twice in a row
+            # (structured_completion's own retry) - treat as "nothing more
+            # to call" rather than aborting the turn, same reasoning as
+            # PlayerAgent's own degrades around this call.
+            return ChatResponse()
+        if choice.tool is None:
+            return ChatResponse()
+        return ChatResponse(
+            tool_calls=[
+                ToolCall(id="fallback", name=choice.tool, arguments=json.dumps(choice.arguments))
+            ]
+        )
 
     async def _retrieve(self, query: str) -> list[SrdSearchHit]:
         """FR-13/FR-24: lexical retrieval over the SRD-plus-modules corpus
@@ -103,7 +165,7 @@ class GmAgent:
 
         for _ in range(MAX_TOOL_ROUNDS):
             try:
-                response = await self._client.chat(messages, tools=tool_definitions())
+                response = await self._get_response(messages)
             except httpx.HTTPError as error:
                 # A slow/unreachable backend must not crash the WS
                 # connection outright (discovered live: an uncaught
@@ -132,6 +194,7 @@ class GmAgent:
                 }
             )
             for call in response.tool_calls:
+                events_before = len(state.log.events)
                 if call.name == "roll_action":
                     try:
                         proposal = RollActionArgs.model_validate_json(call.arguments)
@@ -146,7 +209,8 @@ class GmAgent:
                         # which would kill the connection over a model mistake.
                         result = {"error": str(error)}
                         yield AgentTurnEvent(
-                            type="tool_call", payload={"name": call.name, "result": result}
+                            type="tool_call",
+                            payload={"name": call.name, "result": result, "events": []},
                         )
                         messages.append(
                             {"role": "tool", "tool_call_id": call.id, "content": json.dumps(result)}
@@ -194,8 +258,16 @@ class GmAgent:
                     result = self._run_tool(state, call.name, call.arguments)
                     if "state" in result:
                         state = result.pop("state")
+                # FR-31/FR-32: the same entity-tagged events the Journal
+                # view already renders, so the chat's tool-call status can
+                # reuse the client's existing summarize() instead of
+                # dumping the tool's raw result JSON at the player.
+                new_events = [
+                    event.model_dump(mode="json") for event in state.log.events[events_before:]
+                ]
                 yield AgentTurnEvent(
-                    type="tool_call", payload={"name": call.name, "result": result}
+                    type="tool_call",
+                    payload={"name": call.name, "result": result, "events": new_events},
                 )
                 messages.append(
                     {"role": "tool", "tool_call_id": call.id, "content": json.dumps(result)}

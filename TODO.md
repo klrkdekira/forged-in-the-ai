@@ -39,7 +39,28 @@ refer to that document. Each phase should end in something playable/testable.
       with Zod resolvers, Tailwind v4 and shadcn/ui init (ADR-0006)
 - [x] LLM client abstraction: base URL and model config, streaming,
       tool-calling capability probe, structured-output fallback for weak
-      tool-callers (NFR-6)
+      tool-callers (NFR-6). The probe (`ai/capability.py`) and the
+      schema-driven fallback (`ai/structured.py`) were both built and
+      unit-tested in isolation this phase, but nothing ever called the
+      probe from the live GM loop - `GmAgent` always called `tools=` on
+      every backend regardless, so a "weak" backend/model would sometimes
+      print its own ad hoc tool-call syntax as plain content, which sailed
+      straight through to the player as narration while the tool it meant
+      to call never actually ran. Discovered live with a real backend and
+      closed later (session-ws realignment pass): `GmAgent` gained a
+      `supports_tool_calling` flag and a `ToolChoice`-based
+      structured-completion fallback (`ai/agent.py`'s `_get_response`);
+      `app/session_ws.py` probes once per connection (cached in app.db by
+      the client's own `base_url`/`model`, not read separately from
+      Settings - a dependency-injected test client can legitimately
+      differ from what Settings would build) before constructing the
+      agent. The chat's tool-call display was also fixed along the way:
+      it used to dump the tool's raw result JSON at the player; the
+      `tool_call` turn event now carries the actual entity-tagged event(s)
+      the tool logged, rendered with the Journal view's own `summarize()`
+      for a human-readable status line instead
+      (`chat-message-view.tsx`), plus a typing indicator while the GM's
+      turn is in flight but not yet streaming (`play-page.tsx`).
 - [x] SRD fetch script: download the SRD from its official source to the
       repo root (gitignored), for dev setup; document in README (C1)
 - [x] Extract a machine-usable rules reference from the SRD: section index

@@ -4,7 +4,7 @@ export type ChatMessage =
   | { kind: 'player'; text: string }
   | { kind: 'companion'; name: string; text: string }
   | { kind: 'narration'; text: string; done: boolean }
-  | { kind: 'tool'; name: string; result: unknown }
+  | { kind: 'tool'; name: string; result: unknown; events: JournalEntry[] }
   | { kind: 'error'; message: string }
 
 export interface XpTrackSnapshot {
@@ -239,7 +239,10 @@ export function useSessionSocket(campaignId: string) {
           break
         case 'tool_call':
           setPendingRoll(null)
-          setMessages((prev) => [...prev, { kind: 'tool', name: data.name, result: data.result }])
+          setMessages((prev) => [
+            ...prev,
+            { kind: 'tool', name: data.name, result: data.result, events: data.events ?? [] },
+          ])
           break
         case 'narration_chunk':
           setMessages((prev) => {

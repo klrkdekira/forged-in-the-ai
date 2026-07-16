@@ -38,6 +38,16 @@ export function PlayPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // The GM's turn covers an LLM call plus however many tool-calling rounds
+  // it takes (each shown as its own status line) before narration starts
+  // streaming - `busy` alone stays true across all of that, so this only
+  // shows once there's nothing else already telling the player something
+  // is happening: not mid-stream (the streaming text/cursor is its own
+  // feedback) and not while the roll negotiation dialog has the floor.
+  const lastMessage = messages.at(-1)
+  const isStreamingNarration = lastMessage?.kind === 'narration' && !lastMessage.done
+  const showTyping = busy && !pendingRoll && !isStreamingNarration
+
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
     const text = draft.trim()
@@ -72,6 +82,7 @@ export function PlayPage() {
             {messages.map((message, index) => (
               <ChatMessageView key={index} message={message} />
             ))}
+            {showTyping && <TypingIndicator />}
             <div ref={bottomRef} />
           </div>
 
@@ -169,6 +180,20 @@ export function PlayPage() {
           onDecide={sendRollDecision}
         />
       )}
+    </div>
+  )
+}
+
+function TypingIndicator() {
+  return (
+    <div className="self-start flex items-center gap-1 rounded-lg bg-accent/40 px-3 py-2">
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="size-1.5 animate-bounce rounded-full bg-muted-foreground"
+          style={{ animationDelay: `${i * 0.15}s` }}
+        />
+      ))}
     </div>
   )
 }

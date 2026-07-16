@@ -26,8 +26,23 @@ def _tool_call_message(name: str, arguments: dict) -> dict:
 
 
 def _mock_client(handler) -> LLMClient:
+    # NFR-6: session_ws now probes tool-calling capability once per
+    # connection (ai/capability.py) before a test's own handler ever sees
+    # a request - answered transparently here as "yes", the same as every
+    # real tool-calling backend these tests otherwise assume, so none of
+    # them need to know about the probe.
+    def with_probe_answered(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if any(tool["function"]["name"] == "ping" for tool in body.get("tools") or []):
+            return httpx.Response(
+                200, json={"choices": [{"message": _tool_call_message("ping", {})}]}
+            )
+        return handler(request)
+
     return LLMClient(
-        base_url="http://fake-llm/v1", model="test-model", transport=httpx.MockTransport(handler)
+        base_url="http://fake-llm/v1",
+        model="test-model",
+        transport=httpx.MockTransport(with_probe_answered),
     )
 
 

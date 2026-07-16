@@ -1,6 +1,18 @@
 import Markdown from 'react-markdown'
 
-import type { useSessionSocket } from '@/hooks/use-session-socket'
+import type { JournalEntry, useSessionSocket } from '@/hooks/use-session-socket'
+import { summarize } from '@/lib/journal-summarize'
+
+// FR-31/FR-32: one-line, human-readable status per tool call - reusing the
+// Journal view's own summarize() over the entity-tagged event(s) the tool
+// logged, rather than dumping the tool's raw result JSON into the chat.
+// Falls back to the tool's error message (or just its name) when it didn't
+// log anything, e.g. an unknown tool or bad arguments.
+function toolCallStatuses(name: string, result: unknown, events: JournalEntry[]): string[] {
+  if (events.length > 0) return events.map(summarize)
+  const error = (result as { error?: unknown } | null)?.error
+  return [typeof error === 'string' ? error : `Called ${name}`]
+}
 
 export function ChatMessageView({
   message,
@@ -31,10 +43,17 @@ export function ChatMessageView({
     )
   }
   if (message.kind === 'tool') {
+    const statuses = toolCallStatuses(message.name, message.result, message.events)
     return (
-      <div className="self-start max-w-[80%] rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs font-mono">
-        <div className="font-semibold text-muted-foreground">{message.name}</div>
-        <pre className="whitespace-pre-wrap">{JSON.stringify(message.result, null, 2)}</pre>
+      <div className="self-start flex max-w-[80%] flex-col gap-1 rounded-lg border border-border/60 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+        {statuses.map((status, index) => (
+          <span key={index} className="flex items-center gap-1.5">
+            <span aria-hidden className="text-[0.6rem]">
+              ●
+            </span>
+            {status}
+          </span>
+        ))}
       </div>
     )
   }

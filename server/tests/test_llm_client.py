@@ -15,6 +15,17 @@ def test_default_timeout_is_generous_enough_for_a_real_completion() -> None:
     assert DEFAULT_TIMEOUT_SECONDS >= 60
 
 
+def test_model_and_base_url_are_exposed_for_the_capability_probes_cache_key() -> None:
+    # ai/capability.py keys its cache off these - read from the client
+    # itself, not separately from Settings, so a caller that injects a
+    # different client (a test's dependency override, most notably) still
+    # gets a cache key matching what's actually being talked to.
+    client = LLMClient(base_url="http://fake-llm/v1", model="test-model")
+
+    assert client.model == "test-model"
+    assert "fake-llm/v1" in client.base_url
+
+
 def test_timeout_is_configurable() -> None:
     client = LLMClient(base_url="http://fake-llm/v1", model="test-model", timeout=5.0)
 

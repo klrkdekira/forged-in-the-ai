@@ -148,6 +148,11 @@ async def test_agent_executes_a_tool_call_then_streams_narration():
     assert "".join(e.payload["text"] for e in narration_events) == "You succeed."
     assert done_events[0].payload["state"]["character"]["name"] == "Test"
 
+    # FR-31/FR-32: the same entity-tagged event(s) the Journal view
+    # renders, so the chat's tool-call status can reuse the client's
+    # existing summarize() instead of dumping the raw result JSON.
+    assert tool_events[0].payload["events"][0]["event_type"] == "fortune_roll"
+
 
 @pytest.mark.anyio
 async def test_agent_handles_an_unknown_tool_gracefully():
@@ -1046,3 +1051,113 @@ async def test_agent_runs_a_full_score_and_downtime_loop_through_tools():
         logged_types
     )
     assert state.character.playbook_xp.marked == 1
+
+
+@pytest.mark.anyio
+async def test_agent_uses_a_structured_tool_choice_when_tool_calling_is_unsupported():
+    # NFR-6: a backend whose native tool_calling isn't reliable (the
+    # capability probe, ai/capability.py, said False) still gets tools
+    # executed - via a JSON tool choice instead of the `tools=` mechanism.
+    # Without this, a weak tool-caller's own ad hoc tool-call syntax used
+    # to leak into `content` and sail through to the player as narration,
+    # while the tool it meant to call never actually ran (discovered live).
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if body.get("stream"):
+            return httpx.Response(
+                200,
+                text='data: {"choices":[{"delta":{"content":"Fortune favors you."}}]}\n\n'
+                "data: [DONE]\n\n",
+            )
+        calls.append(body)
+        content = (
+            json.dumps({"tool": "roll_fortune", "arguments": {"pool_size": 2}})
+            if len(calls) == 1
+            else json.dumps({"tool": None, "arguments": {}})
+        )
+        return httpx.Response(
+            200, json={"choices": [{"message": {"role": "assistant", "content": content}}]}
+        )
+
+    client = LLMClient(
+        base_url="http://fake-llm/v1", model="test-model", transport=httpx.MockTransport(handler)
+    )
+    agent = GmAgent(client, _executor(), supports_tool_calling=False)
+
+    events = [event async for event in agent.handle_player_message(_state(), "Any luck?")]
+    await client.aclose()
+
+    tool_event = next(e for e in events if e.type == "tool_call")
+    assert tool_event.payload["name"] == "roll_fortune"
+    assert "band" in tool_event.payload["result"]
+    assert any(e.type == "narration_done" for e in events)
+
+
+@pytest.mark.anyio
+async def test_agent_narrates_without_tools_when_the_fallback_choice_is_invalid():
+    # The fallback's own structured_completion retries once, then gives up
+    # (StructuredOutputError) - that must degrade to "nothing more to
+    # call", not crash the turn.
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if body.get("stream"):
+            return httpx.Response(
+                200,
+                text='data: {"choices":[{"delta":{"content":"You proceed."}}]}\n\ndata: [DONE]\n\n',
+            )
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"role": "assistant", "content": "not json at all"}}]},
+        )
+
+    client = LLMClient(
+        base_url="http://fake-llm/v1", model="test-model", transport=httpx.MockTransport(handler)
+    )
+    agent = GmAgent(client, _executor(), supports_tool_calling=False)
+
+    events = [event async for event in agent.handle_player_message(_state(), "Go on.")]
+    await client.aclose()
+
+    assert not any(e.type == "tool_call" for e in events)
+    assert any(e.type == "narration_done" for e in events)
+
+
+@pytest.mark.anyio
+async def test_agent_tool_call_event_captures_every_event_a_chained_tool_logs():
+    # reduce_heat logs its own downtime_activity_rolled record, then
+    # chains into add_crew_heat (heat_added) - both must reach the chat,
+    # not just the last one, so the status line doesn't silently drop half
+    # of what actually happened.
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        calls.append(body)
+        if body.get("stream"):
+            return httpx.Response(
+                200, text='data: {"choices":[{"delta":{"content":"Noted."}}]}\n\ndata: [DONE]\n\n'
+            )
+        if len(calls) == 1:
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [{"message": _tool_call_message("reduce_heat", {"pool_size": 2})}]
+                },
+            )
+        return httpx.Response(
+            200, json={"choices": [{"message": {"role": "assistant", "content": "placeholder"}}]}
+        )
+
+    client = LLMClient(
+        base_url="http://fake-llm/v1", model="test-model", transport=httpx.MockTransport(handler)
+    )
+    agent = GmAgent(client, _executor())
+
+    events = [event async for event in agent.handle_player_message(_state(), "Lay low.")]
+    await client.aclose()
+
+    tool_event = next(e for e in events if e.type == "tool_call")
+    logged_types = [e["event_type"] for e in tool_event.payload["events"]]
+    assert logged_types == ["downtime_activity_rolled", "heat_added"]
