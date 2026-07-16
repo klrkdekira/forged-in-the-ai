@@ -5,6 +5,7 @@ export type ChatMessage =
   | { kind: 'companion'; name: string; text: string }
   | { kind: 'narration'; text: string; done: boolean }
   | { kind: 'tool'; name: string; result: unknown; events: JournalEntry[] }
+  | { kind: 'companion-decision'; name: string; decision: RollDecision }
   | { kind: 'error'; message: string }
 
 export interface XpTrackSnapshot {
@@ -125,10 +126,22 @@ export interface RelationshipSnapshot {
   history: number[]
 }
 
+// FR-25/FR-35: a seat (human or AI) controlling any number of PCs; a
+// character with no seat naming it is human-controlled by default (see
+// engine.controller.Controller/is_ai_controlled - looked up, not stored on
+// the character itself).
+export interface ControllerSnapshot {
+  seat_id: string
+  kind: 'human' | 'ai'
+  character_ids: string[]
+  cohort_ids: string[]
+}
+
 export interface GameStateSnapshot {
   character: CharacterSnapshot
   characters: Record<string, CharacterSnapshot>
   crew: CrewSnapshot
+  controllers: Record<string, ControllerSnapshot>
   clocks: Record<string, ClockSnapshot>
   canon: CanonSnapshot | null
   session_zero: SessionZeroSnapshot | null
@@ -176,17 +189,36 @@ export interface RollDecision {
 
 // FR-19: after an undo, the visible chat needs to shrink to match the
 // rewound log too, not just the mechanical state - rebuilt from the same
-// player_message/narration events the recap/journal already use, rather
-// than just clearing it (a blank panel would look like a bug, not a
-// deliberate rewind). A player_message carrying a speaker is an AI
-// companion's line (FR-35), rebuilt under its own name rather than as
-// something the human typed. Exported for its own tests.
+// player_message/narration/companion_roll_decision events the recap/
+// journal already use, rather than just clearing it (a blank panel would
+// look like a bug, not a deliberate rewind). A player_message carrying a
+// speaker is an AI companion's line (FR-35), rebuilt under its own name
+// rather than as something the human typed. Exported for its own tests.
 export function messagesFromLog(events: JournalEntry[]): ChatMessage[] {
   return events
-    .filter((entry) => entry.event_type === 'player_message' || entry.event_type === 'narration')
+    .filter(
+      (entry) =>
+        entry.event_type === 'player_message' ||
+        entry.event_type === 'narration' ||
+        entry.event_type === 'companion_roll_decision',
+    )
     .map((entry): ChatMessage => {
       if (entry.event_type === 'narration') {
         return { kind: 'narration', text: String(entry.payload.text), done: true }
+      }
+      if (entry.event_type === 'companion_roll_decision') {
+        const p = entry.payload
+        return {
+          kind: 'companion-decision',
+          name: String(p.name),
+          decision: {
+            push_dice: p.push_dice as boolean | undefined,
+            push_effect: p.push_effect as boolean | undefined,
+            devils_bargain: p.devils_bargain as string | null | undefined,
+            trade: p.trade as RollDecision['trade'],
+            assist_character_id: p.assist_character_id as string | null | undefined,
+          },
+        }
       }
       if (entry.payload.speaker !== undefined) {
         return {
@@ -268,6 +300,28 @@ export function useSessionSocket(campaignId: string) {
           setMessages((prev) => [
             ...prev,
             { kind: 'companion', name: data.name, text: data.text },
+          ])
+          break
+        case 'companion_roll_decision':
+          // FR-16/FR-35: previously invisible live (dropped entirely, not
+          // just deferred to the Journal) - a companion's push/bargain/
+          // trade-off choice, the same decision a human makes in the roll
+          // negotiation dialog. Fields ride flat alongside character_id/name
+          // (matching every other event payload in this app), not nested
+          // under a "decision" key.
+          setMessages((prev) => [
+            ...prev,
+            {
+              kind: 'companion-decision',
+              name: data.name,
+              decision: {
+                push_dice: data.push_dice,
+                push_effect: data.push_effect,
+                devils_bargain: data.devils_bargain,
+                trade: data.trade,
+                assist_character_id: data.assist_character_id,
+              },
+            },
           ])
           break
         case 'error':

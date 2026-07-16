@@ -1,5 +1,26 @@
 import type { JournalEntry } from '@/hooks/use-session-socket'
 
+// FR-16/FR-35: the same push/bargain/trade-off/assist choice a human makes
+// in the roll negotiation dialog, but decided by PlayerAgent for an
+// AI-controlled companion - shared between the journal's one-line summary
+// and the chat's live status line so the two never describe it differently.
+export function describeRollDecision(decision: {
+  push_dice?: boolean
+  push_effect?: boolean
+  devils_bargain?: string | null
+  trade?: string | null
+  assist_character_id?: string | null
+}): string {
+  const parts: string[] = []
+  if (decision.push_dice) parts.push('pushes for +1d')
+  if (decision.push_effect) parts.push('pushes for +1 effect')
+  if (decision.devils_bargain) parts.push(`accepts a Devil's Bargain: ${decision.devils_bargain}`)
+  if (decision.trade === 'worse_position_better_effect') parts.push('trades position for effect')
+  if (decision.trade === 'better_position_worse_effect') parts.push('trades effect for position')
+  if (decision.assist_character_id) parts.push('gets help from a teammate')
+  return parts.length > 0 ? parts.join(', ') : 'rolls as proposed'
+}
+
 // FR-32: a one-line human-readable summary per event type; anything not
 // listed falls back to a generic "<event_type> (<entity>)" line. Kept
 // separate from the payload itself - the raw payload is always available
@@ -83,6 +104,8 @@ export function summarize(entry: JournalEntry): string {
       return `Crew gained special ability: ${p.ability_id}`
     case 'crew_upgrades_advanced':
       return `Crew upgrades marked: ${(p.upgrade_ids as string[]).join(', ')}`
+    case 'companion_roll_decision':
+      return `${entry.entity_id} ${describeRollDecision(p)}`
     default:
       return `${entry.event_type} (${entry.entity_type}:${entry.entity_id})`
   }

@@ -234,12 +234,30 @@ class GmAgent:
                             # neutral choice, no stress spent and no bargain -
                             # same degrade-not-crash rule as _retrieve.
                             decision = RollDecision()
+                        # FR-31/FR-35: a pure record, like player_message/
+                        # narration - without this it only ever reached the
+                        # client as a live turn event, never state.log, so
+                        # it vanished after a reconnect and never reached
+                        # the Journal at all (deeper than "only shows via
+                        # the generic fallback" - it didn't show anywhere).
+                        # "name" rides alongside the decision fields so the
+                        # client can render/rebuild a readable line without
+                        # a separate character lookup, same as
+                        # companion_message's own "speaker"/"name" fields.
+                        decision_payload = {
+                            **decision.model_dump(mode="json"),
+                            "name": state.characters[character_id].name,
+                        }
+                        state = self._executor.log_event(
+                            state,
+                            "character",
+                            character_id,
+                            "companion_roll_decision",
+                            decision_payload,
+                        )
                         yield AgentTurnEvent(
                             type="companion_roll_decision",
-                            payload={
-                                "character_id": character_id,
-                                "decision": decision.model_dump(mode="json"),
-                            },
+                            payload={"character_id": character_id, **decision_payload},
                         )
                     else:
                         decision_payload = yield AgentTurnEvent(

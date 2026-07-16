@@ -5,6 +5,7 @@ import { useParams } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useLastCampaignId } from '@/hooks/use-last-campaign-id'
+import type { ControllerSnapshot } from '@/hooks/use-session-socket'
 import { useSessionSocket } from '@/hooks/use-session-socket'
 
 import { CharacterSheetPanel } from './character-sheet-panel'
@@ -13,6 +14,15 @@ import { JournalPanel } from './journal-panel'
 import { RelationshipMap } from './relationship-map'
 import { RollNegotiationDialog } from './roll-negotiation-dialog'
 import { TableViewPanel } from './table-view-panel'
+
+// FR-35: a character with no seat naming it is human-controlled by
+// default (engine.controller.is_ai_controlled) - looked up, never stored
+// on the character itself.
+function isAiControlled(controllers: Record<string, ControllerSnapshot>, characterId: string) {
+  return Object.values(controllers).some(
+    (controller) => controller.kind === 'ai' && controller.character_ids.includes(characterId),
+  )
+}
 
 export function PlayPage() {
   const { campaignId } = useParams({ from: '/play/$campaignId' })
@@ -32,7 +42,18 @@ export function PlayPage() {
   const [sidePanel, setSidePanel] = useState<'sheet' | 'table' | 'journal' | 'relationships'>(
     'sheet',
   )
+  const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  // FR-25/FR-35: the sheet panel used to always show state.character (the
+  // primary PC computed field) - a companion's own sheet was never
+  // reachable at all. Falls back to the first known PC if nothing's
+  // selected yet, or the selection no longer exists (e.g. after a reconnect).
+  const characterIds = state ? Object.keys(state.characters) : []
+  const activeCharacterId =
+    selectedCharacterId && state?.characters[selectedCharacterId]
+      ? selectedCharacterId
+      : (characterIds[0] ?? null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -140,8 +161,32 @@ export function PlayPage() {
               </Button>
             </div>
             <div className="flex-1 overflow-hidden">
-              {sidePanel === 'sheet' && (
-                <CharacterSheetPanel character={state.character} onOperate={sendSheetOperation} />
+              {sidePanel === 'sheet' && activeCharacterId && (
+                <div className="flex h-full flex-col gap-2">
+                  {characterIds.length > 1 && (
+                    <div className="flex flex-wrap gap-1">
+                      {characterIds.map((characterId) => (
+                        <Button
+                          key={characterId}
+                          type="button"
+                          size="sm"
+                          variant={characterId === activeCharacterId ? 'default' : 'ghost'}
+                          onClick={() => setSelectedCharacterId(characterId)}
+                        >
+                          {state.characters[characterId].name}
+                          {isAiControlled(state.controllers, characterId) && (
+                            <span className="text-[0.65rem] opacity-70">AI</span>
+                          )}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
+                  <CharacterSheetPanel
+                    characterId={activeCharacterId}
+                    character={state.characters[activeCharacterId]}
+                    onOperate={sendSheetOperation}
+                  />
+                </div>
               )}
               {sidePanel === 'table' && (
                 <TableViewPanel

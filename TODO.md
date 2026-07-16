@@ -1161,10 +1161,44 @@ stay open as well; most of them are blocked on items here.
       play a session using its content) still needs a live pass with a
       real LLM backend and a real hack's text, not just this pipeline
       wiring.
-- [ ] **Multi-PC UI (FR-25, FR-35).** Deferred from Phase 5: a character
-      switcher in `/play`, sheet views for companions (the sheet panel shows
-      only the primary PC), and surfacing `companion_roll_decision` events in
-      chat rather than only via the Journal's generic fallback.
+- [x] **Multi-PC UI (FR-25, FR-35).** Traced further than expected: the
+      sheet panel didn't just show the wrong PC, it was actively broken
+      for *any* PC once a companion existed. `sendSheetOperation` never
+      sent `character_id`, and `resolve_character_id` refuses an omitted
+      one once a session has more than one character (FR-25's own
+      "refuses rather than guessing") - so every stress/harm/XP/coin/load
+      click, including the human's own, would have failed the moment
+      `create_character` ever ran. Fixed by threading `characterId`
+      through every `CharacterSheetPanel` operation
+      (`character-sheet-panel.tsx`).
+
+      `companion_roll_decision` had the same "deeper gap" shape: it was
+      never logged to `state.log` at all (`ai/agent.py`) - a live-only
+      turn event, invisible after a reconnect and absent from the Journal
+      entirely, not just falling back to a generic summary as this item's
+      text assumed. Now logged (a pure record, folded as a no-op by
+      `ai/replay.py` like `player_message`/`narration`), with the
+      character's name riding flat alongside the decision fields (matching
+      `companion_message`'s own `name`, and every other event payload in
+      this app - never a nested object). `lib/journal-summarize.ts` gained
+      `describeRollDecision` (shared, so the Journal's one-line summary
+      and the chat's live status line never describe a decision
+      differently) and a real `companion_roll_decision` case.
+
+      Web: `GameStateSnapshot` gained typed `controllers`
+      (`use-session-socket.ts`) so the client can tell human from
+      AI-controlled without a separate lookup. `/play`'s Sheet tab gained
+      a character switcher (only shown once there's more than one PC),
+      tagging AI-controlled entries; `companion_roll_decision` now
+      reaches the chat live (a status line reusing the tool-call pill's
+      styling) and rebuilds correctly after an undo
+      (`messagesFromLog`), the same as a companion's own chat lines.
+      Covered by new `test_agent.py`/`test_ai_replay.py` cases (the event
+      reaching `state.log`, replay skipping it) and
+      `use-session-socket.test.ts`/`journal-summarize.test.ts`
+      (rebuild, `describeRollDecision`); `pnpm build`/`tsc -b` succeeds.
+      Not verified live in a headed browser, same caveat as the other UI
+      items below.
 - [ ] **Visual verification of the Konva views (FR-29, FR-34).** The district
       map, claim map, and relationship map have never been seen rendered (no
       headed browser was available when they were built); only the layout

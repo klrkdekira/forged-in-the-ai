@@ -666,7 +666,16 @@ async def test_agent_lets_the_ai_player_decide_its_own_roll_instead_of_pausing()
     assert not any(e.type == "roll_proposed" for e in events)
     decided = next(e for e in events if e.type == "companion_roll_decision")
     assert decided.payload["character_id"] == "pc-2"
-    assert decided.payload["decision"]["push_dice"] is True
+    assert decided.payload["name"] == "Vex"
+    assert decided.payload["push_dice"] is True
+
+    # FR-31/FR-35: a real event, not just a live-only turn event - it must
+    # survive to state.log (the Journal, a reconnect's recap) too.
+    done_event = next(e for e in events if e.type == "narration_done")
+    logged = done_event.payload["state"]["log"]["events"]
+    decision_events = [e for e in logged if e["event_type"] == "companion_roll_decision"]
+    assert decision_events[-1]["entity_id"] == "pc-2"
+    assert decision_events[-1]["payload"]["push_dice"] is True
 
     done_event = next(e for e in events if e.type == "narration_done")
     logged = done_event.payload["state"]["log"]["events"]
@@ -841,8 +850,8 @@ async def test_agent_rolls_as_proposed_when_the_companion_decision_call_fails():
     await client.aclose()
 
     decided = next(e for e in events if e.type == "companion_roll_decision")
-    assert decided.payload["decision"]["push_dice"] is False
-    assert decided.payload["decision"]["devils_bargain"] is None
+    assert decided.payload["push_dice"] is False
+    assert decided.payload["devils_bargain"] is None
 
     done_event = next(e for e in events if e.type == "narration_done")
     logged = done_event.payload["state"]["log"]["events"]

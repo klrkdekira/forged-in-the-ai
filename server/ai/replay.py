@@ -42,7 +42,10 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
     resistance_roll, engagement_roll, entanglement_roll, asset_acquired,
     downtime_activity_rolled, vice_indulged (pure dice/roll records),
     player_message/narration (FR-31's turn log), x_card_invoked (a
-    safety-tool note, not a mutation) - are silently skipped."""
+    safety-tool note, not a mutation), companion_roll_decision (FR-35's
+    own record of what an AI companion chose - the roll it led to is
+    already folded via action_roll/stress_marked) - are silently
+    skipped."""
     characters = dict(base.characters)
     controllers = dict(base.controllers)
     crew = base.crew

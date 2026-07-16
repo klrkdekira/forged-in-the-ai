@@ -1,7 +1,7 @@
 import Markdown from 'react-markdown'
 
 import type { JournalEntry, useSessionSocket } from '@/hooks/use-session-socket'
-import { summarize } from '@/lib/journal-summarize'
+import { describeRollDecision, summarize } from '@/lib/journal-summarize'
 
 // FR-31/FR-32: one-line, human-readable status per tool call - reusing the
 // Journal view's own summarize() over the entity-tagged event(s) the tool
@@ -54,6 +54,16 @@ export function ChatMessageView({
             {status}
           </span>
         ))}
+      </div>
+    )
+  }
+  if (message.kind === 'companion-decision') {
+    return (
+      <div className="self-start flex max-w-[80%] items-center gap-1.5 rounded-lg border border-border/60 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+        <span aria-hidden className="text-[0.6rem]">
+          ●
+        </span>
+        {message.name} {describeRollDecision(message.decision)}
       </div>
     )
   }

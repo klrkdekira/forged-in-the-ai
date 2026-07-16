@@ -15,10 +15,18 @@ const ATTRIBUTES = ['insight', 'prowess', 'resolve'] as const
 // GameState this reflects only exists for the lifetime of the one active
 // WS connection - there's no persisted, addressable session yet to share
 // across pages (that's Phase 5).
+//
+// FR-25: every operation carries characterId explicitly - once a session
+// has more than one PC, the server's resolve_character_id refuses an
+// omitted id rather than guessing which PC it means, so this was
+// previously the one thing standing between a companion existing at all
+// and every sheet click (including the primary PC's own) failing outright.
 export function CharacterSheetPanel({
+  characterId,
   character,
   onOperate,
 }: {
+  characterId: string
   character: CharacterSnapshot
   onOperate: (operation: SheetOperation) => void
 }) {
@@ -29,7 +37,7 @@ export function CharacterSheetPanel({
     if (!harmName.trim()) return
     onOperate({
       name: 'apply_harm',
-      args: { level: Number(harmLevel), name: harmName.trim() },
+      args: { level: Number(harmLevel), name: harmName.trim(), character_id: characterId },
     })
     setHarmName('')
   }
@@ -49,7 +57,7 @@ export function CharacterSheetPanel({
           onSetMarked={(marked) =>
             onOperate({
               name: 'mark_stress',
-              args: { amount: marked - character.stress.marked },
+              args: { amount: marked - character.stress.marked, character_id: characterId },
             })
           }
         />
@@ -93,7 +101,7 @@ export function CharacterSheetPanel({
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => onOperate({ name: 'heal_character', args: {} })}
+          onClick={() => onOperate({ name: 'heal_character', args: { character_id: characterId } })}
           disabled={character.harm.entries.length === 0}
         >
           Heal 1 level
@@ -108,7 +116,11 @@ export function CharacterSheetPanel({
           onSetMarked={(marked) =>
             onOperate({
               name: 'mark_xp',
-              args: { track: 'playbook', amount: marked - character.playbook_xp.marked },
+              args: {
+                track: 'playbook',
+                amount: marked - character.playbook_xp.marked,
+                character_id: characterId,
+              },
             })
           }
         />
@@ -127,7 +139,7 @@ export function CharacterSheetPanel({
               onSetMarked={(marked) =>
                 onOperate({
                   name: 'mark_xp',
-                  args: { track: attribute, amount: marked - track.marked },
+                  args: { track: attribute, amount: marked - track.marked, character_id: characterId },
                 })
               }
             />
@@ -142,7 +154,9 @@ export function CharacterSheetPanel({
             type="button"
             variant="outline"
             size="icon-sm"
-            onClick={() => onOperate({ name: 'adjust_coin', args: { amount: -1 } })}
+            onClick={() =>
+              onOperate({ name: 'adjust_coin', args: { amount: -1, character_id: characterId } })
+            }
             disabled={character.coin <= 0}
           >
             -
@@ -152,7 +166,9 @@ export function CharacterSheetPanel({
             type="button"
             variant="outline"
             size="icon-sm"
-            onClick={() => onOperate({ name: 'adjust_coin', args: { amount: 1 } })}
+            onClick={() =>
+              onOperate({ name: 'adjust_coin', args: { amount: 1, character_id: characterId } })
+            }
           >
             +
           </Button>
@@ -173,7 +189,11 @@ export function CharacterSheetPanel({
                     onCheckedChange={(checked) =>
                       onOperate({
                         name: 'set_item_carried',
-                        args: { item_id: item.item_id, carried: checked === true },
+                        args: {
+                          item_id: item.item_id,
+                          carried: checked === true,
+                          character_id: characterId,
+                        },
                       })
                     }
                   />

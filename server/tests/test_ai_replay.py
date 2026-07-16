@@ -381,6 +381,18 @@ def test_replay_state_skips_downtime_and_score_roll_records():
     assert len(replayed.log.events) == 1
 
 
+def test_replay_state_skips_companion_roll_decision_records():
+    # FR-35: a pure record of what an AI companion chose - the roll it
+    # led to is already folded via action_roll/stress_marked.
+    base = _base_state()
+    log = base.log.append("character", "pc-1", "companion_roll_decision", {"push_dice": True}, AT)
+
+    replayed = replay_state(base, log.events)
+
+    assert replayed.character == base.character
+    assert len(replayed.log.events) == 1
+
+
 def test_replay_state_reproduces_a_truncated_prefix_of_the_log():
     # This is the mechanism undo/rewind is built on: replaying only a
     # prefix of the log reconstructs state as of that earlier point.

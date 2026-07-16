@@ -37,4 +37,40 @@ describe('messagesFromLog', () => {
       { kind: 'companion', name: 'Vex', text: 'Vex nods.' },
     ])
   })
+
+  it('rebuilds a companion roll decision line from the event log', () => {
+    // FR-16/FR-35: previously dropped entirely on rebuild (never logged at
+    // all) - a companion's push/bargain/trade-off choice must survive an
+    // undo the same way a human's chat messages do.
+    const messages = messagesFromLog([
+      entry({
+        sequence: 1,
+        entity_type: 'character',
+        entity_id: 'pc-2',
+        event_type: 'companion_roll_decision',
+        payload: {
+          name: 'Vex',
+          push_dice: true,
+          push_effect: false,
+          devils_bargain: null,
+          trade: null,
+          assist_character_id: null,
+        },
+      }),
+    ])
+
+    expect(messages).toEqual([
+      {
+        kind: 'companion-decision',
+        name: 'Vex',
+        decision: {
+          push_dice: true,
+          push_effect: false,
+          devils_bargain: null,
+          trade: null,
+          assist_character_id: null,
+        },
+      },
+    ])
+  })
 })
