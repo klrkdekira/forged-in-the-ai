@@ -271,6 +271,18 @@ def test_replay_state_folds_wanted_level_and_crew_rep_and_coin_adjustments():
     assert replayed.crew.coin == 4
 
 
+def test_replay_state_folds_crew_xp_marks():
+    # SRD: "Crew Advancement" - end-of-session crew trigger review.
+    base = _base_state()
+    log = base.log.append(
+        "crew", "The Fifth Foxglove", "crew_xp_marked", {"amount": 2, "reason": "bolstered rep"}, AT
+    )
+
+    replayed = replay_state(base, log.events)
+
+    assert replayed.crew.xp.marked == 2
+
+
 def test_replay_state_folds_flashbacks():
     base = _base_state()
     log = base.log.append(

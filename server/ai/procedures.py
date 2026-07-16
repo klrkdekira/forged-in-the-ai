@@ -127,7 +127,35 @@ DOWNTIME_ACTIVITIES_PROCEDURE = ProcedureDoc(
     ),
 )
 
-PROCEDURES = [GM_ROLE, ACTION_ROLL_PROCEDURE, SCORE_LOOP_PROCEDURE, DOWNTIME_ACTIVITIES_PROCEDURE]
+END_OF_SESSION_PROCEDURE = ProcedureDoc(
+    title="End of session",
+    srd_sections=["PC Advancement", "Crew Advancement"],
+    text=(
+        "When the player signals the session is ending, review xp "
+        "triggers - a narrative judgement call, not something to guess "
+        "from the mechanical log alone, so ask the player rather than "
+        "inferring it. For each PC: their playbook's own trigger, "
+        "whether they expressed beliefs/drives/heritage/background, and "
+        "whether they struggled with their vice or a trauma condition "
+        "(not simply indulging it). Mark 1 xp per trigger that happened, "
+        "2 if it happened a lot, via mark_xp with a reason naming the "
+        "trigger - the player picks which track(s) it goes on. Then the "
+        "crew: its own trigger, contending with challenges above its "
+        "station, bolstering or developing a reputation, and expressing "
+        "the crew's goals/drives/nature - mark_crew_xp with a reason the "
+        "same way. Desperate-roll xp during play is automatic (the "
+        "engine marks it when a roll happens at desperate position) and "
+        "needs no tool call of its own."
+    ),
+)
+
+PROCEDURES = [
+    GM_ROLE,
+    ACTION_ROLL_PROCEDURE,
+    SCORE_LOOP_PROCEDURE,
+    DOWNTIME_ACTIVITIES_PROCEDURE,
+    END_OF_SESSION_PROCEDURE,
+]
 
 # FR-17/FR-36: not SRD content - generic tabletop safety tools plus
 # original setting generation, same reasoning as engine/campaign.py's

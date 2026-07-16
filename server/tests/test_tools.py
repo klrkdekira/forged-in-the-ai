@@ -29,6 +29,7 @@ from ai.tools import (
     IndulgeViceArgs,
     InvokeXCardArgs,
     LongTermProjectArgs,
+    MarkCrewXpArgs,
     MarkStressArgs,
     MarkXpArgs,
     RecoverArgs,
@@ -135,6 +136,7 @@ def test_tool_definitions_cover_every_registered_tool():
         "long_term_project",
         "flashback",
         "mark_xp",
+        "mark_crew_xp",
         "advance_action_rating",
         "advance_special_ability",
         "advance_crew_special_ability",
@@ -166,6 +168,30 @@ def test_roll_action_uses_the_character_action_rating_and_logs_it():
     assert result.result["position"] == "risky"
     assert result.state.log.events[-1].event_type == "action_roll"
     assert result.state.log.events[-1].occurred_at == AT
+
+
+def test_roll_action_marks_xp_automatically_on_a_desperate_roll():
+    # SRD: "PC Advancement" - "When you make a desperate action roll, mark
+    # 1 xp in the attribute for the action you rolled."
+    result = _executor().roll_action(
+        _state(),
+        RollActionArgs(action=Action.PROWL, position=Position.DESPERATE, effect=Effect.STANDARD),
+    )
+
+    xp_event = result.state.log.events[-1]
+    assert xp_event.event_type == "xp_marked"
+    assert xp_event.payload == {"track": "prowess", "amount": 1, "reason": "desperate roll"}
+    assert result.state.character.attribute_xp[Attribute.PROWESS].marked == 1
+
+
+def test_roll_action_does_not_mark_xp_on_a_non_desperate_roll():
+    result = _executor().roll_action(
+        _state(),
+        RollActionArgs(action=Action.PROWL, position=Position.RISKY, effect=Effect.STANDARD),
+    )
+
+    assert result.state.log.events[-1].event_type == "action_roll"
+    assert result.state.character.attribute_xp[Attribute.PROWESS].marked == 0
 
 
 def test_roll_fortune_logs_an_event():
@@ -548,6 +574,27 @@ def test_mark_xp_marks_an_attribute_track():
     result = _executor().mark_xp(_state(), MarkXpArgs(track="prowess", amount=1))
 
     assert result.state.character.attribute_xp[Attribute.PROWESS].marked == 1
+
+
+def test_mark_xp_records_a_reason_when_given():
+    result = _executor().mark_xp(
+        _state(), MarkXpArgs(track="playbook", amount=1, reason="expressed beliefs")
+    )
+
+    assert result.state.log.events[-1].payload["reason"] == "expressed beliefs"
+
+
+def test_mark_crew_xp_updates_the_crew_and_logs_the_reason():
+    # SRD: "Crew Advancement" - end-of-session crew trigger review.
+    result = _executor().mark_crew_xp(
+        _state(), MarkCrewXpArgs(amount=2, reason="bolstered reputation")
+    )
+
+    assert result.result["xp"] == 2
+    assert result.state.crew.xp.marked == 2
+    event = result.state.log.events[-1]
+    assert event.event_type == "crew_xp_marked"
+    assert event.payload["reason"] == "bolstered reputation"
 
 
 def test_adjust_coin_updates_the_character_and_logs_it():

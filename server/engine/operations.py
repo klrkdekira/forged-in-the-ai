@@ -132,6 +132,12 @@ def adjust_crew_coin(crew: Crew, amount: int) -> Crew:
     return crew.model_copy(update={"coin": new_coin})
 
 
+def mark_crew_xp(crew: Crew, amount: int) -> Crew:
+    """SRD: "Crew Advancement" - the crew-xp equivalent of a character's
+    own `mark_playbook_xp`; `XpTrack.mark` clamps to [0, segments]."""
+    return crew.model_copy(update={"xp": crew.xp.mark(amount)})
+
+
 def develop_crew(crew: Crew) -> Crew:
     """SRD: "Development" - weak hold becomes strong; strong hold instead
     pays coin (new Tier x 8) to raise Tier. Either way rep resets to zero,

@@ -999,11 +999,58 @@ stay open as well; most of them are blocked on items here.
       never encodes minimum-quality *enforcement* in code, only returns
       the achieved quality for the GM to judge against whatever minimum
       the fiction calls for.
-- [ ] **End-of-session XP triggers (FR-5).** The advance mechanic exists
-      (`engine/advancement.py`) but nothing detects XP triggers from play or
-      runs the SRD's end-of-session procedure. Depends on the tool-surface
-      item above; add an end-of-session procedure prompt plus a tool for
-      marking trigger XP that logs the reason.
+- [x] **End-of-session XP triggers (FR-5).** Traced further than expected:
+      `engine/advancement.py` already had `earns_desperate_roll_xp`/
+      `xp_attribute_for_action` (both tested in `test_advancement.py`
+      since Phase 3) but neither was ever called from anywhere - the
+      desperate-roll xp trigger ("mark 1 xp in the attribute for the
+      action you rolled") was dead code, not just unwired end-of-session
+      review. Wired it into `ToolExecutor.roll_action` (`ai/tools.py`):
+      no GM judgement is needed for this one (unlike the end-of-session
+      triggers), so the engine marks it automatically the moment a roll
+      happens at desperate position, rather than trusting the model to
+      remember every time. Checked against `args.position` - the
+      post-trade-off position `_resolve_roll` already applies before
+      calling `roll_action`, so a risky roll traded down to desperate
+      correctly earns the xp.
+
+      A second real gap surfaced while wiring the actual review flow:
+      `Crew.xp` (the crew's own advancement tracker) was only ever read
+      (`.is_full`) or reset (`.advanced()`) by
+      `advance_crew_special_ability`/`advance_crew_upgrades` - nothing
+      anywhere incremented it, so a crew could never actually reach a
+      crew advance in the first place. Closed with `mark_crew_xp`
+      (`engine/operations.py`, mirrors the character-side
+      `mark_playbook_xp`) and a `mark_crew_xp` GM tool/`MarkCrewXpArgs`
+      (`ai/tools.py`), folded by `ai/replay.py`.
+
+      `MarkXpArgs` (both the character and crew variants) gained an
+      optional `reason` field, recorded on the `xp_marked`/`crew_xp_marked`
+      event payload - shared by the desperate-roll auto-mark, the TRAIN
+      downtime activity, and the new end-of-session review below, rather
+      than a fourth near-duplicate xp-marking tool. `mark_xp`'s own
+      docstring was stale (claimed `SHEET_OPERATIONS`-only, but the
+      earlier score/downtime tool-surface work had already added it to
+      `TOOL_SPECS` too for TRAIN) - corrected while touching this method.
+
+      `END_OF_SESSION_PROCEDURE` (`ai/procedures.py`, citing "PC
+      Advancement"/"Crew Advancement") is the actual end-of-session
+      review: reviewing each trigger is an explicit narrative judgement
+      call the procedure tells the GM to make *by asking the player*,
+      not something to infer from the mechanical log - covers each PC's
+      playbook trigger, beliefs/drives/heritage, and vice/trauma struggle,
+      then the crew's four triggers, calling `mark_xp`/`mark_crew_xp`
+      with a reason each time. `mark_crew_xp` isn't in `SHEET_OPERATIONS`
+      (unlike `mark_xp`) - there's no crew-xp UI control yet, same
+      "nothing to wire it to yet" reasoning as other GM-only tools.
+
+      Covered by `test_advancement.py` (already existing, untouched),
+      `test_operations.py` (`mark_crew_xp` clamping), `test_tools.py`
+      (the desperate/non-desperate roll_action cases, `mark_xp`'s reason
+      field, `mark_crew_xp`), `test_ai_replay.py` (the new fold case), and
+      `test_procedures.py`'s existing citation-drift check. Not verified
+      live against a real model, per this project's convention of flagging
+      that explicitly when it hasn't happened.
 - [ ] **Character import at campaign creation (FR-8, G2).**
       `app/campaigns.py` hardcodes a fixed starter character and crew (an
       FR-30/FR-36 MVP simplification), so neither loading a JSON sheet nor

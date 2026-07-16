@@ -11,6 +11,8 @@ from engine.advancement import (
     advance_crew_special_ability,
     advance_crew_upgrades,
     advance_special_ability,
+    earns_desperate_roll_xp,
+    xp_attribute_for_action,
 )
 from engine.campaign import CampaignCanon, SessionZeroConfig
 from engine.character import Action, Attribute, Character
@@ -30,6 +32,7 @@ from engine.operations import (
     flashback,
     heal_character,
     mark_attribute_xp,
+    mark_crew_xp,
     mark_harm,
     mark_playbook_xp,
     mark_stress,
@@ -281,6 +284,18 @@ class MarkXpArgs(BaseModel):
     character_id: str | None = Field(
         None, description="Which PC marks XP; only needed once more than one PC exists"
     )
+    reason: str | None = Field(
+        None,
+        description="Why: e.g. an end-of-session xp trigger, or 'desperate roll' - kept for "
+        "the journal audit trail",
+    )
+
+
+class MarkCrewXpArgs(BaseModel):
+    amount: int = Field(..., description="Positive to mark, negative to clear")
+    reason: str | None = Field(
+        None, description="Which crew xp trigger this is, kept for the journal audit trail"
+    )
 
 
 class AdjustCoinArgs(BaseModel):
@@ -507,9 +522,24 @@ class ToolExecutor:
         if assisted_by:
             payload["assisted_by"] = assisted_by
         log = state.log.append("character", character_id, "action_roll", payload, self._clock())
-        return ToolCallResult(
-            state=state.model_copy(update={"log": log}), result=roll.model_dump(mode="json")
-        )
+        state = state.model_copy(update={"log": log})
+        if earns_desperate_roll_xp(args.position is Position.DESPERATE):
+            # SRD: "PC Advancement" - "When you make a desperate action
+            # roll, mark 1 xp in the attribute for the action you rolled."
+            # No GM judgement involved (unlike the end-of-session
+            # triggers), so the engine marks it automatically rather than
+            # relying on the model to remember.
+            attribute = xp_attribute_for_action(args.action)
+            state = self.mark_xp(
+                state,
+                MarkXpArgs(
+                    track=attribute.value,
+                    amount=1,
+                    character_id=character_id,
+                    reason="desperate roll",
+                ),
+            ).state
+        return ToolCallResult(state=state, result=roll.model_dump(mode="json"))
 
     def roll_fortune(self, state: GameState, args: RollFortuneArgs) -> ToolCallResult:
         """SRD: "Fortune Roll". Logged under the session, not a PC: the
@@ -614,25 +644,38 @@ class ToolExecutor:
         )
 
     def mark_xp(self, state: GameState, args: MarkXpArgs) -> ToolCallResult:
-        """SRD: "PC Advancement". `SHEET_OPERATIONS` only (FR-28) - marking
-        xp is the player's own bookkeeping, not a GM/model tool call."""
+        """SRD: "PC Advancement" - marking xp boxes. In `SHEET_OPERATIONS`
+        (FR-28, the player's own bookkeeping) and `TOOL_SPECS` (the GM
+        calls this for the TRAIN downtime activity, a desperate roll's
+        automatic xp, and the end-of-session trigger review) - the same
+        method either way."""
         character_id = self.resolve_character_id(state, args.character_id)
         base = state.characters[character_id]
         if args.track == "playbook":
             character = mark_playbook_xp(base, args.amount)
         else:
             character = mark_attribute_xp(base, Attribute(args.track), args.amount)
-        log = state.log.append(
-            "character",
-            character_id,
-            "xp_marked",
-            {"track": args.track, "amount": args.amount},
-            self._clock(),
-        )
+        payload = {"track": args.track, "amount": args.amount}
+        if args.reason:
+            payload["reason"] = args.reason
+        log = state.log.append("character", character_id, "xp_marked", payload, self._clock())
         characters = {**state.characters, character_id: character}
         return ToolCallResult(
             state=state.model_copy(update={"characters": characters, "log": log}),
             result={"track": args.track},
+        )
+
+    def mark_crew_xp(self, state: GameState, args: MarkCrewXpArgs) -> ToolCallResult:
+        """SRD: "Crew Advancement" - the crew-xp equivalent of `mark_xp`,
+        reviewed at the end of the session alongside each PC's own triggers."""
+        crew = mark_crew_xp(state.crew, args.amount)
+        payload = {"amount": args.amount}
+        if args.reason:
+            payload["reason"] = args.reason
+        log = state.log.append("crew", crew.name, "crew_xp_marked", payload, self._clock())
+        return ToolCallResult(
+            state=state.model_copy(update={"crew": crew, "log": log}),
+            result={"xp": crew.xp.marked},
         )
 
     def adjust_coin(self, state: GameState, args: AdjustCoinArgs) -> ToolCallResult:
@@ -1283,7 +1326,15 @@ TOOL_SPECS: dict[str, tuple[type[BaseModel], str]] = {
     "recover": (RecoverArgs, "Downtime: tick a PC's healing clock; heals harm once it fills."),
     "long_term_project": (LongTermProjectArgs, "Downtime: work a long-term project's clock."),
     "flashback": (FlashbackArgs, "Take a flashback at a GM-set stress cost."),
-    "mark_xp": (MarkXpArgs, "Downtime: train - mark 1 xp in an attribute or the playbook."),
+    "mark_xp": (
+        MarkXpArgs,
+        "Mark or clear xp for a PC - training, a desperate roll, or an "
+        "end-of-session trigger review (give a reason).",
+    ),
+    "mark_crew_xp": (
+        MarkCrewXpArgs,
+        "Mark or clear crew xp, e.g. an end-of-session crew trigger review (give a reason).",
+    ),
     "advance_action_rating": (
         AdvanceActionRatingArgs,
         "Advance a PC's action rating once its attribute xp track is full.",

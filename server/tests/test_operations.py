@@ -15,6 +15,7 @@ from engine.operations import (
     flashback,
     heal_character,
     mark_attribute_xp,
+    mark_crew_xp,
     mark_harm,
     mark_playbook_xp,
     mark_stress,
@@ -139,6 +140,23 @@ def test_adjust_crew_coin_gains_and_spends():
 
     crew = adjust_crew_coin(crew, -4)
     assert crew.coin == 1
+
+
+def test_mark_crew_xp_clamps_to_the_track_segments():
+    # SRD: "Crew Advancement" - the crew xp tracker.
+    crew = _crew(xp=XpTrack(marked=7, segments=8))
+
+    marked = mark_crew_xp(crew, 3)
+
+    assert marked.xp.marked == 8
+
+
+def test_mark_crew_xp_floors_at_zero():
+    crew = _crew(xp=XpTrack(marked=1, segments=8))
+
+    cleared = mark_crew_xp(crew, -3)
+
+    assert cleared.xp.marked == 0
 
 
 def test_develop_crew_refuses_below_threshold():

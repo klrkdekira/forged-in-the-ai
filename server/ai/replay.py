@@ -20,6 +20,7 @@ from engine.operations import (
     flashback,
     heal_character,
     mark_attribute_xp,
+    mark_crew_xp,
     mark_harm,
     mark_playbook_xp,
     mark_stress,
@@ -144,6 +145,8 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
             crew = adjust_crew_rep(crew, payload["amount"])
         elif event.event_type == "crew_coin_adjusted":
             crew = adjust_crew_coin(crew, payload["amount"])
+        elif event.event_type == "crew_xp_marked":
+            crew = mark_crew_xp(crew, payload["amount"])
         elif event.event_type == "payoff":
             crew = crew.model_copy(
                 update={
