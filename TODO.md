@@ -1126,14 +1126,41 @@ stay open as well; most of them are blocked on items here.
       (real content present, missing-file degrade); `pnpm build`/`tsc -b`
       succeeds. Not verified live in a headed browser, same caveat as the
       other UI items below.
-- [ ] **Ingestion web UI (FR-21, FR-22, FR-23).** The ingestion pipeline is
-      API only (`app/ingestion.py`); no client page calls it, so FR-22's
-      "user review and edit before the module activates" has no user surface.
-      This blocks Phase 6's acceptance test. Add an ingestion route: upload
-      (extract-text), draft extraction (extract-module), an editable review
-      form (Zod for form UX only per ADR-0006, the server schema stays the
-      validator), then finalize and save with `source_text` so the module
-      joins the retrieval corpus.
+- [x] **Ingestion web UI (FR-21, FR-22, FR-23).** New `/ingestion` route
+      (`components/ingestion/ingestion-page.tsx`), a standalone page (not
+      tied to a campaign - a module is authored once and reused across
+      campaigns): upload a file straight into `extract-text`, chain
+      into `extract-module`, then an editable review form before
+      `finalize-module` and `POST /api/ingestion/modules` (with
+      `source_text`, so the saved module joins the retrieval corpus in the
+      same step, per FR-24's existing wiring). A saved-modules list
+      (`GET /api/ingestion/modules`) sits below so the page also serves as
+      a browser for what's already been ingested. Sidebar gained an
+      "Ingestion" link.
+
+      This is genuinely the first *real* form in the codebase - Phase 0's
+      react-hook-form + Zod + `@hookform/resolvers` wiring
+      (`test/form-wiring.test.tsx`) had only ever been smoke-tested, since
+      guided character entry (Phase 2) ended up CLI-only. Zod validates
+      the pack metadata fields (id/name/description/version) for UX only,
+      per ADR-0006 - the server's `ModuleDraft`/`ContentPack` schemas are
+      still the real validator, so an edit that doesn't match (e.g. a
+      blank required id inside an array row) surfaces as the finalize
+      call's own error response rather than a client-side check
+      duplicating the server's rules.
+
+      The draft's own shapes don't map onto plain text inputs directly
+      (a `dict[str, int]` for starting action dots, a table's rows as
+      list-of-lists) - `lib/module-draft-form.ts`'s
+      `draftToFormValues`/`formValuesToDraft` (pure, unit-tested,
+      round-trip-tested) convert to and from flat comma/newline-separated
+      strings so `useFieldArray` can edit each category (playbooks, crew
+      types, items, special abilities, factions, tables) as plain rows.
+      Not verified live in a headed browser, same caveat as the other UI
+      items below - Phase 6's own acceptance test (ingest a rulebook and
+      play a session using its content) still needs a live pass with a
+      real LLM backend and a real hack's text, not just this pipeline
+      wiring.
 - [ ] **Multi-PC UI (FR-25, FR-35).** Deferred from Phase 5: a character
       switcher in `/play`, sheet views for companions (the sheet panel shows
       only the primary PC), and surfacing `companion_roll_decision` events in

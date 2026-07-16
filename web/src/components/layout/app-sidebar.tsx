@@ -15,7 +15,7 @@ import {
 import { CreditsDialog } from "@/components/layout/credits-dialog"
 import { PlayLink } from "@/components/play-link"
 import { useLastCampaignId } from "@/hooks/use-last-campaign-id"
-import { ScrollText, Dice5, User, Swords, MessageSquare } from "lucide-react"
+import { ScrollText, Dice5, User, Swords, MessageSquare, BookUp } from "lucide-react"
 
 const activeProps = { className: "bg-accent/50 text-accent-foreground font-medium" }
 
@@ -81,6 +81,14 @@ export function AppSidebar() {
                   <Link to="/journal" activeProps={activeProps}>
                     <ScrollText className="opacity-80" />
                     <span>Journal</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild tooltip="Ingest a rulebook">
+                  <Link to="/ingestion" activeProps={activeProps}>
+                    <BookUp className="opacity-80" />
+                    <span>Ingestion</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
