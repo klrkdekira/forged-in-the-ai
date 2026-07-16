@@ -1210,10 +1210,17 @@ stay open as well; most of them are blocked on items here.
       the image builds, serves the SPA, autoindexes the SRD
       (`SRD_AUTOINDEX=1`), and keeps campaign data across container
       replacement on the named volume.
-- [ ] **Compose dev and Ollama profiles (ADR-0004).** Described in the ADR as
-      options and never built; `make dev` covers hot reload without Docker
-      today. Either build the profiles or amend ADR-0004 to record the
-      Makefile path as the supported dev loop.
+- [x] **Compose dev and Ollama profiles (ADR-0004).** Decided against
+      building either - amended ADR-0004 with a dated Update section
+      recording `make dev` as the supported dev loop (not a stopgap ahead
+      of a compose profile) and dropping the Ollama profile as a distinct
+      goal, since `LLM_BASE_URL` (ADR-0001) already points the app at any
+      OpenAI-compatible backend including a self-run Ollama with no
+      compose changes needed. Both were solving problems that don't exist
+      yet at this project's current scale (one owner, one deploy target);
+      revisit if either premise changes (a contributor whose host can't
+      run `uv`/`pnpm` directly, or turnkey offline play becoming a stated
+      goal). No code changes - `compose.yml` is unchanged.
 
 ## Phase 7: Multiplayer
 

@@ -44,3 +44,32 @@ single deployable artefact.
   WebSocket path.
 - A single image couples web and server release cadence. Acceptable at this
   scale; revisit only if the clients multiply (FR-27).
+
+## Update (2026-07-16, gap backlog)
+
+The `dev` compose profile and the optional Ollama service described above
+were never built; `make dev` (root Makefile) covers hot reload today by
+running `uvicorn --reload` and the Vite dev server directly on the host, no
+Docker involved. Revisited rather than built, since containerising local dev
+would mean solving problems `make dev` doesn't have: proxying the Vite dev
+server through the image, mounting both `server/` and `web/` source trees
+into the container for `--reload`/HMR to see edits, and keeping that compose
+file in sync with the Makefile's own env handling. None of that pays for
+itself while the project has exactly one deploy target (a single owner
+running `docker compose up`) and no second contributor whose host setup
+`make dev` fails to cover.
+
+- `make dev` is the supported dev loop, full stop - not a stopgap ahead of a
+  compose profile. Revisit only if a contributor's host can't run `uv`/`pnpm`
+  directly (e.g. a fully containerised onboarding flow becomes a real ask).
+- The Ollama profile is dropped as a distinct goal. `LLM_BASE_URL`/`LLM_MODEL`
+  (ADR-0001) already point the app at any OpenAI-compatible backend,
+  Ollama included - a user running Ollama themselves sets
+  `LLM_BASE_URL=http://host.docker.internal:11434/v1` (or their own Ollama
+  host) with no compose changes needed. A bundled `ollama` service in
+  `compose.yml` would only save that one env var at the cost of a second
+  container's resource footprint and its own model-pull lifecycle; revisit
+  if turnkey offline play (no separate Ollama setup step) becomes a stated
+  goal rather than something any user can already do themselves.
+- `compose.yml` itself is otherwise unchanged from the Decision above: one
+  image, `docker compose up`, the named `user-data` volume.
