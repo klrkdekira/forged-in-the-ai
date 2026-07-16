@@ -187,6 +187,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/notice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Notice
+         * @description C1: the CC-BY attribution text must appear in any distributed UI's
+         *     credits. Serves NOTICE.md's actual content, verbatim, rather than a
+         *     hand-copied constant - nothing to keep in sync if NOTICE.md changes.
+         */
+        get: operations["get_notice_api_notice_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -543,6 +565,11 @@ export interface components {
             description: string;
             /** Version */
             version: string;
+        };
+        /** NoticeResponse */
+        NoticeResponse: {
+            /** Text */
+            text: string;
         };
         /**
          * PlaybookTemplate
@@ -958,6 +985,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_notice_api_notice_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NoticeResponse"];
                 };
             };
         };

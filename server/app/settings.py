@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     # checkout of this repo (Dockerfile).
     packs_dir: Path = Path("../packs")
 
+    # C1: the CC-BY attribution text, served to the web client's credits
+    # dialog verbatim from the repo's NOTICE.md rather than a duplicated
+    # copy - same "flattened image layout" reasoning as packs_dir above.
+    notice_path: Path = Path("../NOTICE.md")
+
     # FR-13: fetch and index the SRD at startup if app.db has no SRD
     # chunks. Off by default (dev uses `make index-srd` against the local
     # copy, and tests must never touch the network); the container image

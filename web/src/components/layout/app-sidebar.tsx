@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router"
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -11,6 +12,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar"
+import { CreditsDialog } from "@/components/layout/credits-dialog"
 import { PlayLink } from "@/components/play-link"
 import { useLastCampaignId } from "@/hooks/use-last-campaign-id"
 import { ScrollText, Dice5, User, Swords, MessageSquare } from "lucide-react"
@@ -86,6 +88,11 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter>
+        <SidebarMenu>
+          <CreditsDialog />
+        </SidebarMenu>
+      </SidebarFooter>
       <SidebarRail />
     </Sidebar>
   )

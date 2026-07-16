@@ -54,9 +54,10 @@ refer to that document. Each phase should end in something playable/testable.
       (`ContentPack` in `server/engine/packs.py`; `load_pack`/`load_packs_dir`
       in `server/engine/pack_loader.py`, which also refuses forbidden content
       at runtime; documented in `packs/README.md`)
-- [x] CONTRIBUTING.md note on the content policy. UI credits path (C1) is
-      deferred: no distributed UI exists yet to carry NOTICE.md attribution
-      (Phase 4 web play UI); re-check this once one does
+- [x] CONTRIBUTING.md note on the content policy. UI credits path (C1) was
+      deferred here (no distributed UI existed yet to carry NOTICE.md
+      attribution) - closed in the gap backlog below, once the web play UI
+      existed to carry it
 
 ## Phase 1: Rules engine core (no AI)
 
@@ -1059,13 +1060,26 @@ stay open as well; most of them are blocked on items here.
       character (and crew) payload validated against the engine schemas, and
       give the campaign picker an import step that uploads a JSON sheet or
       selects a saved guided-entry file.
-- [ ] **CC-BY attribution in the UI (C1).** SPECIFICATION.md requires the
-      NOTICE.md attribution text in any distributed UI's credits, and the
-      Docker image now distributes the SPA, but no route or component renders
-      any attribution. Add a small credits surface (for example a sidebar
-      footer link opening a dialog) carrying the CC-BY attribution text
-      verbatim from NOTICE.md, then close the deferral note in
-      CONTRIBUTING.md and the Phase 0 entry above.
+- [x] **CC-BY attribution in the UI (C1).** Rather than a hand-copied
+      constant that could drift from NOTICE.md, the server serves the file
+      itself: `Settings.notice_path` (`app/settings.py`, default
+      `"../NOTICE.md"`, same relative-to-cwd convention as `packs_dir`) and
+      `GET /api/notice` (`app/notice.py`) return its raw text, degrading to
+      a placeholder message (never a 500) if the file is missing rather
+      than crashing. Dockerfile gained `COPY NOTICE.md` and
+      `NOTICE_PATH=/app/NOTICE.md` (the image's flattened layout, same
+      shape as `PACKS_DIR`). Web: `CreditsDialog`
+      (`components/layout/credits-dialog.tsx`) - a sidebar footer link
+      (`SidebarFooter` in `app-sidebar.tsx`, previously unused) opening a
+      dialog that fetches `/api/notice` on first open and renders it with
+      `react-markdown` (already a dependency, used the same way for GM
+      narration in `chat-message-view.tsx`). Rendering the whole file
+      rather than extracting just the attribution paragraph means there's
+      no parsing logic that could silently drop the required text if
+      NOTICE.md's structure ever changes. Covered by `test_notice_api.py`
+      (real content present, missing-file degrade); `pnpm build`/`tsc -b`
+      succeeds. Not verified live in a headed browser, same caveat as the
+      other UI items below.
 - [ ] **Ingestion web UI (FR-21, FR-22, FR-23).** The ingestion pipeline is
       API only (`app/ingestion.py`); no client page calls it, so FR-22's
       "user review and edit before the module activates" has no user surface.

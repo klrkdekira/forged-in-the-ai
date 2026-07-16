@@ -16,6 +16,7 @@ COPY server/engine ./engine
 COPY server/ingestion ./ingestion
 COPY server/state ./state
 COPY packs ./packs
+COPY NOTICE.md ./NOTICE.md
 RUN uv sync --locked --no-dev
 
 FROM server-base AS openapi-export
@@ -56,5 +57,8 @@ ENV SRD_AUTOINDEX=1
 # image's layout is flattened (no server/ nesting), so packs/ lands at
 # /app/packs instead (app/packs.py::load_entanglements).
 ENV PACKS_DIR=/app/packs
+# Same reasoning as PACKS_DIR: the image's flattened layout puts NOTICE.md
+# straight in /app rather than under a server/ nesting (app/notice.py).
+ENV NOTICE_PATH=/app/NOTICE.md
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
