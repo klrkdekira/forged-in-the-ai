@@ -14,6 +14,9 @@ from engine.events import Event, EventLog
 from engine.operations import (
     add_heat,
     adjust_coin,
+    adjust_crew_coin,
+    adjust_crew_rep,
+    adjust_wanted_level,
     flashback,
     heal_character,
     mark_attribute_xp,
@@ -135,6 +138,12 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
             )
         elif event.event_type == "heat_added":
             crew = add_heat(crew, payload["amount"]).crew
+        elif event.event_type == "wanted_level_adjusted":
+            crew = adjust_wanted_level(crew, payload["amount"])
+        elif event.event_type == "crew_rep_adjusted":
+            crew = adjust_crew_rep(crew, payload["amount"])
+        elif event.event_type == "crew_coin_adjusted":
+            crew = adjust_crew_coin(crew, payload["amount"])
         elif event.event_type == "payoff":
             crew = crew.model_copy(
                 update={

@@ -1,3 +1,4 @@
+import { Button } from '@/components/ui/button'
 import type {
   CanonSnapshot,
   ClockSnapshot,
@@ -9,8 +10,11 @@ import { ClaimMap } from './claim-map'
 import { DistrictMap } from './district-map'
 import { TickBoxes } from './tick-boxes'
 
-// FR-29: active clocks (clickable, same tick-box control as the sheet
-// panel's stress/XP), the crew's claims and the district map (each as a
+// FR-28/FR-29: the crew's heat/wanted level/rep/coin are clickable, same
+// engine-operation shape as the character sheet panel (previously
+// read-only - Table view v1 only wired up clocks and claims); active
+// clocks (clickable, same tick-box control as the sheet panel's
+// stress/XP), the crew's claims and the district map (each as a
 // generated Konva diagram, ADR-0007, alongside the precise text list -
 // the map is a fiction aid, not the only source of the detail), and
 // (once session zero has generated one, FR-36) the setting. Neither map
@@ -34,6 +38,74 @@ export function TableViewPanel({
       <div>
         <h2 className="text-lg font-semibold text-foreground">{crew.name}</h2>
         <p className="text-xs text-muted-foreground">{crew.crew_type}</p>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <span className="text-xs font-semibold text-muted-foreground">Heat</span>
+        <TickBoxes
+          segments={9}
+          marked={crew.heat.heat}
+          onSetMarked={(marked) =>
+            onOperate({
+              name: 'add_crew_heat',
+              args: { amount: marked - crew.heat.heat },
+            })
+          }
+        />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <span className="text-xs font-semibold text-muted-foreground">Wanted level</span>
+        <TickBoxes
+          segments={4}
+          marked={crew.wanted_level}
+          onSetMarked={(marked) =>
+            onOperate({
+              name: 'adjust_wanted_level',
+              args: { amount: marked - crew.wanted_level },
+            })
+          }
+        />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <span className="text-xs font-semibold text-muted-foreground">
+          Rep (turf: {crew.rep.turf})
+        </span>
+        <TickBoxes
+          segments={crew.rep.threshold}
+          marked={crew.rep.rep}
+          onSetMarked={(marked) =>
+            onOperate({
+              name: 'adjust_crew_rep',
+              args: { amount: marked - crew.rep.rep },
+            })
+          }
+        />
+      </div>
+
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-muted-foreground">Coin</span>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            onClick={() => onOperate({ name: 'adjust_crew_coin', args: { amount: -1 } })}
+            disabled={crew.coin <= 0}
+          >
+            -
+          </Button>
+          <span className="w-6 text-center">{crew.coin}</span>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            onClick={() => onOperate({ name: 'adjust_crew_coin', args: { amount: 1 } })}
+          >
+            +
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-col gap-2">

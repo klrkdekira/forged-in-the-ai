@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from engine.character import Attribute, Character
 from engine.consequences import TRAUMA_CONDITIONS
 from engine.crew import Crew
-from engine.crew_mechanics import Hold
+from engine.crew_mechanics import MAX_WANTED_LEVEL, Hold
 from engine.errors import EngineError
 
 
@@ -103,8 +103,33 @@ def add_heat(crew: Crew, amount: int) -> CrewMutation:
     result = crew.heat.add(amount)
     crew = crew.model_copy(update={"heat": result.track})
     if result.wanted_level_increased:
-        crew = crew.model_copy(update={"wanted_level": min(4, crew.wanted_level + 1)})
+        crew = crew.model_copy(
+            update={"wanted_level": min(MAX_WANTED_LEVEL, crew.wanted_level + 1)}
+        )
     return CrewMutation(crew=crew, wanted_level_increased=result.wanted_level_increased)
+
+
+def adjust_wanted_level(crew: Crew, amount: int) -> Crew:
+    """SRD: "Heat & Wanted Level" - direct adjustment, clamped to [0, 4]
+    (e.g. incarceration reducing it by 1, outside of heat overflow)."""
+    new_level = max(0, min(MAX_WANTED_LEVEL, crew.wanted_level + amount))
+    return crew.model_copy(update={"wanted_level": new_level})
+
+
+def adjust_crew_rep(crew: Crew, amount: int) -> Crew:
+    """SRD: "Development" - rep gained outside of a score's payoff (e.g. a
+    GM-awarded bonus); `RepTrack.add_rep` clamps to [0, threshold]."""
+    return crew.model_copy(update={"rep": crew.rep.add_rep(amount)})
+
+
+def adjust_crew_coin(crew: Crew, amount: int) -> Crew:
+    """SRD: "Coin and Stash" - the crew's own coin, spent on crew upgrades
+    and assets; refuses rather than letting the crew spend coin they
+    don't have, same as a character's own `adjust_coin`."""
+    new_coin = crew.coin + amount
+    if new_coin < 0:
+        raise EngineError(f"crew {crew.name!r} has {crew.coin} coin, cannot spend {-amount}")
+    return crew.model_copy(update={"coin": new_coin})
 
 
 def develop_crew(crew: Crew) -> Crew:

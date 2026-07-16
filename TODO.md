@@ -870,14 +870,40 @@ stay open as well; most of them are blocked on items here.
       `CampaignCanon.locations` entry - closing that needs either a
       structured target-location field or a matching convention, which is
       its own design question, not a mechanical follow-on to this item.
-- [ ] **Crew mutations and an interactive crew sheet (FR-12, FR-28).**
-      Nothing mutates crew heat, rep, wanted level, or crew coin at runtime:
-      `adjust_coin` is per character, and `SHEET_OPERATIONS` has no crew
-      entries, so the crew half of the sheet panel is read only (Phase 4's
-      FR-28 entry deferred this and Table view v1 picked up claims and clocks
-      instead). Add engine operations plus GM tools and sheet operations for
-      heat, wanted, rep, and crew coin, then make the crew sheet's tick boxes
-      clickable like the character sheet's.
+- [x] **Crew mutations and an interactive crew sheet (FR-12, FR-28).**
+      Three new engine operations (`engine/operations.py`):
+      `adjust_wanted_level` (direct +/-, clamped to the SRD's [0, 4] - a new
+      `MAX_WANTED_LEVEL` constant in `engine/crew_mechanics.py`, replacing
+      `add_heat`'s previous hardcoded `4`), `adjust_crew_rep` (delegates to
+      the existing `RepTrack.add_rep`, which already clamps to the
+      turf-reduced threshold), and `adjust_crew_coin` (mirrors the
+      character-side `adjust_coin`: refuses rather than letting the crew
+      spend coin it doesn't have). `RepTrack.threshold` gained
+      `@computed_field` (it was a plain `@property` before, so it never
+      serialized) purely so the web rep tick-boxes know their segment
+      count without a duplicated copy of the turf formula in TypeScript.
+
+      GM tools (`ai/tools.py`, `TOOL_SPECS`): `adjust_wanted_level`,
+      `adjust_crew_rep`, `adjust_crew_coin`, each logging its own
+      `wanted_level_adjusted`/`crew_rep_adjusted`/`crew_coin_adjusted`
+      event, folded by `ai/replay.py`. Also added to `SHEET_OPERATIONS`
+      (FR-28) alongside the pre-existing `add_crew_heat`, which had a GM
+      tool already but, per this item's own gap description, was never
+      reachable from the sheet panel either - all four are now on both
+      surfaces, same shared-method shape as `mark_stress`/`tick_clock`.
+
+      Web: `TableViewPanel` (`table-view-panel.tsx`) gained a crew-stats
+      block - heat and wanted level as `TickBoxes` (segments 9 and 4),
+      rep as a `TickBoxes` sized to the crew's own threshold, coin as
+      +/- buttons matching the character sheet's - immediately after the
+      crew name/type header, above the pre-existing setting/clocks/claims
+      sections. `CrewSnapshot`/`SheetOperation` (`use-session-socket.ts`)
+      typed the new fields and operation names. Covered by new
+      `test_operations.py`/`test_tools.py`/`test_ai_replay.py` cases citing
+      the SRD sections they encode ("Heat & Wanted Level", "Development",
+      "Coin and Stash"); `pnpm build`/`tsc -b` succeeds. Not verified live
+      in a headed browser - no headed browser is available in this
+      environment, same caveat as the Konva views below.
 - [ ] **Assist and teamwork (FR-1, FR-2, FR-16).** No assist, setup, group
       action, or protect mechanics exist anywhere: `engine/rolls.py` has no
       teamwork code and `RollDecision` (`ai/tools.py`) offers only push,

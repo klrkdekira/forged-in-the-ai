@@ -10,6 +10,9 @@ from ai.tools import (
     AddCanonLocationArgs,
     AddCrewHeatArgs,
     AdjustCoinArgs,
+    AdjustCrewCoinArgs,
+    AdjustCrewRepArgs,
+    AdjustWantedLevelArgs,
     AdvanceActionRatingArgs,
     AdvanceCrewSpecialAbilityArgs,
     AdvanceCrewUpgradesArgs,
@@ -119,6 +122,9 @@ def test_tool_definitions_cover_every_registered_tool():
         "roll_engagement",
         "resolve_payoff",
         "add_crew_heat",
+        "adjust_wanted_level",
+        "adjust_crew_rep",
+        "adjust_crew_coin",
         "roll_entanglement",
         "acquire_asset",
         "indulge_vice",
@@ -622,6 +628,46 @@ def test_add_crew_heat_can_clear_heat():
     result = _executor().add_crew_heat(state, AddCrewHeatArgs(amount=-2))
 
     assert result.state.crew.heat.heat == 1
+
+
+def test_adjust_wanted_level_updates_the_crew():
+    # SRD: "Heat & Wanted Level".
+    state = _state_with_crew_tier(1)
+
+    result = _executor().adjust_wanted_level(state, AdjustWantedLevelArgs(amount=1))
+
+    assert result.result["wanted_level"] == 1
+    assert result.state.crew.wanted_level == 1
+    assert result.state.log.events[-1].event_type == "wanted_level_adjusted"
+
+
+def test_adjust_crew_rep_updates_the_crew():
+    # SRD: "Development".
+    state = _state_with_crew_tier(1)
+
+    result = _executor().adjust_crew_rep(state, AdjustCrewRepArgs(amount=3))
+
+    assert result.result["rep"] == 3
+    assert result.state.crew.rep.rep == 3
+    assert result.state.log.events[-1].event_type == "crew_rep_adjusted"
+
+
+def test_adjust_crew_coin_updates_the_crew():
+    # SRD: "Coin and Stash".
+    state = _state_with_crew_tier(1)
+
+    result = _executor().adjust_crew_coin(state, AdjustCrewCoinArgs(amount=4))
+
+    assert result.result["coin"] == 4
+    assert result.state.crew.coin == 4
+    assert result.state.log.events[-1].event_type == "crew_coin_adjusted"
+
+
+def test_adjust_crew_coin_refuses_to_go_negative():
+    state = _state_with_crew_tier(1)
+
+    with pytest.raises(EngineError):
+        _executor().adjust_crew_coin(state, AdjustCrewCoinArgs(amount=-1))
 
 
 def test_roll_entanglement_refuses_without_a_table_loaded():

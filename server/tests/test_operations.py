@@ -8,6 +8,9 @@ from engine.operations import (
     InvalidTraumaConditionError,
     add_heat,
     adjust_coin,
+    adjust_crew_coin,
+    adjust_crew_rep,
+    adjust_wanted_level,
     develop_crew,
     flashback,
     heal_character,
@@ -91,6 +94,51 @@ def test_add_heat_increases_wanted_level_on_overflow():
     assert result.wanted_level_increased
     assert result.crew.wanted_level == 1
     assert result.crew.heat.heat == 2
+
+
+def test_adjust_wanted_level_clamps_to_the_srd_maximum():
+    # SRD: "Heat & Wanted Level" - "The maximum wanted level is 4."
+    crew = _crew(wanted_level=4)
+
+    crew = adjust_wanted_level(crew, 1)
+
+    assert crew.wanted_level == 4
+
+
+def test_adjust_wanted_level_clamps_at_zero():
+    # SRD: "Heat & Wanted Level" - incarceration reduces it by 1, never below zero.
+    crew = _crew(wanted_level=0)
+
+    crew = adjust_wanted_level(crew, -1)
+
+    assert crew.wanted_level == 0
+
+
+def test_adjust_crew_rep_clamps_to_the_development_threshold():
+    # SRD: "Development" - rep is capped by the crew's threshold (reduced by turf).
+    crew = _crew(rep=RepTrack(rep=10, turf=2))
+
+    crew = adjust_crew_rep(crew, 5)
+
+    assert crew.rep.rep == crew.rep.threshold
+
+
+def test_adjust_crew_coin_refuses_to_go_negative():
+    # SRD: "Coin and Stash".
+    crew = _crew(coin=2)
+
+    with pytest.raises(EngineError):
+        adjust_crew_coin(crew, -3)
+
+
+def test_adjust_crew_coin_gains_and_spends():
+    crew = _crew(coin=2)
+
+    crew = adjust_crew_coin(crew, 3)
+    assert crew.coin == 5
+
+    crew = adjust_crew_coin(crew, -4)
+    assert crew.coin == 1
 
 
 def test_develop_crew_refuses_below_threshold():

@@ -53,6 +53,10 @@ export interface CrewSnapshot {
   name: string
   crew_type: string
   claims: ClaimSnapshot[]
+  heat: { heat: number }
+  wanted_level: number
+  rep: { rep: number; turf: number; threshold: number }
+  coin: number
   [key: string]: unknown
 }
 
@@ -143,6 +147,10 @@ export interface SheetOperation {
     | 'adjust_coin'
     | 'set_item_carried'
     | 'tick_clock'
+    | 'add_crew_heat'
+    | 'adjust_wanted_level'
+    | 'adjust_crew_rep'
+    | 'adjust_crew_coin'
   args: Record<string, unknown>
 }
 

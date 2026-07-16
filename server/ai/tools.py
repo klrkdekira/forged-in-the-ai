@@ -24,6 +24,9 @@ from engine.events import EventLog
 from engine.operations import (
     add_heat,
     adjust_coin,
+    adjust_crew_coin,
+    adjust_crew_rep,
+    adjust_wanted_level,
     flashback,
     heal_character,
     mark_attribute_xp,
@@ -309,6 +312,20 @@ class AddCrewHeatArgs(BaseModel):
     amount: int = Field(
         ..., description="Positive to add heat, negative to clear it (e.g. from Reduce Heat)"
     )
+
+
+class AdjustWantedLevelArgs(BaseModel):
+    amount: int = Field(
+        ..., description="Positive to raise the crew's wanted level, negative to lower it"
+    )
+
+
+class AdjustCrewRepArgs(BaseModel):
+    amount: int = Field(..., description="Rep gained, outside of a score's payoff")
+
+
+class AdjustCrewCoinArgs(BaseModel):
+    amount: int = Field(..., description="Positive to gain crew coin, negative to spend it")
 
 
 class RollEntanglementArgs(BaseModel):
@@ -679,6 +696,41 @@ class ToolExecutor:
                 "wanted_level": mutation.crew.wanted_level,
                 "wanted_level_increased": mutation.wanted_level_increased,
             },
+        )
+
+    def adjust_wanted_level(self, state: GameState, args: AdjustWantedLevelArgs) -> ToolCallResult:
+        """SRD: "Heat & Wanted Level" - direct adjustment (e.g.
+        incarceration lowering it by 1), outside of heat overflow."""
+        crew = adjust_wanted_level(state.crew, args.amount)
+        log = state.log.append(
+            "crew", crew.name, "wanted_level_adjusted", {"amount": args.amount}, self._clock()
+        )
+        return ToolCallResult(
+            state=state.model_copy(update={"crew": crew, "log": log}),
+            result={"wanted_level": crew.wanted_level},
+        )
+
+    def adjust_crew_rep(self, state: GameState, args: AdjustCrewRepArgs) -> ToolCallResult:
+        """SRD: "Development" - rep gained outside of a score's payoff."""
+        crew = adjust_crew_rep(state.crew, args.amount)
+        log = state.log.append(
+            "crew", crew.name, "crew_rep_adjusted", {"amount": args.amount}, self._clock()
+        )
+        return ToolCallResult(
+            state=state.model_copy(update={"crew": crew, "log": log}),
+            result={"rep": crew.rep.rep},
+        )
+
+    def adjust_crew_coin(self, state: GameState, args: AdjustCrewCoinArgs) -> ToolCallResult:
+        """SRD: "Coin and Stash" - the crew's own coin, spent on crew
+        upgrades and assets."""
+        crew = adjust_crew_coin(state.crew, args.amount)
+        log = state.log.append(
+            "crew", crew.name, "crew_coin_adjusted", {"amount": args.amount}, self._clock()
+        )
+        return ToolCallResult(
+            state=state.model_copy(update={"crew": crew, "log": log}),
+            result={"coin": crew.coin},
         )
 
     def roll_entanglement(self, state: GameState, args: RollEntanglementArgs) -> ToolCallResult:
@@ -1150,6 +1202,15 @@ TOOL_SPECS: dict[str, tuple[type[BaseModel], str]] = {
     ),
     "resolve_payoff": (ResolvePayoffArgs, "Resolve the score's payoff: rep and coin earned."),
     "add_crew_heat": (AddCrewHeatArgs, "Add (or clear) heat on the crew."),
+    "adjust_wanted_level": (
+        AdjustWantedLevelArgs,
+        "Directly raise or lower the crew's wanted level (e.g. incarceration).",
+    ),
+    "adjust_crew_rep": (
+        AdjustCrewRepArgs,
+        "Add rep to the crew, outside of a score's payoff.",
+    ),
+    "adjust_crew_coin": (AdjustCrewCoinArgs, "Add or spend the crew's own coin."),
     "roll_entanglement": (
         RollEntanglementArgs,
         "Roll for an entanglement from the crew's current wanted level and heat.",
@@ -1210,7 +1271,10 @@ def tool_definitions() -> list[dict]:
 # for the LLM to invoke on the player's behalf, except where the SRD gives
 # the GM a hand in it too: mark_stress/apply_harm/tick_clock/mark_xp (the
 # TRAIN downtime activity) are shared with TOOL_SPECS - the same
-# ToolExecutor method, reachable from either surface.
+# ToolExecutor method, reachable from either surface. add_crew_heat/
+# adjust_wanted_level/adjust_crew_rep/adjust_crew_coin are the crew-sheet
+# equivalent of adjust_coin - direct bookkeeping a player can tick on the
+# crew half of the sheet, same shared-method shape.
 SHEET_OPERATIONS: dict[str, type[BaseModel]] = {
     "mark_stress": MarkStressArgs,
     "apply_harm": ApplyHarmArgs,
@@ -1219,4 +1283,8 @@ SHEET_OPERATIONS: dict[str, type[BaseModel]] = {
     "adjust_coin": AdjustCoinArgs,
     "set_item_carried": SetItemCarriedArgs,
     "tick_clock": TickClockArgs,
+    "add_crew_heat": AddCrewHeatArgs,
+    "adjust_wanted_level": AdjustWantedLevelArgs,
+    "adjust_crew_rep": AdjustCrewRepArgs,
+    "adjust_crew_coin": AdjustCrewCoinArgs,
 }

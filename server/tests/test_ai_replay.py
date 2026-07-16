@@ -257,6 +257,20 @@ def test_replay_state_folds_score_creation_and_updates():
     assert score.heat_gained == 2
 
 
+def test_replay_state_folds_wanted_level_and_crew_rep_and_coin_adjustments():
+    base = _base_state()
+    log = base.log
+    log = log.append("crew", "The Fifth Foxglove", "wanted_level_adjusted", {"amount": 2}, AT)
+    log = log.append("crew", "The Fifth Foxglove", "crew_rep_adjusted", {"amount": 3}, AT)
+    log = log.append("crew", "The Fifth Foxglove", "crew_coin_adjusted", {"amount": 4}, AT)
+
+    replayed = replay_state(base, log.events)
+
+    assert replayed.crew.wanted_level == 2
+    assert replayed.crew.rep.rep == 3
+    assert replayed.crew.coin == 4
+
+
 def test_replay_state_folds_flashbacks():
     base = _base_state()
     log = base.log.append(

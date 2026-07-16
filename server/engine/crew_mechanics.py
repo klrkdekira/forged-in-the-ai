@@ -1,7 +1,7 @@
 from enum import StrEnum
 from typing import ClassVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 
 
 class Hold(StrEnum):
@@ -9,6 +9,10 @@ class Hold(StrEnum):
 
     WEAK = "weak"
     STRONG = "strong"
+
+
+MAX_WANTED_LEVEL = 4
+"""SRD: "Heat & Wanted Level" - "The maximum wanted level is 4"."""
 
 
 class HeatMarkResult(BaseModel):
@@ -41,8 +45,12 @@ class RepTrack(BaseModel):
     rep: int = 0
     turf: int = 0
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def threshold(self) -> int:
+        """Serialized (unlike a plain `@property`) so the web sheet panel's
+        rep tick-boxes know their segment count without duplicating the
+        SRD formula client-side."""
         return self.BASE_THRESHOLD - min(self.turf, self.MAX_TURF)
 
     @property
