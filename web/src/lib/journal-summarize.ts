@@ -70,7 +70,9 @@ export function summarize(entry: JournalEntry): string {
         (p.overindulged ? ', overindulged' : '')
       )
     case 'downtime_activity_rolled':
-      return `${entry.entity_id} rolled ${p.activity} (${p.band}, ${p.amount} ticks)`
+      return p.activity === 'craft'
+        ? `${entry.entity_id} crafted (${p.band}, quality ${p.quality})`
+        : `${entry.entity_id} rolled ${p.activity} (${p.band}, ${p.amount} ticks)`
     case 'flashback_taken':
       return `${entry.entity_id} took a flashback (${p.stress_cost} stress)`
     case 'action_advanced':

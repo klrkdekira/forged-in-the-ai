@@ -1,6 +1,6 @@
 import random
 
-from engine.downtime import acquire_asset_roll, indulge_vice_roll
+from engine.downtime import acquire_asset_roll, craft_roll, indulge_vice_roll
 from engine.rolls import RollBand
 from engine.score import downtime_ticks
 
@@ -28,6 +28,54 @@ def test_acquire_asset_roll_never_goes_below_zero_quality():
     rng = random.Random(2)
     result = next(
         r for r in (acquire_asset_roll(0, rng) for _ in range(200)) if r.band is RollBand.BAD
+    )
+
+    assert result.quality == 0
+
+
+def test_craft_roll_sets_quality_relative_to_tier():
+    # SRD: "CRAFTING ROLL" - "4/5: Quality level is equal to Tier."
+    rng = random.Random(5)
+    result = next(
+        r
+        for r in (craft_roll(2, crew_tier=2, rng=rng) for _ in range(200))
+        if r.band is RollBand.PARTIAL
+    )
+
+    assert result.quality == 2
+
+
+def test_craft_roll_adds_one_for_the_workshop_upgrade():
+    # SRD: "CRAFTING ROLL" - "+1 quality for Workshop crew upgrade."
+    rng = random.Random(6)
+    result = next(
+        r
+        for r in (craft_roll(2, crew_tier=2, rng=rng, has_workshop=True) for _ in range(200))
+        if r.band is RollBand.PARTIAL
+    )
+
+    assert result.quality == 3
+
+
+def test_craft_roll_adds_one_per_coin_spent_beyond_tier_plus_two():
+    # SRD: "Crafting" - "spend coin 1-for-1 to increase the final quality
+    # level result of your roll (this can raise quality level beyond Tier +2)."
+    rng = random.Random(7)
+    result = next(
+        r
+        for r in (craft_roll(2, crew_tier=2, rng=rng, coin_spent=3) for _ in range(200))
+        if r.band is RollBand.CRITICAL
+    )
+
+    assert result.quality == 2 + 2 + 3  # tier + critical's +2 + 3 coin
+
+
+def test_craft_roll_never_goes_below_zero_quality():
+    rng = random.Random(8)
+    result = next(
+        r
+        for r in (craft_roll(0, crew_tier=0, rng=rng) for _ in range(200))
+        if r.band is RollBand.BAD
     )
 
     assert result.quality == 0

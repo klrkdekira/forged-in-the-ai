@@ -104,6 +104,8 @@ DOWNTIME_ACTIVITIES_PROCEDURE = ProcedureDoc(
         "REDUCE HEAT",
         "TRAIN",
         "VICE",
+        "Crafting",
+        "CRAFTING ROLL",
     ],
     text=(
         "During downtime, each PC takes up to two activities (+1d if a "
@@ -113,12 +115,15 @@ DOWNTIME_ACTIVITIES_PROCEDURE = ProcedureDoc(
         "heals a harm level once it fills), reduce_heat (rolls the "
         "crew's action, clears that much heat), long_term_project "
         "(rolls the action, ticks that clock), mark_xp (train - 1xp in "
-        "an attribute or the playbook, once per track per downtime), or "
+        "an attribute or the playbook, once per track per downtime), "
         "indulge_vice (clears stress up to the roll, flags an "
-        "overindulgence you narrate a consequence for). Also advance "
-        "faction project clocks and give each faction you're interested "
-        "in a downtime maneuver of your own choosing - a fortune roll on "
-        "their Tier if you're unsure how far to move a clock."
+        "overindulgence you narrate a consequence for), or craft (rolls "
+        "Tinker; quality is the crew's Tier plus the result, the "
+        "Workshop crew upgrade, and any coin the player spends). Also "
+        "advance faction project clocks and give each faction you're "
+        "interested in a downtime maneuver of your own choosing - a "
+        "fortune roll on their Tier if you're unsure how far to move a "
+        "clock."
     ),
 )
 

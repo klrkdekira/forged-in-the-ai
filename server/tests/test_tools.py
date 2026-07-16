@@ -18,6 +18,7 @@ from ai.tools import (
     AdvanceCrewUpgradesArgs,
     AdvanceSpecialAbilityArgs,
     ApplyHarmArgs,
+    CraftArgs,
     CreateCharacterArgs,
     CreateClockArgs,
     CreateNpcArgs,
@@ -128,6 +129,7 @@ def test_tool_definitions_cover_every_registered_tool():
         "roll_entanglement",
         "acquire_asset",
         "indulge_vice",
+        "craft",
         "reduce_heat",
         "recover",
         "long_term_project",
@@ -714,6 +716,58 @@ def test_indulge_vice_clears_stress_and_logs_it():
     assert result.state.log.events[-2].event_type == "vice_indulged"
     assert result.state.log.events[-1].event_type == "stress_marked"
     assert result.state.character.stress.marked <= 2
+
+
+def _state_for_craft(tier: int, tinker: int, coin: int = 0, upgrade_ids: tuple = ()) -> GameState:
+    character = Character(
+        name="Test", playbook="Test Playbook", action_ratings={Action.TINKER: tinker}, coin=coin
+    )
+    return _state(character).model_copy(
+        update={
+            "crew": Crew(
+                name="Test Crew", crew_type="Test Type", tier=tier, upgrade_ids=list(upgrade_ids)
+            )
+        }
+    )
+
+
+def test_craft_logs_a_downtime_activity_with_quality():
+    # SRD: "Crafting"/"CRAFTING ROLL".
+    result = _executor().craft(_state_for_craft(tier=1, tinker=2), CraftArgs())
+
+    event = result.state.log.events[-1]
+    assert event.event_type == "downtime_activity_rolled"
+    assert event.payload["activity"] == "craft"
+    assert result.result["quality"] == event.payload["quality"]
+
+
+def test_craft_adds_one_for_the_workshop_upgrade():
+    # SRD: "CRAFTING ROLL" - "+1 quality for Workshop crew upgrade."
+    without_workshop = _executor(seed=9).craft(_state_for_craft(tier=1, tinker=2), CraftArgs())
+    with_workshop = _executor(seed=9).craft(
+        _state_for_craft(tier=1, tinker=2, upgrade_ids=("workshop",)), CraftArgs()
+    )
+
+    assert with_workshop.result["quality"] == without_workshop.result["quality"] + 1
+
+
+def test_craft_spends_coin_and_raises_quality():
+    # SRD: "Crafting" - "spend coin 1-for-1 to increase the final quality level."
+    no_spend = _executor(seed=9).craft(
+        _state_for_craft(tier=1, tinker=2, coin=3), CraftArgs(coin_spent=0)
+    )
+    spend = _executor(seed=9).craft(
+        _state_for_craft(tier=1, tinker=2, coin=3), CraftArgs(coin_spent=2)
+    )
+
+    assert spend.result["quality"] == no_spend.result["quality"] + 2
+    assert spend.state.character.coin == 1
+    assert any(e.event_type == "coin_adjusted" for e in spend.state.log.events)
+
+
+def test_craft_refuses_when_coin_spent_exceeds_available_coin():
+    with pytest.raises(EngineError):
+        _executor().craft(_state_for_craft(tier=1, tinker=2, coin=1), CraftArgs(coin_spent=2))
 
 
 def test_reduce_heat_clears_heat_by_the_downtime_ticks_table():

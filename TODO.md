@@ -951,11 +951,54 @@ stay open as well; most of them are blocked on items here.
       character before a resistance roll; set up needs to carry its
       "which follow-up gets the bonus" state across a turn boundary) and
       is left for a follow-up pass rather than folded into this one.
-- [ ] **Crafting (FR-1).** No crafting code at all (SRD "Crafting": the
-      tinker long-term project, the quality level formula, inventing). At
-      minimum encode the quality formula and a craft downtime path with
-      SRD-cited tests; the generic long-term-project clock already covers
-      project progress.
+- [x] **Crafting (FR-1).** Engine: `craft_roll` (`engine/downtime.py`) - the
+      SRD's "CRAFTING ROLL" formula, base quality the crew's Tier plus the
+      roll's result, +1 for the Workshop crew upgrade, +1 per coin spent.
+      Shares its Tier-relative delta table with the existing
+      `acquire_asset_roll` (both use the same critical/6/4-5/1-3 shape;
+      the table was renamed from `_ACQUIRE_ASSET_QUALITY_DELTA` to
+      `_TIER_QUALITY_DELTA` rather than duplicated). SRD-cited tests in
+      `test_downtime.py` (quality relative to Tier, the Workshop bonus,
+      coin raising quality beyond Tier +2, floor at zero).
+
+      GM tool: `craft` (`ai/tools.py`) - pools from the crafting PC's own
+      Tinker rating (the SRD names this action specifically, unlike
+      Recover/Reduce Heat's "your action" free choice, so it's derived the
+      same way `roll_action` derives a pool from `RollActionArgs.action`
+      rather than taking `pool_size` as an argument); `has_workshop` is
+      derived from `"workshop" in crew.upgrade_ids` (the SRD base pack's
+      own id for that upgrade) rather than trusting a model-supplied
+      boolean judgement call. Logs its own `downtime_activity_rolled`
+      record (`activity: "craft"`, `pool_size`, `band`, `quality`,
+      `coin_spent`), then spends the coin via the existing `adjust_coin`
+      (refuses rather than letting a PC spend coin they don't have, same
+      as every other coin spend) - same "roll, log, chain into the
+      existing operation" shape `recover`/`reduce_heat` already use.
+      `DOWNTIME_ACTIVITIES_PROCEDURE` (`ai/procedures.py`) names it
+      alongside the other downtime activities, citing "Crafting" and
+      "CRAFTING ROLL" from the committed SRD section index.
+      `journal-summarize.ts`'s downtime-activity summary special-cases
+      `craft` (quality, not ticks - its payload shape genuinely differs
+      from the tick-based activities, a real small gap this surfaced:
+      the generic summary would have shown "undefined ticks" for a craft
+      entry otherwise). Covered by `test_tools.py` (quality/event
+      plumbing, the Workshop bonus, coin spend and its refusal). Not
+      wired into the Journal's downtime filter bucket separately - that
+      bucket already matches on `downtime_activity_rolled` regardless of
+      which activity, so craft entries were already included, no code
+      change needed there.
+
+      Inventing (a new formula/design as a long-term project) needed no
+      new code, as scoped: the generic `long_term_project` tool already
+      covers arbitrary clock progress, and a formula's own mechanical
+      effect is narrative bookkeeping the GM tracks in notes/canon facts,
+      not a new engine rule. "Modifying an item" (SRD: simple/significant/
+      arcane modifications need Tier +1/+2/+3 quality) is the same
+      `craft_roll`/`craft` tool with a higher GM-set minimum to compare
+      against - like Acquire Asset's own GM-set minimum, this project
+      never encodes minimum-quality *enforcement* in code, only returns
+      the achieved quality for the GM to judge against whatever minimum
+      the fiction calls for.
 - [ ] **End-of-session XP triggers (FR-5).** The advance mechanic exists
       (`engine/advancement.py`) but nothing detects XP triggers from play or
       runs the SRD's end-of-session procedure. Depends on the tool-surface

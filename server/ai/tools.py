@@ -17,7 +17,7 @@ from engine.character import Action, Attribute, Character
 from engine.clocks import Clock, ClockKind
 from engine.controller import Controller
 from engine.crew import Crew
-from engine.downtime import acquire_asset_roll, indulge_vice_roll
+from engine.downtime import acquire_asset_roll, craft_roll, indulge_vice_roll
 from engine.entities import Npc, Score
 from engine.errors import EngineError
 from engine.events import EventLog
@@ -345,6 +345,13 @@ class AcquireAssetArgs(BaseModel):
 class IndulgeViceArgs(BaseModel):
     character_id: str | None = Field(
         None, description="Which PC indulges; only needed once more than one PC exists"
+    )
+
+
+class CraftArgs(BaseModel):
+    coin_spent: int = Field(0, description="Coin spent 1-for-1 to raise the result's quality level")
+    character_id: str | None = Field(
+        None, description="Which PC crafts; only needed once more than one PC exists"
     )
 
 
@@ -784,6 +791,42 @@ class ToolExecutor:
         state = self.mark_stress(
             state, MarkStressArgs(amount=-roll.stress_cleared, character_id=character_id)
         ).state
+        return ToolCallResult(state=state, result=roll.model_dump(mode="json"))
+
+    def craft(self, state: GameState, args: CraftArgs) -> ToolCallResult:
+        """SRD: "Crafting"/"CRAFTING ROLL" - roll Tinker; quality is the
+        crew's Tier plus the result, +1 for the Workshop crew upgrade
+        (`"workshop"`, the SRD base pack's own id for it), and +1 per coin
+        spent."""
+        character_id = self.resolve_character_id(state, args.character_id)
+        character = state.characters[character_id]
+        tinker_rating = character.action_ratings.get(Action.TINKER, 0)
+        has_workshop = "workshop" in state.crew.upgrade_ids
+        roll = craft_roll(
+            tinker_rating,
+            state.crew.tier,
+            self._rng,
+            has_workshop=has_workshop,
+            coin_spent=args.coin_spent,
+        )
+        log = state.log.append(
+            "character",
+            character_id,
+            "downtime_activity_rolled",
+            {
+                "activity": "craft",
+                "pool_size": tinker_rating,
+                "band": roll.band.value,
+                "quality": roll.quality,
+                "coin_spent": args.coin_spent,
+            },
+            self._clock(),
+        )
+        state = state.model_copy(update={"log": log})
+        if args.coin_spent:
+            state = self.adjust_coin(
+                state, AdjustCoinArgs(amount=-args.coin_spent, character_id=character_id)
+            ).state
         return ToolCallResult(state=state, result=roll.model_dump(mode="json"))
 
     def reduce_heat(self, state: GameState, args: ReduceHeatArgs) -> ToolCallResult:
@@ -1231,6 +1274,10 @@ TOOL_SPECS: dict[str, tuple[type[BaseModel], str]] = {
     "indulge_vice": (
         IndulgeViceArgs,
         "Downtime: indulge a PC's vice to clear stress, at the risk of overindulging.",
+    ),
+    "craft": (
+        CraftArgs,
+        "Downtime: Tinker to craft or modify an item; quality is set by the roll.",
     ),
     "reduce_heat": (ReduceHeatArgs, "Downtime: roll to reduce the crew's heat."),
     "recover": (RecoverArgs, "Downtime: tick a PC's healing clock; heals harm once it fills."),
