@@ -9,7 +9,7 @@ from engine.campaign import CampaignCanon, SessionZeroConfig
 from engine.character import Action, Attribute, Character
 from engine.clocks import Clock, ClockKind
 from engine.controller import Controller
-from engine.entities import Npc
+from engine.entities import Npc, Score
 from engine.events import Event, EventLog
 from engine.operations import (
     add_heat,
@@ -45,6 +45,7 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
     session = base.session
     clocks = dict(base.clocks)
     npcs = dict(base.npcs)
+    scores = dict(base.scores)
     faction_statuses = dict(base.faction_statuses)
     relationships = dict(base.relationships)
     canon = base.canon
@@ -101,6 +102,10 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
             session = session.transition_to(CampaignPhase(payload["phase"]))
         elif event.event_type == "npc_created":
             npcs[event.entity_id] = Npc.model_validate(payload)
+        elif event.event_type == "score_created":
+            scores[event.entity_id] = Score.model_validate(payload)
+        elif event.event_type == "score_updated":
+            scores[event.entity_id] = scores[event.entity_id].model_copy(update=payload)
         elif event.event_type == "faction_status_changed":
             current = faction_statuses.get(
                 event.entity_id, FactionStatus(crew_id=crew.name, faction_id=event.entity_id)
@@ -162,6 +167,7 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
             "session": session,
             "clocks": clocks,
             "npcs": npcs,
+            "scores": scores,
             "faction_statuses": faction_statuses,
             "relationships": relationships,
             "canon": canon,

@@ -839,16 +839,37 @@ stay open as well; most of them are blocked on items here.
       (`test_tools.py`), replay fold-case tests (`test_ai_replay.py`), and
       a `journal-panel.test.tsx` case proving the downtime filter bucket
       now actually filters something.
-- [ ] **Score entity wiring (spec section 5, FR-4, FR-29).**
-      `engine/entities.py` defines `Score` (target, plan, engagement result,
-      payoff, heat, entanglement) but `GameState` (`ai/tools.py`) has no
-      score field and no tool creates one, so the current score is never
-      persisted as an entity. This also blocks the Table view's score map,
-      which Phase 5 noted has no target location to highlight. Add
-      `GameState.scores` (a dict keyed like `clocks` and `npcs`), tools to
-      create and update the active score (or fold them into the score-loop
-      tools above), replay cases, and a canon section in `ai/canon.py` so the
-      active score reaches the prompt.
+- [x] **Score entity wiring (spec section 5, FR-4, FR-29).**
+      `GameState.scores: dict[str, Score]` (`ai/tools.py`), keyed like
+      `clocks`/`npcs`, plus two new tools: `create_score` (target and plan,
+      called once the crew commits to a job) and `update_score` (records
+      whichever of engagement result/payoff/heat gained/entanglement the
+      caller supplies - only the fields actually passed are applied, so
+      resolving a score across several turns doesn't clobber earlier
+      results with nulls). Kept as its own explicit pair of tools rather
+      than folding into `roll_engagement`/`resolve_payoff`/`add_crew_heat`/
+      `roll_entanglement` above: `add_crew_heat` in particular is also
+      called by `reduce_heat` during downtime, so threading an implicit
+      "update the active score" side effect through it would have updated
+      a score's heat from an unrelated downtime roll. `SCORE_LOOP_PROCEDURE`
+      (`ai/procedures.py`) now names `create_score`/`update_score` at the
+      right points in the loop, same pattern as the rest of that doc.
+      Replay fold cases for `score_created`/`score_updated`
+      (`ai/replay.py`, the update case is a plain `model_copy` over the
+      partial payload, mirroring the tool's own partial-update logic) and
+      an "Active score" canon section (`ai/canon.py`, priority 1 alongside
+      clocks/NPCs/faction status - supplementary state, not core identity
+      like the character/crew sections). Covered by new cases in
+      `test_tools.py` (creation, partial updates accumulating across two
+      calls, refusing an unknown score id), `test_ai_replay.py`, and
+      `test_canon.py`.
+
+      Still open, not attempted here: the Table view's score map (FR-29)
+      needs a *location* to highlight, and `Score.target` is free prose
+      (e.g. "The Silver Vault") with no guaranteed link to a
+      `CampaignCanon.locations` entry - closing that needs either a
+      structured target-location field or a matching convention, which is
+      its own design question, not a mechanical follow-on to this item.
 - [ ] **Crew mutations and an interactive crew sheet (FR-12, FR-28).**
       Nothing mutates crew heat, rep, wanted level, or crew coin at runtime:
       `adjust_coin` is per character, and `SHEET_OPERATIONS` has no crew

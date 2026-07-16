@@ -18,7 +18,7 @@ from engine.clocks import Clock, ClockKind
 from engine.controller import Controller
 from engine.crew import Crew
 from engine.downtime import acquire_asset_roll, indulge_vice_roll
-from engine.entities import Npc
+from engine.entities import Npc, Score
 from engine.errors import EngineError
 from engine.events import EventLog
 from engine.operations import (
@@ -61,6 +61,7 @@ class GameState(BaseModel):
     )
     clocks: dict[str, Clock] = Field(default_factory=dict)
     npcs: dict[str, Npc] = Field(default_factory=dict)
+    scores: dict[str, Score] = Field(default_factory=dict)
     faction_statuses: dict[str, FactionStatus] = Field(
         default_factory=dict, description="Keyed by faction_id"
     )
@@ -182,6 +183,23 @@ class CreateNpcArgs(BaseModel):
     name: str
     tags: list[str] = Field(default_factory=list)
     faction_id: str | None = None
+
+
+class CreateScoreArgs(BaseModel):
+    score_id: str
+    target: str = Field(..., description="What the crew is after and where")
+    plan_type: str | None = None
+    plan_detail: str | None = None
+
+
+class UpdateScoreArgs(BaseModel):
+    score_id: str
+    engagement_result: str | None = Field(
+        None, description="The engagement roll's outcome, e.g. 'controlled'"
+    )
+    payoff: int | None = Field(None, description="Coin the score earned")
+    heat_gained: int | None = Field(None, description="Heat the crew took for this score")
+    entanglement: str | None = Field(None, description="The entanglement rolled, if any")
 
 
 class CreateCharacterArgs(BaseModel):
@@ -883,6 +901,47 @@ class ToolExecutor:
         state = state.model_copy(update={"session": session, "log": log})
         return ToolCallResult(state=state, result={"phase": args.phase.value})
 
+    def create_score(self, state: GameState, args: CreateScoreArgs) -> ToolCallResult:
+        """SPECIFICATION.md §5: "Score" - the target and plan, set once
+        the crew commits to a job (SRD: "The Score")."""
+        score = Score(
+            id=args.score_id,
+            target=args.target,
+            plan_type=args.plan_type,
+            plan_detail=args.plan_detail,
+        )
+        log = state.log.append(
+            "score", args.score_id, "score_created", score.model_dump(mode="json"), self._clock()
+        )
+        scores = {**state.scores, args.score_id: score}
+        return ToolCallResult(
+            state=state.model_copy(update={"scores": scores, "log": log}),
+            result=score.model_dump(mode="json"),
+        )
+
+    def update_score(self, state: GameState, args: UpdateScoreArgs) -> ToolCallResult:
+        """SPECIFICATION.md §5: "Score" - records this score's engagement
+        result, payoff, heat, and entanglement as they're resolved."""
+        if args.score_id not in state.scores:
+            raise EngineError(f"no score {args.score_id!r} in this session")
+        updates = {
+            field: value
+            for field, value in (
+                ("engagement_result", args.engagement_result),
+                ("payoff", args.payoff),
+                ("heat_gained", args.heat_gained),
+                ("entanglement", args.entanglement),
+            )
+            if value is not None
+        }
+        score = state.scores[args.score_id].model_copy(update=updates)
+        log = state.log.append("score", args.score_id, "score_updated", updates, self._clock())
+        scores = {**state.scores, args.score_id: score}
+        return ToolCallResult(
+            state=state.model_copy(update={"scores": scores, "log": log}),
+            result=score.model_dump(mode="json"),
+        )
+
     def create_npc(self, state: GameState, args: CreateNpcArgs) -> ToolCallResult:
         """SPECIFICATION.md §5: "NPC ... lightweight entities with tags and
         the fiction established about them"."""
@@ -1052,6 +1111,11 @@ TOOL_SPECS: dict[str, tuple[type[BaseModel], str]] = {
     "apply_harm": (ApplyHarmArgs, "Record harm on the current character."),
     "mark_stress": (MarkStressArgs, "Mark or clear stress on the current character."),
     "transition_phase": (TransitionPhaseArgs, "Move the campaign to its next phase."),
+    "create_score": (CreateScoreArgs, "Start a new score: the target and plan."),
+    "update_score": (
+        UpdateScoreArgs,
+        "Record a score's engagement result, payoff, heat gained, or entanglement.",
+    ),
     "create_npc": (CreateNpcArgs, "Introduce a new NPC as campaign canon."),
     "create_character": (
         CreateCharacterArgs,

@@ -18,6 +18,7 @@ from ai.tools import (
     CreateCharacterArgs,
     CreateClockArgs,
     CreateNpcArgs,
+    CreateScoreArgs,
     FlashbackArgs,
     GameState,
     HealCharacterArgs,
@@ -42,6 +43,7 @@ from ai.tools import (
     TransitionPhaseArgs,
     UpdateFactionStatusArgs,
     UpdateRelationshipArgs,
+    UpdateScoreArgs,
     tool_definitions,
 )
 from engine.campaign import CampaignCanon
@@ -103,6 +105,8 @@ def test_tool_definitions_cover_every_registered_tool():
         "apply_harm",
         "mark_stress",
         "transition_phase",
+        "create_score",
+        "update_score",
         "create_npc",
         "create_character",
         "update_faction_status",
@@ -225,6 +229,43 @@ def test_create_npc_adds_it_to_state():
 
     assert result.state.npcs["n1"].name == "Test NPC"
     assert result.state.log.events[-1].event_type == "npc_created"
+
+
+def test_create_score_adds_it_to_state():
+    # SPECIFICATION.md §5: "Score" - target and plan, set once
+    result = _executor().create_score(
+        _state(),
+        CreateScoreArgs(
+            score_id="s1", target="The Silver Vault", plan_type="Assault", plan_detail="Front door"
+        ),
+    )
+
+    score = result.state.scores["s1"]
+    assert score.target == "The Silver Vault"
+    assert score.plan_type == "Assault"
+    assert result.state.log.events[-1].event_type == "score_created"
+
+
+def test_update_score_applies_only_provided_fields():
+    state = _executor().create_score(_state(), CreateScoreArgs(score_id="s1", target="Vault")).state
+
+    result = _executor().update_score(
+        state, UpdateScoreArgs(score_id="s1", engagement_result="controlled")
+    )
+
+    score = result.state.scores["s1"]
+    assert score.engagement_result == "controlled"
+    assert score.payoff is None
+    assert result.state.log.events[-1].event_type == "score_updated"
+
+    result = _executor().update_score(result.state, UpdateScoreArgs(score_id="s1", payoff=6))
+    assert result.state.scores["s1"].engagement_result == "controlled"
+    assert result.state.scores["s1"].payoff == 6
+
+
+def test_update_score_refuses_an_unknown_score_id():
+    with pytest.raises(EngineError):
+        _executor().update_score(_state(), UpdateScoreArgs(score_id="missing", payoff=6))
 
 
 def test_create_character_adds_a_second_pc():

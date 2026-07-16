@@ -226,6 +226,37 @@ def test_replay_state_folds_crew_heat_and_payoff():
     assert replayed.crew.coin == 4
 
 
+def test_replay_state_folds_score_creation_and_updates():
+    base = _base_state()
+    log = base.log
+    log = log.append(
+        "score",
+        "s1",
+        "score_created",
+        {
+            "id": "s1",
+            "target": "The Silver Vault",
+            "plan_type": "Assault",
+            "plan_detail": None,
+            "engagement_result": None,
+            "payoff": None,
+            "heat_gained": None,
+            "entanglement": None,
+        },
+        AT,
+    )
+    log = log.append("score", "s1", "score_updated", {"engagement_result": "controlled"}, AT)
+    log = log.append("score", "s1", "score_updated", {"payoff": 6, "heat_gained": 2}, AT)
+
+    replayed = replay_state(base, log.events)
+
+    score = replayed.scores["s1"]
+    assert score.target == "The Silver Vault"
+    assert score.engagement_result == "controlled"
+    assert score.payoff == 6
+    assert score.heat_gained == 2
+
+
 def test_replay_state_folds_flashbacks():
     base = _base_state()
     log = base.log.append(

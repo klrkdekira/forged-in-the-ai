@@ -4,7 +4,7 @@ from engine.campaign import CampaignCanon, SessionZeroConfig
 from engine.character import Character
 from engine.clocks import Clock, ClockKind
 from engine.crew import Crew
-from engine.entities import Npc
+from engine.entities import Npc, Score
 from engine.relationships import FactionStatus, Relationship, RelationshipKind
 from engine.session import Session
 
@@ -34,6 +34,24 @@ def test_render_canon_includes_clocks_only_when_present():
 
     assert "Alert" in clocks_section.text
     assert clocks_section.priority < 2
+
+
+def test_render_canon_includes_score_only_when_present():
+    assert not any(s.title == "Active score" for s in render_canon(_state()))
+
+    state = _state(
+        scores={
+            "s1": Score(
+                id="s1", target="The Silver Vault", plan_type="Assault", payoff=6, heat_gained=2
+            )
+        }
+    )
+    score_section = next(s for s in render_canon(state) if s.title == "Active score")
+
+    assert "The Silver Vault" in score_section.text
+    assert "Assault" in score_section.text
+    assert "payoff: 6 coin" in score_section.text
+    assert "heat: 2" in score_section.text
 
 
 def test_render_canon_includes_npcs_only_when_present():

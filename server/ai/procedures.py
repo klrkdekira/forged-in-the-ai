@@ -75,8 +75,9 @@ SCORE_LOOP_PROCEDURE = ProcedureDoc(
         "Entanglements",
     ],
     text=(
-        "Free play -> plan and detail chosen -> transition_phase to score, "
-        "then roll_engagement (a fortune roll, 1d for luck plus/minus "
+        "Free play -> plan and detail chosen -> call create_score (the "
+        "target and plan), then transition_phase to score, then "
+        "roll_engagement (a fortune roll, 1d for luck plus/minus "
         "advantages) sets the starting position: critical carries past "
         "the first obstacle, 6 controlled, 4/5 risky, 1-3 desperate -> "
         "the score plays out -> transition_phase to downtime: "
@@ -86,7 +87,9 @@ SCORE_LOOP_PROCEDURE = ProcedureDoc(
         "roll_entanglement (heat band picks the column, wanted-level "
         "dice pick the row) - call the matching tool for each step "
         "rather than only narrating it, so the sheet and journal reflect "
-        "what happened."
+        "what happened. After each of those calls, also call update_score "
+        "so the score entity itself records its own engagement result, "
+        "payoff, heat, and entanglement."
     ),
 )
 

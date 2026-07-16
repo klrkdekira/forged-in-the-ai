@@ -36,6 +36,26 @@ def render_canon(state: GameState) -> list[CanonSection]:
     )
     sections.append(CanonSection(title="Crew", text=render_crew(state.crew), priority=2))
 
+    if state.scores:
+        score_lines = []
+        for score in state.scores.values():
+            line = f"- {score.target}"
+            if score.plan_type:
+                line += f" ({score.plan_type})"
+            details = []
+            if score.engagement_result:
+                details.append(f"engagement: {score.engagement_result}")
+            if score.payoff is not None:
+                details.append(f"payoff: {score.payoff} coin")
+            if score.heat_gained is not None:
+                details.append(f"heat: {score.heat_gained}")
+            if score.entanglement:
+                details.append(f"entanglement: {score.entanglement}")
+            if details:
+                line += " - " + ", ".join(details)
+            score_lines.append(line)
+        sections.append(CanonSection(title="Active score", text="\n".join(score_lines), priority=1))
+
     if state.clocks:
         clock_lines = [
             f"- {clock.name} ({clock.kind.value}): {clock.filled}/{clock.segments}"
