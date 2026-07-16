@@ -761,6 +761,164 @@ by the committed SRD base pack plus guided entry from Phase 2.
       populated, degrades offline).
 - [ ] Acceptance test: ingest a rulebook and play a session using its content
 
+## Gap backlog (alignment audit, 2026-07-16)
+
+Findings from auditing SPECIFICATION.md against the code, ordered by how much
+play each one blocks. Each item is scoped to hand to an implementing agent:
+read the named files and the cited spec sections before starting, and follow
+the existing patterns they establish (tools wrap engine functions, every new
+event type gets a replay fold case in `ai/replay.py`, engine tests cite the
+SRD). The unchecked playtest and acceptance items inside Phases 4 to 6 above
+stay open as well; most of them are blocked on items here.
+
+- [x] **GM score and downtime tool surface (FR-4, FR-5, FR-12, FR-14).**
+      `ai/tools.py` gained fourteen tools wrapping the existing engine
+      functions (same pattern as `roll_action` - no new engine code needed
+      beyond what Phase 3 already built and tested): `roll_engagement`,
+      `resolve_payoff`, `add_crew_heat`, `roll_entanglement`,
+      `acquire_asset`, `indulge_vice`, `reduce_heat`, `recover`,
+      `long_term_project`, `flashback`, `advance_action_rating`,
+      `advance_special_ability`, `advance_crew_special_ability`,
+      `advance_crew_upgrades`, plus `mark_xp` (previously `SHEET_OPERATIONS`
+      only) is now also in `TOOL_SPECS` for the TRAIN activity - the GM can
+      mark a companion's xp during a narrated downtime scene, same as a
+      human player clicking their own sheet. `recover`/`reduce_heat`/
+      `long_term_project` share the SRD's "roll your action, downtime_ticks
+      picks the amount" shape - each logs its own `downtime_activity_rolled`
+      record, then chains into `tick_clock`/`add_crew_heat` (reusing those
+      tools' own methods and events rather than duplicating the mutation).
+      `recover` auto-heals one harm level when its tick fills the clock,
+      per the SRD.
+
+      Every new event type got a replay fold case (`ai/replay.py`) -
+      most reuse the engine functions directly (`add_heat`,
+      `advance_action_rating`, etc., same as the rest of replay.py), except
+      `action_advanced`, which now logs its `cap` alongside `new_rating` so
+      replay doesn't have to guess the cap a live call used (unlike other
+      folded events, `advance_action_rating`'s cap is caller-supplied, not
+      derivable from state). A `DOWNTIME_ACTIVITIES_PROCEDURE` doc
+      (`ai/procedures.py`) cites the SRD's "DOWNTIME ACTIVITIES SUMMARY"
+      section and its per-activity subsections, checked against the
+      committed SRD section index by the existing drift test
+      (`test_procedures.py`); `SCORE_LOOP_PROCEDURE` now names the actual
+      tool to call at each step instead of only describing the mechanic.
+      `journal-summarize.ts` and `journal-panel.tsx` gained summaries and a
+      populated "downtime" filter bucket (previously permanently empty,
+      FR-32) for every new event type.
+
+      `roll_entanglement` needed the SRD base pack's entanglement table at
+      runtime, which surfaced a real gap once traced: nothing loaded
+      `packs/srd_base.json` at play time at all (the ingestion/retrieval
+      pipeline reads SRD *prose* into the FTS5 index, never the pack's
+      *structured* tables), and the Dockerfile never copied `packs/` into
+      the image in the first place (the same shape of gap Phase 0's COPY
+      fix closed for `server/ai`/`server/ingestion`/`server/alembic_campaign`,
+      just never hit until now because nothing needed pack data at runtime
+      before). Closed with `ToolExecutor(entanglements=...)` - an injected
+      dependency, same reasoning as `rng`/`clock` - loaded via a new
+      `app/packs.py::load_entanglements`, degrading to an empty list (and a
+      clear refusal from `roll_entanglement` itself) rather than crashing
+      the WS connection if the pack is missing or malformed, same shape as
+      `GmAgent._retrieve`'s no-session-factory no-op. A new
+      `Settings.packs_dir` (default `"../packs"`, dev's cwd is `server/`)
+      points at it; the Dockerfile now `COPY packs ./packs` and sets
+      `PACKS_DIR=/app/packs` (its layout is flattened, no `server/`
+      nesting, so the default relative path doesn't resolve there) -
+      verified live: `load_entanglements` against the real dev settings
+      returns all 9 committed entries. `cli/session.py`'s dev harness wires
+      the same loader in.
+
+      Acceptance: `test_agent_runs_a_full_score_and_downtime_loop_through_tools`
+      (`test_agent.py`) drives plan, engagement, action (paused for the
+      player's push/trade-off decision, FR-16), payoff, heat, entanglement,
+      and one of each downtime activity end to end through the GM agent's
+      tool-calling loop across four turns, mirroring what
+      `test_headless_session.py` proves engine-side - not verified live
+      against a real model this round, flagging that explicitly per this
+      project's convention. Also covered: per-tool unit tests
+      (`test_tools.py`), replay fold-case tests (`test_ai_replay.py`), and
+      a `journal-panel.test.tsx` case proving the downtime filter bucket
+      now actually filters something.
+- [ ] **Score entity wiring (spec section 5, FR-4, FR-29).**
+      `engine/entities.py` defines `Score` (target, plan, engagement result,
+      payoff, heat, entanglement) but `GameState` (`ai/tools.py`) has no
+      score field and no tool creates one, so the current score is never
+      persisted as an entity. This also blocks the Table view's score map,
+      which Phase 5 noted has no target location to highlight. Add
+      `GameState.scores` (a dict keyed like `clocks` and `npcs`), tools to
+      create and update the active score (or fold them into the score-loop
+      tools above), replay cases, and a canon section in `ai/canon.py` so the
+      active score reaches the prompt.
+- [ ] **Crew mutations and an interactive crew sheet (FR-12, FR-28).**
+      Nothing mutates crew heat, rep, wanted level, or crew coin at runtime:
+      `adjust_coin` is per character, and `SHEET_OPERATIONS` has no crew
+      entries, so the crew half of the sheet panel is read only (Phase 4's
+      FR-28 entry deferred this and Table view v1 picked up claims and clocks
+      instead). Add engine operations plus GM tools and sheet operations for
+      heat, wanted, rep, and crew coin, then make the crew sheet's tick boxes
+      clickable like the character sheet's.
+- [ ] **Assist and teamwork (FR-1, FR-2, FR-16).** No assist, setup, group
+      action, or protect mechanics exist anywhere: `engine/rolls.py` has no
+      teamwork code and `RollDecision` (`ai/tools.py`) offers only push,
+      Devil's Bargain, and the position/effect trade. The old blocker (a
+      single-PC `GameState`) is gone since FR-35 landed
+      `GameState.characters`. Engine first (SRD "Teamwork", with cited
+      tests), then extend `RollDecision` with an assist option (the helper
+      takes 1 stress, the roller gains 1d), then offer it in the roll
+      negotiation dialog and in `PlayerAgent.decide_roll`.
+- [ ] **Crafting (FR-1).** No crafting code at all (SRD "Crafting": the
+      tinker long-term project, the quality level formula, inventing). At
+      minimum encode the quality formula and a craft downtime path with
+      SRD-cited tests; the generic long-term-project clock already covers
+      project progress.
+- [ ] **End-of-session XP triggers (FR-5).** The advance mechanic exists
+      (`engine/advancement.py`) but nothing detects XP triggers from play or
+      runs the SRD's end-of-session procedure. Depends on the tool-surface
+      item above; add an end-of-session procedure prompt plus a tool for
+      marking trigger XP that logs the reason.
+- [ ] **Character import at campaign creation (FR-8, G2).**
+      `app/campaigns.py` hardcodes a fixed starter character and crew (an
+      FR-30/FR-36 MVP simplification), so neither loading a JSON sheet nor
+      the guided-entry output (Phase 2, saved under `server/data/characters/`)
+      can actually enter a web campaign. Extend campaign creation to accept a
+      character (and crew) payload validated against the engine schemas, and
+      give the campaign picker an import step that uploads a JSON sheet or
+      selects a saved guided-entry file.
+- [ ] **CC-BY attribution in the UI (C1).** SPECIFICATION.md requires the
+      NOTICE.md attribution text in any distributed UI's credits, and the
+      Docker image now distributes the SPA, but no route or component renders
+      any attribution. Add a small credits surface (for example a sidebar
+      footer link opening a dialog) carrying the CC-BY attribution text
+      verbatim from NOTICE.md, then close the deferral note in
+      CONTRIBUTING.md and the Phase 0 entry above.
+- [ ] **Ingestion web UI (FR-21, FR-22, FR-23).** The ingestion pipeline is
+      API only (`app/ingestion.py`); no client page calls it, so FR-22's
+      "user review and edit before the module activates" has no user surface.
+      This blocks Phase 6's acceptance test. Add an ingestion route: upload
+      (extract-text), draft extraction (extract-module), an editable review
+      form (Zod for form UX only per ADR-0006, the server schema stays the
+      validator), then finalize and save with `source_text` so the module
+      joins the retrieval corpus.
+- [ ] **Multi-PC UI (FR-25, FR-35).** Deferred from Phase 5: a character
+      switcher in `/play`, sheet views for companions (the sheet panel shows
+      only the primary PC), and surfacing `companion_roll_decision` events in
+      chat rather than only via the Journal's generic fallback.
+- [ ] **Visual verification of the Konva views (FR-29, FR-34).** The district
+      map, claim map, and relationship map have never been seen rendered (no
+      headed browser was available when they were built); only the layout
+      maths is unit tested. Run the app in a headed browser, verify all three
+      views, and fix whatever that surfaces.
+- [ ] **Container build and run verification (NFR-7).** `make build` and
+      `docker compose up` have not been executed on a machine with a
+      container runtime since the Dockerfile COPY fix (Phase 0 note). Verify
+      the image builds, serves the SPA, autoindexes the SRD
+      (`SRD_AUTOINDEX=1`), and keeps campaign data across container
+      replacement on the named volume.
+- [ ] **Compose dev and Ollama profiles (ADR-0004).** Described in the ADR as
+      options and never built; `make dev` covers hot reload without Docker
+      today. Either build the profiles or amend ADR-0004 to record the
+      Makefile path as the supported dev loop.
+
 ## Phase 7: Multiplayer
 
 - [ ] Decide transport (D5); record an ADR

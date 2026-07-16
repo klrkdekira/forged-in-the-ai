@@ -6,6 +6,7 @@ from pathlib import Path
 import click
 
 from ai.tools import TOOL_SPECS, GameState, ToolExecutor
+from app.packs import load_entanglements
 from app.settings import get_settings
 from engine.character import Character
 from engine.crew import Crew
@@ -50,7 +51,11 @@ def dev_session(character: str | None, crew: str | None, seed: int | None) -> No
         crew=_load_or_create_crew(crew),
         session=Session(),
     )
-    executor = ToolExecutor(rng=random.Random(seed), clock=lambda: datetime.now(UTC))
+    executor = ToolExecutor(
+        rng=random.Random(seed),
+        clock=lambda: datetime.now(UTC),
+        entanglements=load_entanglements(get_settings()),
+    )
 
     while True:
         line = click.prompt(">", prompt_suffix=" ", default="", show_default=False).strip()

@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 from ai.replay import replay_state
 from ai.tools import GameState
-from engine.character import Character
+from engine.character import Action, Attribute, Character
 from engine.crew import Crew
 from engine.session import CampaignPhase, Session
 
@@ -205,6 +205,123 @@ def test_replay_state_folds_relationship_updates_and_accumulates_history():
     assert edge.kind.value == "rival"
     assert edge.status == "betrayed the crew"
     assert edge.history == [1, 2]
+
+
+def test_replay_state_folds_crew_heat_and_payoff():
+    base = _base_state()
+    log = base.log
+    log = log.append("crew", "The Fifth Foxglove", "heat_added", {"amount": 4}, AT)
+    log = log.append(
+        "crew",
+        "The Fifth Foxglove",
+        "payoff",
+        {"rep": 3, "coin": 4, "target_tier": 2, "quiet": False},
+        AT,
+    )
+
+    replayed = replay_state(base, log.events)
+
+    assert replayed.crew.heat.heat == 4
+    assert replayed.crew.rep.rep == 3
+    assert replayed.crew.coin == 4
+
+
+def test_replay_state_folds_flashbacks():
+    base = _base_state()
+    log = base.log.append(
+        "character", "pc-1", "flashback_taken", {"stress_cost": 2, "triggered_trauma": False}, AT
+    )
+
+    replayed = replay_state(base, log.events)
+
+    assert replayed.character.stress.marked == 2
+
+
+def test_replay_state_folds_action_and_ability_advancement():
+    base = _base_state().model_copy(
+        update={
+            "characters": {
+                "pc-1": Character(
+                    name="Scoundrel",
+                    playbook="Cutter",
+                    action_ratings={Action.PROWL: 1},
+                    attribute_xp={Attribute.PROWESS: {"marked": 6, "segments": 6}},
+                    playbook_xp={"marked": 8, "segments": 8},
+                )
+            }
+        }
+    )
+    log = base.log
+    log = log.append(
+        "character",
+        "pc-1",
+        "action_advanced",
+        {"action": "prowl", "new_rating": 2, "cap": 3},
+        AT,
+    )
+    log = log.append("character", "pc-1", "special_ability_advanced", {"ability_id": "veteran"}, AT)
+
+    replayed = replay_state(base, log.events)
+
+    assert replayed.character.action_ratings[Action.PROWL] == 2
+    assert "veteran" in replayed.character.special_ability_ids
+
+
+def test_replay_state_folds_crew_advancement():
+    base = _base_state().model_copy(
+        update={
+            "crew": Crew(
+                name="The Fifth Foxglove",
+                crew_type="Assassins",
+                xp={"marked": 8, "segments": 8},
+            )
+        }
+    )
+    log = base.log
+    log = log.append(
+        "crew", "The Fifth Foxglove", "crew_special_ability_advanced", {"ability_id": "vice"}, AT
+    )
+
+    replayed = replay_state(base, log.events)
+
+    assert "vice" in replayed.crew.special_ability_ids
+
+
+def test_replay_state_folds_crew_upgrades():
+    base = _base_state().model_copy(
+        update={
+            "crew": Crew(
+                name="The Fifth Foxglove",
+                crew_type="Assassins",
+                xp={"marked": 8, "segments": 8},
+            )
+        }
+    )
+    log = base.log.append(
+        "crew",
+        "The Fifth Foxglove",
+        "crew_upgrades_advanced",
+        {"upgrade_ids": ["quality", "quality"]},
+        AT,
+    )
+
+    replayed = replay_state(base, log.events)
+
+    assert replayed.crew.upgrade_ids == ["quality", "quality"]
+
+
+def test_replay_state_skips_downtime_and_score_roll_records():
+    # engagement_roll/entanglement_roll/asset_acquired/downtime_activity_rolled/
+    # vice_indulged are pure records - only the log should reflect them.
+    base = _base_state()
+    log = base.log.append(
+        "score", "current", "engagement_roll", {"band": "6", "position": "controlled"}, AT
+    )
+
+    replayed = replay_state(base, log.events)
+
+    assert replayed.crew == base.crew
+    assert len(replayed.log.events) == 1
 
 
 def test_replay_state_reproduces_a_truncated_prefix_of_the_log():

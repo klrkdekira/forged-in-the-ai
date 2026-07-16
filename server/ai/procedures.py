@@ -73,21 +73,53 @@ SCORE_LOOP_PROCEDURE = ProcedureDoc(
         "Payoff",
         "Heat",
         "Entanglements",
-        "Downtime activities",
     ],
     text=(
-        "Free play -> plan and detail chosen -> engagement roll (a "
-        "fortune roll, 1d for luck plus/minus advantages) sets the "
-        "starting position: critical carries past the first obstacle, 6 "
-        "controlled, 4/5 risky, 1-3 desperate -> the score plays out -> "
-        "downtime: payoff (2 rep, +-1 per Tier difference from the "
-        "target), heat (from the operation's nature), an entanglement "
-        "roll (heat band picks the column, wanted-level dice pick the "
-        "row), then each PC's two downtime activities."
+        "Free play -> plan and detail chosen -> transition_phase to score, "
+        "then roll_engagement (a fortune roll, 1d for luck plus/minus "
+        "advantages) sets the starting position: critical carries past "
+        "the first obstacle, 6 controlled, 4/5 risky, 1-3 desperate -> "
+        "the score plays out -> transition_phase to downtime: "
+        "resolve_payoff (2 rep, +-1 per Tier difference from the target, "
+        "zero if kept quiet, plus whatever coin the score earned), "
+        "add_crew_heat (from the operation's nature), then "
+        "roll_entanglement (heat band picks the column, wanted-level "
+        "dice pick the row) - call the matching tool for each step "
+        "rather than only narrating it, so the sheet and journal reflect "
+        "what happened."
     ),
 )
 
-PROCEDURES = [GM_ROLE, ACTION_ROLL_PROCEDURE, SCORE_LOOP_PROCEDURE]
+DOWNTIME_ACTIVITIES_PROCEDURE = ProcedureDoc(
+    title="Downtime activities",
+    srd_sections=[
+        "NPC & faction downtime",
+        "DOWNTIME ACTIVITIES SUMMARY",
+        "ACQUIRE ASSET",
+        "LONG-TERM PROJECT",
+        "RECOVER",
+        "REDUCE HEAT",
+        "TRAIN",
+        "VICE",
+    ],
+    text=(
+        "During downtime, each PC takes up to two activities (+1d if a "
+        "friend or contact helps). Call the matching tool for whichever "
+        "they choose: acquire_asset (rolls the crew's Tier for quality), "
+        "recover (rolls the PC's action, ticks their healing clock, "
+        "heals a harm level once it fills), reduce_heat (rolls the "
+        "crew's action, clears that much heat), long_term_project "
+        "(rolls the action, ticks that clock), mark_xp (train - 1xp in "
+        "an attribute or the playbook, once per track per downtime), or "
+        "indulge_vice (clears stress up to the roll, flags an "
+        "overindulgence you narrate a consequence for). Also advance "
+        "faction project clocks and give each faction you're interested "
+        "in a downtime maneuver of your own choosing - a fortune roll on "
+        "their Tier if you're unsure how far to move a clock."
+    ),
+)
+
+PROCEDURES = [GM_ROLE, ACTION_ROLL_PROCEDURE, SCORE_LOOP_PROCEDURE, DOWNTIME_ACTIVITIES_PROCEDURE]
 
 # FR-17/FR-36: not SRD content - generic tabletop safety tools plus
 # original setting generation, same reasoning as engine/campaign.py's

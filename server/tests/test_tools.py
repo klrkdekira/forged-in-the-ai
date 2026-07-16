@@ -5,19 +5,33 @@ import pytest
 
 from ai.tools import (
     SHEET_OPERATIONS,
+    AcquireAssetArgs,
     AddCanonFactArgs,
     AddCanonLocationArgs,
+    AddCrewHeatArgs,
     AdjustCoinArgs,
+    AdvanceActionRatingArgs,
+    AdvanceCrewSpecialAbilityArgs,
+    AdvanceCrewUpgradesArgs,
+    AdvanceSpecialAbilityArgs,
     ApplyHarmArgs,
     CreateCharacterArgs,
     CreateClockArgs,
     CreateNpcArgs,
+    FlashbackArgs,
     GameState,
     HealCharacterArgs,
+    IndulgeViceArgs,
     InvokeXCardArgs,
+    LongTermProjectArgs,
     MarkStressArgs,
     MarkXpArgs,
+    RecoverArgs,
+    ReduceHeatArgs,
+    ResolvePayoffArgs,
     RollActionArgs,
+    RollEngagementArgs,
+    RollEntanglementArgs,
     RollFortuneArgs,
     RollResistanceArgs,
     SetCampaignCanonArgs,
@@ -35,6 +49,7 @@ from engine.character import Action, Attribute, Character, CharacterItem
 from engine.clocks import ClockKind
 from engine.crew import Crew
 from engine.errors import EngineError
+from engine.packs import EntanglementEntry
 from engine.relationships import RelationshipKind
 from engine.rolls import Effect, Position
 from engine.session import CampaignPhase, Session
@@ -55,8 +70,23 @@ def _state(character: Character | None = None) -> GameState:
     )
 
 
-def _executor(seed: int = 1) -> ToolExecutor:
-    return ToolExecutor(rng=random.Random(seed), clock=lambda: AT)
+def _executor(seed: int = 1, entanglements: list[EntanglementEntry] | None = None) -> ToolExecutor:
+    return ToolExecutor(
+        rng=random.Random(seed), clock=lambda: AT, entanglements=entanglements or []
+    )
+
+
+_ENTANGLEMENTS = [
+    EntanglementEntry(heat_band="0-3", roll_result="1-3", entanglement="Gang Trouble"),
+    EntanglementEntry(heat_band="0-3", roll_result="4/5", entanglement="Rivals"),
+    EntanglementEntry(heat_band="0-3", roll_result="6", entanglement="Rough Trade"),
+    EntanglementEntry(heat_band="4-5", roll_result="1-3", entanglement="Snitch"),
+    EntanglementEntry(heat_band="4-5", roll_result="4/5", entanglement="Extradition"),
+    EntanglementEntry(heat_band="4-5", roll_result="6", entanglement="Extortion"),
+    EntanglementEntry(heat_band="6", roll_result="1-3", entanglement="Warrant"),
+    EntanglementEntry(heat_band="6", roll_result="4/5", entanglement="Crackdown"),
+    EntanglementEntry(heat_band="6", roll_result="6", entanglement="Unquiet Dead"),
+]
 
 
 def test_tool_definitions_cover_every_registered_tool():
@@ -82,6 +112,21 @@ def test_tool_definitions_cover_every_registered_tool():
         "invoke_x_card",
         "set_session_zero_config",
         "set_campaign_canon",
+        "roll_engagement",
+        "resolve_payoff",
+        "add_crew_heat",
+        "roll_entanglement",
+        "acquire_asset",
+        "indulge_vice",
+        "reduce_heat",
+        "recover",
+        "long_term_project",
+        "flashback",
+        "mark_xp",
+        "advance_action_rating",
+        "advance_special_ability",
+        "advance_crew_special_ability",
+        "advance_crew_upgrades",
     }
     assert all("parameters" in d["function"] for d in definitions)
 
@@ -416,17 +461,18 @@ def test_tool_calls_are_deterministic_for_the_same_seed():
 def test_sheet_operations_are_never_exposed_to_the_llm():
     # FR-28/FR-16: the sheet panel's own engine-operation surface is
     # distinct from the LLM's tool surface (CLAUDE.md: "the engine
-    # adjudicates, the model narrates").
+    # adjudicates, the model narrates"), except mark_xp - the GM also
+    # needs it for the TRAIN downtime activity.
     tool_names = {d["function"]["name"] for d in tool_definitions()}
 
-    assert "mark_xp" not in tool_names
     assert "adjust_coin" not in tool_names
     assert "set_item_carried" not in tool_names
     assert "heal_character" not in tool_names
-    # mark_stress/apply_harm/tick_clock are shared with TOOL_SPECS.
+    # mark_stress/apply_harm/tick_clock/mark_xp are shared with TOOL_SPECS.
     assert SHEET_OPERATIONS["mark_stress"] is MarkStressArgs
     assert SHEET_OPERATIONS["apply_harm"] is ApplyHarmArgs
     assert SHEET_OPERATIONS["tick_clock"] is TickClockArgs
+    assert SHEET_OPERATIONS["mark_xp"] is MarkXpArgs
 
 
 def test_heal_character_heals_one_level_and_logs_it():
@@ -480,3 +526,253 @@ def test_set_item_carried_toggles_and_recomputes_load():
 
     assert result.result["load"] == 1
     assert result.state.log.events[-1].event_type == "item_carried_set"
+
+
+def _state_with_crew_tier(tier: int) -> GameState:
+    return _state().model_copy(
+        update={"crew": Crew(name="Test Crew", crew_type="Test Type", tier=tier)}
+    )
+
+
+def test_roll_engagement_sets_a_starting_position():
+    # SRD: "Engagement Roll" - a fortune roll setting the crew's position.
+    result = _executor().roll_engagement(_state(), RollEngagementArgs(pool_size=1))
+
+    assert result.state.log.events[-1].event_type == "engagement_roll"
+    assert result.state.log.events[-1].entity_type == "score"
+    assert "position" in result.result
+
+
+def test_resolve_payoff_applies_rep_and_coin_to_the_crew():
+    # SRD: "Payoff" - 2 rep, +-1 per Tier difference from the target.
+    state = _state_with_crew_tier(1)
+
+    result = _executor().resolve_payoff(state, ResolvePayoffArgs(target_tier=2, coin=4))
+
+    assert result.result["rep"] == 3
+    assert result.state.crew.rep.rep == 3
+    assert result.state.crew.coin == 4
+    assert result.state.log.events[-1].event_type == "payoff"
+
+
+def test_resolve_payoff_is_zero_rep_when_kept_quiet():
+    state = _state_with_crew_tier(1)
+
+    result = _executor().resolve_payoff(state, ResolvePayoffArgs(target_tier=2, coin=0, quiet=True))
+
+    assert result.result["rep"] == 0
+    assert result.state.crew.rep.rep == 0
+
+
+def test_add_crew_heat_increases_heat_and_reports_wanted_level():
+    state = _state_with_crew_tier(1)
+
+    result = _executor().add_crew_heat(state, AddCrewHeatArgs(amount=9))
+
+    assert result.result["wanted_level_increased"]
+    assert result.state.log.events[-1].event_type == "heat_added"
+
+
+def test_add_crew_heat_can_clear_heat():
+    state = _state_with_crew_tier(1).model_copy(
+        update={"crew": Crew(name="Test Crew", crew_type="Test Type", tier=1, heat={"heat": 3})}
+    )
+
+    result = _executor().add_crew_heat(state, AddCrewHeatArgs(amount=-2))
+
+    assert result.state.crew.heat.heat == 1
+
+
+def test_roll_entanglement_refuses_without_a_table_loaded():
+    with pytest.raises(EngineError, match="no entanglement table"):
+        _executor().roll_entanglement(_state_with_crew_tier(1), RollEntanglementArgs())
+
+
+def test_roll_entanglement_uses_the_crews_wanted_level_and_heat():
+    # SRD: "Entanglements" - heat band picks the column, wanted-level dice
+    # pick the row.
+    state = _state_with_crew_tier(1).model_copy(
+        update={
+            "crew": Crew(
+                name="Test Crew", crew_type="Test Type", tier=1, wanted_level=1, heat={"heat": 4}
+            )
+        }
+    )
+
+    result = _executor(entanglements=_ENTANGLEMENTS).roll_entanglement(
+        state, RollEntanglementArgs()
+    )
+
+    assert result.state.log.events[-1].event_type == "entanglement_roll"
+    assert result.result["heat_band"] == "4-5"
+
+
+def test_acquire_asset_rolls_the_crews_tier():
+    result = _executor().acquire_asset(_state_with_crew_tier(2), AcquireAssetArgs())
+
+    assert result.state.log.events[-1].event_type == "asset_acquired"
+    assert "quality" in result.result
+
+
+def test_indulge_vice_clears_stress_and_logs_it():
+    character = Character(
+        name="Test",
+        playbook="Test Playbook",
+        action_ratings={Action.PROWL: 2},
+        stress={"marked": 2},
+    )
+
+    result = _executor().indulge_vice(_state(character), IndulgeViceArgs())
+
+    assert result.state.log.events[-2].event_type == "vice_indulged"
+    assert result.state.log.events[-1].event_type == "stress_marked"
+    assert result.state.character.stress.marked <= 2
+
+
+def test_reduce_heat_clears_heat_by_the_downtime_ticks_table():
+    state = _state_with_crew_tier(1).model_copy(
+        update={"crew": Crew(name="Test Crew", crew_type="Test Type", tier=1, heat={"heat": 5})}
+    )
+
+    result = _executor().reduce_heat(state, ReduceHeatArgs(pool_size=2))
+
+    assert result.state.log.events[-2].event_type == "downtime_activity_rolled"
+    assert result.state.log.events[-1].event_type == "heat_added"
+    assert result.state.crew.heat.heat == max(0, 5 - result.result["heat_cleared"])
+
+
+def test_recover_ticks_the_healing_clock():
+    executor = _executor()
+    state = executor.create_clock(
+        _state(),
+        CreateClockArgs(clock_id="heal-1", name="Healing", kind=ClockKind.HEALING, segments=8),
+    ).state
+
+    result = executor.recover(state, RecoverArgs(clock_id="heal-1", pool_size=2))
+
+    assert result.state.log.events[-2].event_type == "downtime_activity_rolled"
+    assert result.state.log.events[-1].event_type == "clock_ticked"
+    assert result.state.clocks["heal-1"].filled == result.result["ticks"]
+    assert not result.result["healed"]
+
+
+def test_recover_heals_once_the_clock_fills():
+    character = Character(
+        name="Test",
+        playbook="Test Playbook",
+        harm={"entries": [{"level": 2, "name": "Twisted Ankle"}]},
+    )
+    executor = _executor(seed=9)
+    state = executor.create_clock(
+        _state(character),
+        CreateClockArgs(clock_id="heal-1", name="Healing", kind=ClockKind.HEALING, segments=1),
+    ).state
+
+    result = executor.recover(state, RecoverArgs(clock_id="heal-1", pool_size=1))
+
+    assert result.result["healed"]
+    assert result.state.character.harm.entries[0].level == 1
+
+
+def test_recover_refuses_an_unknown_clock():
+    with pytest.raises(EngineError, match="no clock"):
+        _executor().recover(_state(), RecoverArgs(clock_id="nope", pool_size=1))
+
+
+def test_long_term_project_ticks_the_projects_clock():
+    executor = _executor()
+    state = executor.create_clock(
+        _state(),
+        CreateClockArgs(
+            clock_id="vault", name="Crack the Vault", kind=ClockKind.LONG_TERM_PROJECT, segments=8
+        ),
+    ).state
+
+    result = executor.long_term_project(state, LongTermProjectArgs(clock_id="vault", pool_size=2))
+
+    assert result.state.log.events[-1].event_type == "clock_ticked"
+    assert result.state.clocks["vault"].filled == result.result["ticks"]
+
+
+def test_flashback_marks_stress_at_the_gm_set_cost():
+    # SRD: "Flashbacks" - the GM sets the stress cost.
+    result = _executor().flashback(_state(), FlashbackArgs(stress_cost=2))
+
+    assert result.state.character.stress.marked == 2
+    assert result.state.log.events[-1].event_type == "flashback_taken"
+
+
+def test_advance_action_rating_requires_a_full_xp_track():
+    from engine.advancement import AdvancementError
+
+    with pytest.raises(AdvancementError, match="not full"):
+        _executor().advance_action_rating(_state(), AdvanceActionRatingArgs(action=Action.PROWL))
+
+
+def test_advance_action_rating_adds_a_dot_once_the_track_is_full():
+    character = Character(
+        name="Test",
+        playbook="Test Playbook",
+        action_ratings={Action.PROWL: 1},
+        attribute_xp={Attribute.PROWESS: {"marked": 6, "segments": 6}},
+    )
+
+    result = _executor().advance_action_rating(
+        _state(character), AdvanceActionRatingArgs(action=Action.PROWL)
+    )
+
+    assert result.state.character.action_ratings[Action.PROWL] == 2
+    assert result.state.log.events[-1].event_type == "action_advanced"
+    assert result.state.log.events[-1].payload["cap"] == 3
+
+
+def test_advance_special_ability_requires_a_full_playbook_track():
+    from engine.advancement import AdvancementError
+
+    with pytest.raises(AdvancementError, match="not full"):
+        _executor().advance_special_ability(
+            _state(), AdvanceSpecialAbilityArgs(ability_id="veteran")
+        )
+
+
+def test_advance_special_ability_grants_it_once_full():
+    character = Character(
+        name="Test", playbook="Test Playbook", playbook_xp={"marked": 8, "segments": 8}
+    )
+
+    result = _executor().advance_special_ability(
+        _state(character), AdvanceSpecialAbilityArgs(ability_id="veteran")
+    )
+
+    assert "veteran" in result.state.character.special_ability_ids
+    assert result.state.log.events[-1].event_type == "special_ability_advanced"
+
+
+def test_advance_crew_special_ability_grants_it_once_full():
+    state = _state().model_copy(
+        update={
+            "crew": Crew(name="Test Crew", crew_type="Test Type", xp={"marked": 8, "segments": 8})
+        }
+    )
+
+    result = _executor().advance_crew_special_ability(
+        state, AdvanceCrewSpecialAbilityArgs(ability_id="crew-veteran")
+    )
+
+    assert "crew-veteran" in result.state.crew.special_ability_ids
+    assert result.state.log.events[-1].event_type == "crew_special_ability_advanced"
+
+
+def test_advance_crew_upgrades_marks_two_boxes():
+    state = _state().model_copy(
+        update={
+            "crew": Crew(name="Test Crew", crew_type="Test Type", xp={"marked": 8, "segments": 8})
+        }
+    )
+
+    result = _executor().advance_crew_upgrades(
+        state, AdvanceCrewUpgradesArgs(upgrade_ids=("quality", "quality"))
+    )
+
+    assert result.state.crew.upgrade_ids == ["quality", "quality"]
+    assert result.state.log.events[-1].event_type == "crew_upgrades_advanced"

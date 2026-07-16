@@ -1,12 +1,20 @@
 from ai.tools import GameState
+from engine.advancement import (
+    advance_action_rating,
+    advance_crew_special_ability,
+    advance_crew_upgrades,
+    advance_special_ability,
+)
 from engine.campaign import CampaignCanon, SessionZeroConfig
-from engine.character import Attribute, Character
+from engine.character import Action, Attribute, Character
 from engine.clocks import Clock, ClockKind
 from engine.controller import Controller
 from engine.entities import Npc
 from engine.events import Event, EventLog
 from engine.operations import (
+    add_heat,
     adjust_coin,
+    flashback,
     heal_character,
     mark_attribute_xp,
     mark_harm,
@@ -27,9 +35,10 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
     disagree about what an event means (NFR-1).
 
     Event types with no state to fold - action_roll, fortune_roll,
-    resistance_roll (pure dice records), player_message/narration (FR-31's
-    turn log), x_card_invoked (a safety-tool note, not a mutation) - are
-    silently skipped."""
+    resistance_roll, engagement_roll, entanglement_roll, asset_acquired,
+    downtime_activity_rolled, vice_indulged (pure dice/roll records),
+    player_message/narration (FR-31's turn log), x_card_invoked (a
+    safety-tool note, not a mutation) - are silently skipped."""
     characters = dict(base.characters)
     controllers = dict(base.controllers)
     crew = base.crew
@@ -119,6 +128,31 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
             relationships[event.entity_id] = current.updated(
                 RelationshipKind(payload["kind"]), payload["status"], event.sequence
             )
+        elif event.event_type == "heat_added":
+            crew = add_heat(crew, payload["amount"]).crew
+        elif event.event_type == "payoff":
+            crew = crew.model_copy(
+                update={
+                    "rep": crew.rep.add_rep(payload["rep"]),
+                    "coin": crew.coin + payload["coin"],
+                }
+            )
+        elif event.event_type == "flashback_taken":
+            characters[event.entity_id] = flashback(
+                characters[event.entity_id], payload["stress_cost"]
+            ).character
+        elif event.event_type == "action_advanced":
+            characters[event.entity_id] = advance_action_rating(
+                characters[event.entity_id], Action(payload["action"]), payload["cap"]
+            )
+        elif event.event_type == "special_ability_advanced":
+            characters[event.entity_id] = advance_special_ability(
+                characters[event.entity_id], payload["ability_id"]
+            )
+        elif event.event_type == "crew_special_ability_advanced":
+            crew = advance_crew_special_ability(crew, payload["ability_id"])
+        elif event.event_type == "crew_upgrades_advanced":
+            crew = advance_crew_upgrades(crew, tuple(payload["upgrade_ids"]))
 
     return base.model_copy(
         update={

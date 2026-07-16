@@ -3,17 +3,33 @@ import { useMemo, useState } from 'react'
 import type { JournalEntry } from '@/hooks/use-session-socket'
 import { summarize } from '@/lib/journal-summarize'
 
-// FR-32: "type (narration / rolls / consequences / downtime)". Downtime
-// activities have no GM tool wired up yet (TODO.md), so that bucket is
-// reserved but always empty for now - the filter option still exists,
-// ready for when one lands. "Other" isn't in the spec's four names, but a
-// filterable journal needs an honest catch-all rather than silently
-// hiding entries no one category fits (npc/canon/phase/safety-tool notes).
+// FR-32: "type (narration / rolls / consequences / downtime)". "Other"
+// isn't in the spec's four names, but a filterable journal needs an
+// honest catch-all rather than silently hiding entries no one category
+// fits (npc/canon/phase/safety-tool notes).
 const TYPE_CATEGORIES = {
   narration: ['player_message', 'narration'],
-  rolls: ['action_roll', 'fortune_roll', 'resistance_roll'],
-  consequences: ['stress_marked', 'harm_marked', 'harm_healed', 'faction_status_changed', 'clock_ticked'],
-  downtime: [] as string[],
+  rolls: ['action_roll', 'fortune_roll', 'resistance_roll', 'engagement_roll'],
+  consequences: [
+    'stress_marked',
+    'harm_marked',
+    'harm_healed',
+    'faction_status_changed',
+    'clock_ticked',
+    'flashback_taken',
+    'action_advanced',
+    'special_ability_advanced',
+    'crew_special_ability_advanced',
+    'crew_upgrades_advanced',
+  ],
+  downtime: [
+    'downtime_activity_rolled',
+    'asset_acquired',
+    'vice_indulged',
+    'payoff',
+    'heat_added',
+    'entanglement_roll',
+  ],
 } as const
 type TypeCategory = keyof typeof TYPE_CATEGORIES | 'other'
 

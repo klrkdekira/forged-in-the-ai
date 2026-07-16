@@ -1,20 +1,30 @@
 import random
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
+from engine.advancement import (
+    POST_CREATION_ACTION_CAP,
+    advance_action_rating,
+    advance_crew_special_ability,
+    advance_crew_upgrades,
+    advance_special_ability,
+)
 from engine.campaign import CampaignCanon, SessionZeroConfig
 from engine.character import Action, Attribute, Character
 from engine.clocks import Clock, ClockKind
 from engine.controller import Controller
 from engine.crew import Crew
+from engine.downtime import acquire_asset_roll, indulge_vice_roll
 from engine.entities import Npc
 from engine.errors import EngineError
 from engine.events import EventLog
 from engine.operations import (
+    add_heat,
     adjust_coin,
+    flashback,
     heal_character,
     mark_attribute_xp,
     mark_harm,
@@ -22,8 +32,10 @@ from engine.operations import (
     mark_stress,
     set_item_carried,
 )
+from engine.packs import EntanglementEntry
 from engine.relationships import FactionStatus, Relationship, RelationshipKind
 from engine.rolls import Effect, Position, action_roll, fortune_roll, resistance_roll
+from engine.score import downtime_ticks, engagement_roll, entanglement_roll, payoff_rep
 from engine.session import CampaignPhase, Session
 
 _DEFAULT_CHARACTER_ID = "pc-1"
@@ -260,6 +272,95 @@ class SetItemCarriedArgs(BaseModel):
     )
 
 
+class RollEngagementArgs(BaseModel):
+    pool_size: int = Field(
+        ...,
+        description="Fortune-roll pool: 1d for sheer luck, +-1d per major advantage/disadvantage",
+    )
+
+
+class ResolvePayoffArgs(BaseModel):
+    target_tier: int = Field(..., description="The target's Tier, for the rep formula")
+    coin: int = Field(0, description="Coin the crew earned from the score")
+    quiet: bool = Field(
+        False, description="No rep is gained if the operation was kept completely quiet"
+    )
+
+
+class AddCrewHeatArgs(BaseModel):
+    amount: int = Field(
+        ..., description="Positive to add heat, negative to clear it (e.g. from Reduce Heat)"
+    )
+
+
+class RollEntanglementArgs(BaseModel):
+    """SRD: "Entanglements" - no fields; the roll is entirely determined by
+    the crew's current wanted level and heat."""
+
+
+class AcquireAssetArgs(BaseModel):
+    """SRD: "Acquire Asset" - no fields; rolls the crew's Tier."""
+
+
+class IndulgeViceArgs(BaseModel):
+    character_id: str | None = Field(
+        None, description="Which PC indulges; only needed once more than one PC exists"
+    )
+
+
+class ReduceHeatArgs(BaseModel):
+    pool_size: int = Field(..., description="Dice pool for the action rolled to reduce heat")
+
+
+class RecoverArgs(BaseModel):
+    clock_id: str = Field(..., description="The character's healing clock")
+    pool_size: int = Field(..., description="Dice pool for the action rolled to get treatment")
+    character_id: str | None = Field(
+        None, description="Which PC recovers; only needed once more than one PC exists"
+    )
+
+
+class LongTermProjectArgs(BaseModel):
+    clock_id: str = Field(..., description="The long-term project's clock")
+    pool_size: int = Field(..., description="Dice pool for the action rolled to work the project")
+
+
+class FlashbackArgs(BaseModel):
+    stress_cost: int = Field(
+        ..., description="0, 1, 2, or more - the GM's judged cost for this flashback"
+    )
+    character_id: str | None = Field(
+        None, description="Which PC flashes back; only needed once more than one PC exists"
+    )
+
+
+class AdvanceActionRatingArgs(BaseModel):
+    action: Action
+    character_id: str | None = Field(
+        None, description="Which PC advances; only needed once more than one PC exists"
+    )
+    cap: int = Field(
+        POST_CREATION_ACTION_CAP, description="Action rating cap - 4 once the crew has Mastery"
+    )
+
+
+class AdvanceSpecialAbilityArgs(BaseModel):
+    ability_id: str
+    character_id: str | None = Field(
+        None, description="Which PC advances; only needed once more than one PC exists"
+    )
+
+
+class AdvanceCrewSpecialAbilityArgs(BaseModel):
+    ability_id: str
+
+
+class AdvanceCrewUpgradesArgs(BaseModel):
+    upgrade_ids: tuple[str, str] = Field(
+        ..., description="Two crew upgrade boxes to mark - the crew-xp alternative to a new ability"
+    )
+
+
 class ToolExecutor:
     """Executes GM-agent tool calls against a `GameState` (FR-12): the AI
     never edits state directly, only through these methods. Holds the
@@ -267,9 +368,15 @@ class ToolExecutor:
     "no datetime.now()/random() inside deterministic logic" rule the engine
     follows (CLAUDE.md), applied one layer up."""
 
-    def __init__(self, rng: random.Random, clock: Callable[[], datetime]):
+    def __init__(
+        self,
+        rng: random.Random,
+        clock: Callable[[], datetime],
+        entanglements: Sequence[EntanglementEntry] = (),
+    ):
         self._rng = rng
         self._clock = clock
+        self._entanglements = entanglements
 
     def log_event(
         self, state: GameState, entity_type: str, entity_id: str, event_type: str, payload: dict
@@ -512,6 +619,261 @@ class ToolExecutor:
             result={"load": character.load},
         )
 
+    def roll_engagement(self, state: GameState, args: RollEngagementArgs) -> ToolCallResult:
+        """SRD: "Engagement Roll" - sets the crew's starting position for the score."""
+        roll = engagement_roll(args.pool_size, self._rng)
+        log = state.log.append(
+            "score", "current", "engagement_roll", roll.model_dump(mode="json"), self._clock()
+        )
+        return ToolCallResult(
+            state=state.model_copy(update={"log": log}), result=roll.model_dump(mode="json")
+        )
+
+    def resolve_payoff(self, state: GameState, args: ResolvePayoffArgs) -> ToolCallResult:
+        """SRD: "Payoff" - rep (+-1 per Tier difference from the target, zero if kept quiet)
+        plus whatever coin the score earned."""
+        rep = payoff_rep(state.crew.tier, args.target_tier, args.quiet)
+        crew = state.crew.model_copy(
+            update={"rep": state.crew.rep.add_rep(rep), "coin": state.crew.coin + args.coin}
+        )
+        log = state.log.append(
+            "crew",
+            crew.name,
+            "payoff",
+            {"rep": rep, "coin": args.coin, "target_tier": args.target_tier, "quiet": args.quiet},
+            self._clock(),
+        )
+        return ToolCallResult(
+            state=state.model_copy(update={"crew": crew, "log": log}),
+            result={"rep": rep, "coin": args.coin},
+        )
+
+    def add_crew_heat(self, state: GameState, args: AddCrewHeatArgs) -> ToolCallResult:
+        """SRD: "Heat" - heat 0-9; reaching 9 gains a wanted level and rolls the excess over."""
+        mutation = add_heat(state.crew, args.amount)
+        log = state.log.append(
+            "crew", mutation.crew.name, "heat_added", {"amount": args.amount}, self._clock()
+        )
+        return ToolCallResult(
+            state=state.model_copy(update={"crew": mutation.crew, "log": log}),
+            result={
+                "heat": mutation.crew.heat.heat,
+                "wanted_level": mutation.crew.wanted_level,
+                "wanted_level_increased": mutation.wanted_level_increased,
+            },
+        )
+
+    def roll_entanglement(self, state: GameState, args: RollEntanglementArgs) -> ToolCallResult:
+        """SRD: "Entanglements" - heat band picks the column, wanted-level dice pick the row."""
+        if not self._entanglements:
+            raise EngineError("no entanglement table loaded for this session")
+        roll = entanglement_roll(
+            state.crew.wanted_level, state.crew.heat.heat, self._entanglements, self._rng
+        )
+        log = state.log.append(
+            "crew",
+            state.crew.name,
+            "entanglement_roll",
+            roll.model_dump(mode="json"),
+            self._clock(),
+        )
+        return ToolCallResult(
+            state=state.model_copy(update={"log": log}), result=roll.model_dump(mode="json")
+        )
+
+    def acquire_asset(self, state: GameState, args: AcquireAssetArgs) -> ToolCallResult:
+        """SRD: "Acquire Asset" - roll the crew's Tier; the result sets the asset's quality."""
+        roll = acquire_asset_roll(state.crew.tier, self._rng)
+        log = state.log.append(
+            "crew", state.crew.name, "asset_acquired", roll.model_dump(mode="json"), self._clock()
+        )
+        return ToolCallResult(
+            state=state.model_copy(update={"log": log}), result=roll.model_dump(mode="json")
+        )
+
+    def indulge_vice(self, state: GameState, args: IndulgeViceArgs) -> ToolCallResult:
+        """SRD: "Vice" - clear stress equal to the highest die of a pool sized by the
+        character's lowest attribute; clearing more than was marked overindulges."""
+        character_id = self.resolve_character_id(state, args.character_id)
+        character = state.characters[character_id]
+        lowest = min(character.attribute_rating(attribute) for attribute in Attribute)
+        roll = indulge_vice_roll(lowest, character.stress.marked, self._rng)
+        log = state.log.append(
+            "character", character_id, "vice_indulged", roll.model_dump(mode="json"), self._clock()
+        )
+        state = state.model_copy(update={"log": log})
+        state = self.mark_stress(
+            state, MarkStressArgs(amount=-roll.stress_cleared, character_id=character_id)
+        ).state
+        return ToolCallResult(state=state, result=roll.model_dump(mode="json"))
+
+    def reduce_heat(self, state: GameState, args: ReduceHeatArgs) -> ToolCallResult:
+        """SRD: "Reduce Heat" - roll your action; the result clears that much heat."""
+        roll = fortune_roll(args.pool_size, self._rng)
+        ticks = downtime_ticks(roll.band)
+        log = state.log.append(
+            "crew",
+            state.crew.name,
+            "downtime_activity_rolled",
+            {
+                "activity": "reduce_heat",
+                "pool_size": args.pool_size,
+                "band": roll.band.value,
+                "amount": ticks,
+            },
+            self._clock(),
+        )
+        state = state.model_copy(update={"log": log})
+        state = self.add_crew_heat(state, AddCrewHeatArgs(amount=-ticks)).state
+        return ToolCallResult(state=state, result={"band": roll.band.value, "heat_cleared": ticks})
+
+    def recover(self, state: GameState, args: RecoverArgs) -> ToolCallResult:
+        """SRD: "Recover" - tick the healing clock like a long-term project; filling it
+        heals one level of harm."""
+        character_id = self.resolve_character_id(state, args.character_id)
+        if args.clock_id not in state.clocks:
+            raise EngineError(f"no clock {args.clock_id!r} in this session")
+        roll = fortune_roll(args.pool_size, self._rng)
+        ticks = downtime_ticks(roll.band)
+        log = state.log.append(
+            "character",
+            character_id,
+            "downtime_activity_rolled",
+            {
+                "activity": "recover",
+                "pool_size": args.pool_size,
+                "band": roll.band.value,
+                "amount": ticks,
+            },
+            self._clock(),
+        )
+        state = state.model_copy(update={"log": log})
+        state = self.tick_clock(state, TickClockArgs(clock_id=args.clock_id, amount=ticks)).state
+        healed = False
+        if state.clocks[args.clock_id].is_complete:
+            state = self.heal_character(state, HealCharacterArgs(character_id=character_id)).state
+            healed = True
+        return ToolCallResult(
+            state=state, result={"band": roll.band.value, "ticks": ticks, "healed": healed}
+        )
+
+    def long_term_project(self, state: GameState, args: LongTermProjectArgs) -> ToolCallResult:
+        """SRD: "Long-Term Project" - roll your action; the result ticks that many segments."""
+        if args.clock_id not in state.clocks:
+            raise EngineError(f"no clock {args.clock_id!r} in this session")
+        roll = fortune_roll(args.pool_size, self._rng)
+        ticks = downtime_ticks(roll.band)
+        log = state.log.append(
+            "clock",
+            args.clock_id,
+            "downtime_activity_rolled",
+            {
+                "activity": "long_term_project",
+                "pool_size": args.pool_size,
+                "band": roll.band.value,
+                "amount": ticks,
+            },
+            self._clock(),
+        )
+        state = state.model_copy(update={"log": log})
+        state = self.tick_clock(state, TickClockArgs(clock_id=args.clock_id, amount=ticks)).state
+        return ToolCallResult(state=state, result={"band": roll.band.value, "ticks": ticks})
+
+    def flashback(self, state: GameState, args: FlashbackArgs) -> ToolCallResult:
+        """SRD: "Flashbacks" - a stress cost the GM sets, paid the same way any other
+        stress is marked."""
+        character_id = self.resolve_character_id(state, args.character_id)
+        mutation = flashback(state.characters[character_id], args.stress_cost)
+        log = state.log.append(
+            "character",
+            character_id,
+            "flashback_taken",
+            {"stress_cost": args.stress_cost, "triggered_trauma": mutation.triggered_trauma},
+            self._clock(),
+        )
+        characters = {**state.characters, character_id: mutation.character}
+        return ToolCallResult(
+            state=state.model_copy(update={"characters": characters, "log": log}),
+            result={"triggered_trauma": mutation.triggered_trauma},
+        )
+
+    def advance_action_rating(
+        self, state: GameState, args: AdvanceActionRatingArgs
+    ) -> ToolCallResult:
+        """SRD: "PC Advancement" - filling an attribute's xp track adds a dot to one
+        of its actions."""
+        character_id = self.resolve_character_id(state, args.character_id)
+        character = advance_action_rating(state.characters[character_id], args.action, args.cap)
+        new_rating = character.action_ratings[args.action]
+        log = state.log.append(
+            "character",
+            character_id,
+            "action_advanced",
+            {"action": args.action.value, "new_rating": new_rating, "cap": args.cap},
+            self._clock(),
+        )
+        characters = {**state.characters, character_id: character}
+        return ToolCallResult(
+            state=state.model_copy(update={"characters": characters, "log": log}),
+            result={"action": args.action.value, "new_rating": new_rating},
+        )
+
+    def advance_special_ability(
+        self, state: GameState, args: AdvanceSpecialAbilityArgs
+    ) -> ToolCallResult:
+        """SRD: "PC Advancement" - filling the playbook xp track grants a new special
+        ability."""
+        character_id = self.resolve_character_id(state, args.character_id)
+        character = advance_special_ability(state.characters[character_id], args.ability_id)
+        log = state.log.append(
+            "character",
+            character_id,
+            "special_ability_advanced",
+            {"ability_id": args.ability_id},
+            self._clock(),
+        )
+        characters = {**state.characters, character_id: character}
+        return ToolCallResult(
+            state=state.model_copy(update={"characters": characters, "log": log}),
+            result={"ability_id": args.ability_id},
+        )
+
+    def advance_crew_special_ability(
+        self, state: GameState, args: AdvanceCrewSpecialAbilityArgs
+    ) -> ToolCallResult:
+        """SRD: "Crew Advancement" - filling the crew xp tracker grants a new special
+        ability."""
+        crew = advance_crew_special_ability(state.crew, args.ability_id)
+        log = state.log.append(
+            "crew",
+            crew.name,
+            "crew_special_ability_advanced",
+            {"ability_id": args.ability_id},
+            self._clock(),
+        )
+        return ToolCallResult(
+            state=state.model_copy(update={"crew": crew, "log": log}),
+            result={"ability_id": args.ability_id},
+        )
+
+    def advance_crew_upgrades(
+        self, state: GameState, args: AdvanceCrewUpgradesArgs
+    ) -> ToolCallResult:
+        """SRD: "Crew Advancement" - the crew-xp alternative to a new special ability:
+        mark two crew upgrade boxes."""
+        crew = advance_crew_upgrades(state.crew, args.upgrade_ids)
+        log = state.log.append(
+            "crew",
+            crew.name,
+            "crew_upgrades_advanced",
+            {"upgrade_ids": list(args.upgrade_ids)},
+            self._clock(),
+        )
+        return ToolCallResult(
+            state=state.model_copy(update={"crew": crew, "log": log}),
+            result={"upgrade_ids": list(args.upgrade_ids)},
+        )
+
     def transition_phase(self, state: GameState, args: TransitionPhaseArgs) -> ToolCallResult:
         """SRD: "The Game Structure"."""
         session = state.session.transition_to(args.phase)
@@ -718,6 +1080,45 @@ TOOL_SPECS: dict[str, tuple[type[BaseModel], str]] = {
         SetCampaignCanonArgs,
         "Session zero: create the original campaign setting (never a core-book setting).",
     ),
+    "roll_engagement": (
+        RollEngagementArgs,
+        "Roll the engagement roll that sets the crew's starting position for a score.",
+    ),
+    "resolve_payoff": (ResolvePayoffArgs, "Resolve the score's payoff: rep and coin earned."),
+    "add_crew_heat": (AddCrewHeatArgs, "Add (or clear) heat on the crew."),
+    "roll_entanglement": (
+        RollEntanglementArgs,
+        "Roll for an entanglement from the crew's current wanted level and heat.",
+    ),
+    "acquire_asset": (
+        AcquireAssetArgs,
+        "Downtime: acquire an asset, quality set by the crew's Tier.",
+    ),
+    "indulge_vice": (
+        IndulgeViceArgs,
+        "Downtime: indulge a PC's vice to clear stress, at the risk of overindulging.",
+    ),
+    "reduce_heat": (ReduceHeatArgs, "Downtime: roll to reduce the crew's heat."),
+    "recover": (RecoverArgs, "Downtime: tick a PC's healing clock; heals harm once it fills."),
+    "long_term_project": (LongTermProjectArgs, "Downtime: work a long-term project's clock."),
+    "flashback": (FlashbackArgs, "Take a flashback at a GM-set stress cost."),
+    "mark_xp": (MarkXpArgs, "Downtime: train - mark 1 xp in an attribute or the playbook."),
+    "advance_action_rating": (
+        AdvanceActionRatingArgs,
+        "Advance a PC's action rating once its attribute xp track is full.",
+    ),
+    "advance_special_ability": (
+        AdvanceSpecialAbilityArgs,
+        "Grant a PC a new special ability once their playbook xp track is full.",
+    ),
+    "advance_crew_special_ability": (
+        AdvanceCrewSpecialAbilityArgs,
+        "Grant the crew a new special ability once their xp track is full.",
+    ),
+    "advance_crew_upgrades": (
+        AdvanceCrewUpgradesArgs,
+        "Mark two crew upgrade boxes once the crew's xp track is full.",
+    ),
 }
 
 
@@ -742,9 +1143,10 @@ def tool_definitions() -> list[dict]:
 # Deliberately separate from TOOL_SPECS: CLAUDE.md's "the engine
 # adjudicates, the model narrates" splits the AI's tool surface from the
 # UI's own engine-operation calls, so none of this is in tool_definitions()
-# for the LLM to invoke on the player's behalf. mark_stress/apply_harm/
-# tick_clock are shared with TOOL_SPECS - the same ToolExecutor method,
-# reachable from either surface.
+# for the LLM to invoke on the player's behalf, except where the SRD gives
+# the GM a hand in it too: mark_stress/apply_harm/tick_clock/mark_xp (the
+# TRAIN downtime activity) are shared with TOOL_SPECS - the same
+# ToolExecutor method, reachable from either surface.
 SHEET_OPERATIONS: dict[str, type[BaseModel]] = {
     "mark_stress": MarkStressArgs,
     "apply_harm": ApplyHarmArgs,

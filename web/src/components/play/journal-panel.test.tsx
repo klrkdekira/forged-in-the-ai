@@ -39,6 +39,14 @@ const ENTRIES: JournalEntry[] = [
     payload: { amount: 5 },
     occurred_at: '2026-01-01T00:00:03Z',
   },
+  {
+    sequence: 5,
+    entity_type: 'crew',
+    entity_id: 'The Fifth Foxglove',
+    event_type: 'payoff',
+    payload: { rep: 2, coin: 4, target_tier: 1, quiet: false },
+    occurred_at: '2026-01-01T00:00:04Z',
+  },
 ]
 
 describe('JournalPanel', () => {
@@ -48,6 +56,7 @@ describe('JournalPanel', () => {
     expect(screen.getByText('Scoundrel marked 2 stress')).toBeInTheDocument()
     expect(screen.getByText('Phase → score')).toBeInTheDocument()
     expect(screen.getByText(/gained 5 coin/)).toBeInTheDocument()
+    expect(screen.getByText('Payoff: 2 rep, 4 coin')).toBeInTheDocument()
   })
 
   it('filters by type category', async () => {
@@ -57,6 +66,19 @@ describe('JournalPanel', () => {
     await user.click(screen.getByRole('button', { name: 'Narration' }))
 
     expect(screen.getByText('Player: I pick the lock.')).toBeInTheDocument()
+    expect(screen.queryByText('Scoundrel marked 2 stress')).not.toBeInTheDocument()
+  })
+
+  it('filters to the downtime category, now that it has content', async () => {
+    // FR-32/TODO.md: the downtime bucket used to be permanently empty
+    // because no GM tool produced a downtime-shaped event.
+    const user = userEvent.setup()
+    render(<JournalPanel entries={ENTRIES} campaignId="c1" onUndo={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Downtime' }))
+
+    expect(screen.getByText('Payoff: 2 rep, 4 coin')).toBeInTheDocument()
+    expect(screen.queryByText('Player: I pick the lock.')).not.toBeInTheDocument()
     expect(screen.queryByText('Scoundrel marked 2 stress')).not.toBeInTheDocument()
   })
 

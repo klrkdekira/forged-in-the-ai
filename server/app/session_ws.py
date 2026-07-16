@@ -9,6 +9,7 @@ from ai.agent import GmAgent
 from ai.llm_client import LLMClient
 from ai.tools import SHEET_OPERATIONS, GameState, ToolExecutor
 from app.llm import build_llm_client
+from app.packs import load_entanglements
 from app.settings import Settings, get_settings
 from engine.errors import EngineError
 from state.campaign_store import load_state, save_state, undo_to
@@ -82,7 +83,11 @@ async def session_ws(
     state change comes from a tool call (FR-12); the client only ever
     sends player messages."""
     await websocket.accept()
-    executor = ToolExecutor(rng=random.Random(), clock=lambda: datetime.now(UTC))
+    executor = ToolExecutor(
+        rng=random.Random(),
+        clock=lambda: datetime.now(UTC),
+        entanglements=load_entanglements(settings),
+    )
     # FR-13/FR-24: the SRD-plus-modules retrieval index lives in app.db,
     # a separate file from this campaign's own db_path (ADR-0005) - its
     # own short-lived engine/session factory, disposed with the

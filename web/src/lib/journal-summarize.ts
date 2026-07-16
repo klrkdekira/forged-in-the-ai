@@ -54,6 +54,33 @@ export function summarize(entry: JournalEntry): string {
       return `${p.subject_id} -> ${p.object_id}: ${p.kind}` + (p.status ? ` (${p.status})` : '')
     case 'x_card_invoked':
       return 'X-card invoked'
+    case 'engagement_roll':
+      return `Engagement roll (${p.band}) -> ${p.position}`
+    case 'payoff':
+      return `Payoff: ${p.rep} rep, ${p.coin} coin` + (p.quiet ? ' (quiet)' : '')
+    case 'heat_added':
+      return `${entry.entity_id} heat ${Number(p.amount) >= 0 ? '+' : ''}${p.amount}`
+    case 'entanglement_roll':
+      return `Entanglement: ${p.entanglement}`
+    case 'asset_acquired':
+      return `Asset acquired (${p.band}, quality ${p.quality})`
+    case 'vice_indulged':
+      return (
+        `${entry.entity_id} indulged their vice (cleared ${p.stress_cleared} stress)` +
+        (p.overindulged ? ', overindulged' : '')
+      )
+    case 'downtime_activity_rolled':
+      return `${entry.entity_id} rolled ${p.activity} (${p.band}, ${p.amount} ticks)`
+    case 'flashback_taken':
+      return `${entry.entity_id} took a flashback (${p.stress_cost} stress)`
+    case 'action_advanced':
+      return `${entry.entity_id} advanced ${p.action} to ${p.new_rating}`
+    case 'special_ability_advanced':
+      return `${entry.entity_id} gained special ability: ${p.ability_id}`
+    case 'crew_special_ability_advanced':
+      return `Crew gained special ability: ${p.ability_id}`
+    case 'crew_upgrades_advanced':
+      return `Crew upgrades marked: ${(p.upgrade_ids as string[]).join(', ')}`
     default:
       return `${entry.event_type} (${entry.entity_type}:${entry.entity_id})`
   }

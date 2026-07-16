@@ -12,6 +12,7 @@ from ai.tools import GameState, ToolExecutor
 from engine.character import Action, Character
 from engine.controller import Controller
 from engine.crew import Crew
+from engine.packs import EntanglementEntry
 from engine.rolls import Effect
 from engine.session import Session
 from state.db import app_db_path, make_engine, make_session_factory
@@ -49,6 +50,19 @@ def _executor() -> ToolExecutor:
     return ToolExecutor(rng=random.Random(1), clock=lambda: AT)
 
 
+_ENTANGLEMENTS = [
+    EntanglementEntry(
+        heat_band=heat_band, roll_result=roll_result, entanglement=f"{heat_band}/{roll_result}"
+    )
+    for heat_band in ("0-3", "4-5", "6")
+    for roll_result in ("1-3", "4/5", "6")
+]
+
+
+def _executor_with_entanglements() -> ToolExecutor:
+    return ToolExecutor(rng=random.Random(1), clock=lambda: AT, entanglements=_ENTANGLEMENTS)
+
+
 def _tool_call_message(name: str, arguments: dict) -> dict:
     return {
         "role": "assistant",
@@ -61,6 +75,34 @@ def _tool_call_message(name: str, arguments: dict) -> dict:
             }
         ],
     }
+
+
+def _tool_calls_message(calls: list[tuple[str, dict]]) -> dict:
+    # Several tool calls bundled into a single response - the agent's loop
+    # runs all of them within one round (one call to _client.chat), not
+    # one round each.
+    return {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "id": f"call_{i}",
+                "type": "function",
+                "function": {"name": name, "arguments": json.dumps(arguments)},
+            }
+            for i, (name, arguments) in enumerate(calls)
+        ],
+    }
+
+
+def _final_message() -> dict:
+    return {"choices": [{"message": {"role": "assistant", "content": "placeholder"}}]}
+
+
+def _narration_response(text: str) -> httpx.Response:
+    return httpx.Response(
+        200, text=f'data: {{"choices":[{{"delta":{{"content":"{text}"}}}}]}}\n\ndata: [DONE]\n\n'
+    )
 
 
 @pytest.mark.anyio
@@ -750,3 +792,138 @@ async def test_agent_skips_retrieval_with_no_session_factory_configured():
     await client.aclose()
 
     assert any(e.type == "narration_done" for e in events)
+
+
+@pytest.mark.anyio
+async def test_agent_runs_a_full_score_and_downtime_loop_through_tools():
+    # TODO.md gap backlog: "GM score and downtime tool surface" - mirrors
+    # test_headless_session.py's engine-only loop (plan, engagement,
+    # action, payoff, heat, entanglement, one of each downtime activity),
+    # but end to end through the GM agent's tool-calling loop instead of
+    # calling engine functions directly.
+    non_stream_round = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal non_stream_round
+        body = json.loads(request.content)
+        if body.get("stream"):
+            return _narration_response("Noted.")
+        non_stream_round += 1
+        if non_stream_round == 1:
+            message = _tool_calls_message(
+                [
+                    ("transition_phase", {"phase": "score"}),
+                    ("roll_engagement", {"pool_size": 1}),
+                ]
+            )
+        elif non_stream_round == 3:
+            message = _tool_call_message(
+                "roll_action", {"action": "prowl", "position": "risky", "effect": "standard"}
+            )
+        elif non_stream_round == 5:
+            message = _tool_calls_message(
+                [
+                    ("transition_phase", {"phase": "downtime"}),
+                    ("resolve_payoff", {"target_tier": 2, "coin": 4}),
+                    ("add_crew_heat", {"amount": 4}),
+                    ("roll_entanglement", {}),
+                ]
+            )
+        elif non_stream_round == 7:
+            message = _tool_calls_message(
+                [
+                    (
+                        "create_clock",
+                        {"clock_id": "heal-1", "name": "Healing", "kind": "healing", "segments": 8},
+                    ),
+                    (
+                        "create_clock",
+                        {
+                            "clock_id": "vault",
+                            "name": "Crack the Vault",
+                            "kind": "long_term_project",
+                            "segments": 8,
+                        },
+                    ),
+                    ("acquire_asset", {}),
+                    ("indulge_vice", {}),
+                    ("recover", {"clock_id": "heal-1", "pool_size": 2}),
+                    ("reduce_heat", {"pool_size": 2}),
+                    ("long_term_project", {"clock_id": "vault", "pool_size": 2}),
+                    ("mark_xp", {"track": "playbook", "amount": 1}),
+                ]
+            )
+        else:
+            return httpx.Response(200, json=_final_message())
+        return httpx.Response(200, json={"choices": [{"message": message}]})
+
+    client = LLMClient(
+        base_url="http://fake-llm/v1", model="test-model", transport=httpx.MockTransport(handler)
+    )
+    agent = GmAgent(client, _executor_with_entanglements())
+    state = GameState(
+        character=Character(
+            name="Test", playbook="Test Playbook", action_ratings={Action.PROWL: 2}
+        ),
+        crew=Crew(name="Test Crew", crew_type="Test Type", tier=1),
+        session=Session(),
+    )
+
+    def _tool_names(events: list) -> list[str]:
+        return [e.payload["name"] for e in events if e.type == "tool_call"]
+
+    def _final_state(events: list) -> GameState:
+        done = next(e for e in events if e.type == "narration_done")
+        return GameState.model_validate(done.payload["state"])
+
+    # Turn 1: plan and engagement.
+    events = [event async for event in agent.handle_player_message(state, "Let's plan the job.")]
+    state = _final_state(events)
+    assert _tool_names(events) == ["transition_phase", "roll_engagement"]
+    assert state.session.phase.value == "score"
+    assert any(ev.event_type == "engagement_roll" for ev in state.log.events)
+
+    # Turn 2: the action roll, paused for the player's decision (FR-16).
+    turn = agent.handle_player_message(state, "We strike now.")
+    proposed = await anext(turn)
+    assert proposed.type == "roll_proposed"
+    tool_event = await turn.asend({})
+    assert tool_event.type == "tool_call"
+    remaining = [event async for event in turn]
+    state = _final_state(remaining)
+    assert any(ev.event_type == "action_roll" for ev in state.log.events)
+
+    # Turn 3: downtime opens - payoff, heat, entanglement.
+    events = [event async for event in agent.handle_player_message(state, "Time for downtime.")]
+    state = _final_state(events)
+    assert _tool_names(events) == [
+        "transition_phase",
+        "resolve_payoff",
+        "add_crew_heat",
+        "roll_entanglement",
+    ]
+    assert state.session.phase.value == "downtime"
+    assert state.crew.rep.rep == 3  # payoff_rep(tier=1, target_tier=2) = 2 + (2-1)
+    assert state.crew.coin == 4
+    assert state.crew.heat.heat == 4
+    assert any(ev.event_type == "entanglement_roll" for ev in state.log.events)
+
+    # Turn 4: downtime activities - one of each.
+    events = [event async for event in agent.handle_player_message(state, "We spend our downtime.")]
+    await client.aclose()
+    state = _final_state(events)
+    assert _tool_names(events) == [
+        "create_clock",
+        "create_clock",
+        "acquire_asset",
+        "indulge_vice",
+        "recover",
+        "reduce_heat",
+        "long_term_project",
+        "mark_xp",
+    ]
+    logged_types = {ev.event_type for ev in state.log.events}
+    assert {"asset_acquired", "vice_indulged", "downtime_activity_rolled", "clock_ticked"} <= (
+        logged_types
+    )
+    assert state.character.playbook_xp.marked == 1

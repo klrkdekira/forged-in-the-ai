@@ -8,6 +8,13 @@ class Settings(BaseSettings):
     # ADR-0004: DATA_DIR is the user-data volume mount point in compose.yml.
     data_dir: Path = Path("./data")
 
+    # The committed content packs directory (packs/srd_base.json and any
+    # others). Relative to the server process's cwd (`server/`, per the
+    # Makefile), the same convention data_dir already uses - the container
+    # image sets PACKS_DIR since its layout is flattened rather than a
+    # checkout of this repo (Dockerfile).
+    packs_dir: Path = Path("../packs")
+
     # FR-13: fetch and index the SRD at startup if app.db has no SRD
     # chunks. Off by default (dev uses `make index-srd` against the local
     # copy, and tests must never touch the network); the container image

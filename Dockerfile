@@ -15,6 +15,7 @@ COPY server/ai ./ai
 COPY server/engine ./engine
 COPY server/ingestion ./ingestion
 COPY server/state ./state
+COPY packs ./packs
 RUN uv sync --locked --no-dev
 
 FROM server-base AS openapi-export
@@ -51,5 +52,9 @@ ENV PATH="/app/.venv/bin:$PATH"
 # index (FR-13) is fetched and built on first start instead (app/main.py
 # lifespan via state/srd_bootstrap.py); a no-op once app.db has it.
 ENV SRD_AUTOINDEX=1
+# Settings.packs_dir defaults to "../packs" (dev's cwd is server/); the
+# image's layout is flattened (no server/ nesting), so packs/ lands at
+# /app/packs instead (app/packs.py::load_entanglements).
+ENV PACKS_DIR=/app/packs
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
