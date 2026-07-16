@@ -53,6 +53,17 @@ class PlayerAgent:
         by this character's own agent so the GM's tool-calling loop never
         has to pause for a human who isn't there."""
         character = state.characters[self.character_id]
+        others = {
+            character_id: other.name
+            for character_id, other in state.characters.items()
+            if character_id != self.character_id
+        }
+        assist_line = (
+            f"A crewmate could assist instead (they take 1 stress, you gain +1d): "
+            f"{', '.join(f'{name} ({character_id})' for character_id, name in others.items())}."
+            if others
+            else ""
+        )
         messages = [
             {"role": "system", "content": build_player_system_prompt(character)},
             {
@@ -64,7 +75,7 @@ class PlayerAgent:
                     f"{character.stress.marked}/{StressTrack.MAX} stress marked already. "
                     "Decide whether to push yourself (more dice or more effect, at a stress "
                     "cost), accept a Devil's Bargain, trade position for effect or the "
-                    "reverse, or just roll as proposed."
+                    f"reverse, or just roll as proposed. {assist_line}"
                 ),
             },
         ]

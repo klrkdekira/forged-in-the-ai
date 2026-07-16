@@ -137,6 +137,11 @@ class RollDecision(BaseModel):
         None, description="Accepted Devil's Bargain price, if any (+1d, free)"
     )
     trade: Literal["worse_position_better_effect", "better_position_worse_effect"] | None = None
+    assist_character_id: str | None = Field(
+        None,
+        description="SRD 'Teamwork'/'Assist': another PC helping this roll - they take 1 "
+        "stress, this roll gets +1d",
+    )
 
 
 class RollFortuneArgs(BaseModel):
@@ -473,13 +478,15 @@ class ToolExecutor:
         args: RollActionArgs,
         bonus_dice: int = 0,
         devils_bargain: str | None = None,
+        assisted_by: str | None = None,
     ) -> ToolCallResult:
-        """SRD: "Action Roll". `bonus_dice`/`devils_bargain` are Python-only
-        parameters, not fields on `RollActionArgs` - they come from the
-        player's post-negotiation `RollDecision` (FR-16), applied by the GM
-        agent's `_resolve_roll` before this call, never from the LLM's own
-        tool-call arguments (`tool_definitions()` only ever introspects
-        `RollActionArgs`, so the model never sees these as choices it makes)."""
+        """SRD: "Action Roll". `bonus_dice`/`devils_bargain`/`assisted_by`
+        are Python-only parameters, not fields on `RollActionArgs` - they
+        come from the player's post-negotiation `RollDecision` (FR-16),
+        applied by the GM agent's `_resolve_roll` before this call, never
+        from the LLM's own tool-call arguments (`tool_definitions()` only
+        ever introspects `RollActionArgs`, so the model never sees these as
+        choices it makes)."""
         character_id = self.resolve_character_id(state, args.character_id)
         pool_size = state.characters[character_id].action_ratings.get(args.action, 0) + bonus_dice
         roll = action_roll(pool_size, args.position, args.effect, self._rng)
@@ -490,6 +497,8 @@ class ToolExecutor:
         }
         if devils_bargain:
             payload["devils_bargain"] = devils_bargain
+        if assisted_by:
+            payload["assisted_by"] = assisted_by
         log = state.log.append("character", character_id, "action_roll", payload, self._clock())
         return ToolCallResult(
             state=state.model_copy(update={"log": log}), result=roll.model_dump(mode="json")

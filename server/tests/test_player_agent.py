@@ -66,6 +66,37 @@ async def test_decide_roll_returns_a_structured_decision():
 
 
 @pytest.mark.anyio
+async def test_decide_roll_mentions_other_pcs_as_assist_candidates():
+    # SRD: "Teamwork"/"Assist" - the companion agent can nominate a
+    # crewmate to help, same as a human would in the negotiation dialog.
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        captured["user_message"] = body["messages"][2]["content"]
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {"message": {"role": "assistant", "content": json.dumps({"push_dice": True})}}
+                ]
+            },
+        )
+
+    client = LLMClient(
+        base_url="http://fake-llm/v1", model="test-model", transport=httpx.MockTransport(handler)
+    )
+    agent = PlayerAgent(client, "pc-2")
+    proposal = RollActionArgs(action=Action.PROWL, position=Position.RISKY, effect=Effect.STANDARD)
+
+    await agent.decide_roll(_state(), proposal, pool_size=2)
+    await client.aclose()
+
+    assert "Anders" in captured["user_message"]
+    assert "pc-1" in captured["user_message"]
+
+
+@pytest.mark.anyio
 async def test_maybe_roleplay_returns_none_when_the_model_stays_quiet():
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(

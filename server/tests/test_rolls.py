@@ -2,6 +2,8 @@ import random
 
 from engine.dice import DiceResult
 from engine.rolls import (
+    ASSIST_BONUS_DICE,
+    ASSIST_STRESS_COST,
     Effect,
     Position,
     RollBand,
@@ -11,6 +13,12 @@ from engine.rolls import (
     resistance_roll,
     step_position,
 )
+
+
+def test_assist_costs_one_stress_for_one_bonus_die():
+    # SRD: "Teamwork" / "Assist" - "Take 1 stress and give them +1d to their roll."
+    assert ASSIST_STRESS_COST == 1
+    assert ASSIST_BONUS_DICE == 1
 
 
 def test_band_for_critical_on_two_sixes():

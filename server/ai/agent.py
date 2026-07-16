@@ -23,7 +23,7 @@ from ai.tools import (
 )
 from ai.transcript import render_transcript
 from engine.controller import is_ai_controlled
-from engine.rolls import step_position
+from engine.rolls import ASSIST_BONUS_DICE, ASSIST_STRESS_COST, step_position
 from state.srd_index import SrdSearchHit, build_match_query, search_srd
 
 MAX_TOOL_ROUNDS = 6
@@ -181,6 +181,7 @@ class GmAgent:
                         decision_payload = yield AgentTurnEvent(
                             type="roll_proposed",
                             payload={
+                                "character_id": character_id,
                                 "action": proposal.action.value,
                                 "position": proposal.position.value,
                                 "effect": proposal.effect.name.lower(),
@@ -279,7 +280,29 @@ class GmAgent:
                 state, MarkStressArgs(amount=stress_spent, character_id=proposal.character_id)
             ).state
 
-        bonus_dice = int(decision.push_dice) + int(bool(decision.devils_bargain))
+        # SRD: "Teamwork"/"Assist" - a different PC helping this roll takes
+        # the stress themselves. An unknown id or the roller assisting
+        # themselves is silently dropped rather than raised: `decision`
+        # comes from a human's own dialog choices or a companion's
+        # structured completion, neither of which should be able to crash
+        # the turn over a bad choice (same reasoning as the httpx/
+        # StructuredOutputError degrades around this call's callers).
+        roller_id = self._executor.resolve_character_id(state, proposal.character_id)
+        assisted_by = decision.assist_character_id
+        if assisted_by is not None and (
+            assisted_by not in state.characters or assisted_by == roller_id
+        ):
+            assisted_by = None
+        if assisted_by is not None:
+            state = self._executor.mark_stress(
+                state, MarkStressArgs(amount=ASSIST_STRESS_COST, character_id=assisted_by)
+            ).state
+
+        bonus_dice = (
+            int(decision.push_dice)
+            + int(bool(decision.devils_bargain))
+            + (ASSIST_BONUS_DICE if assisted_by is not None else 0)
+        )
         roll_result = self._executor.roll_action(
             state,
             RollActionArgs(
@@ -290,6 +313,7 @@ class GmAgent:
             ),
             bonus_dice=bonus_dice,
             devils_bargain=decision.devils_bargain,
+            assisted_by=assisted_by,
         )
         return roll_result.result, roll_result.state
 

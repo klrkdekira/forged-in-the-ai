@@ -91,6 +91,12 @@ def fortune_roll(pool_size: int, rng: random.Random) -> FortuneRollResult:
     return FortuneRollResult(dice=dice, band=band_for(dice))
 
 
+ASSIST_STRESS_COST = 1
+ASSIST_BONUS_DICE = 1
+"""SRD: "Teamwork" / "Assist" - "Take 1 stress and give them +1d to their
+roll." Only one character may assist a given roll."""
+
+
 class ResistanceRollResult(BaseModel):
     dice: DiceResult
     stress_delta: int

@@ -127,6 +127,7 @@ export interface RelationshipSnapshot {
 
 export interface GameStateSnapshot {
   character: CharacterSnapshot
+  characters: Record<string, CharacterSnapshot>
   crew: CrewSnapshot
   clocks: Record<string, ClockSnapshot>
   canon: CanonSnapshot | null
@@ -158,6 +159,7 @@ export interface SheetOperation {
 // before it executes - pool/position/effect shown, push/Devil's Bargain/
 // trade-off offered.
 export interface RollProposal {
+  character_id: string
   action: string
   position: 'controlled' | 'risky' | 'desperate'
   effect: 'zero' | 'limited' | 'standard' | 'great' | 'extreme'
@@ -169,6 +171,7 @@ export interface RollDecision {
   push_effect?: boolean
   devils_bargain?: string | null
   trade?: 'worse_position_better_effect' | 'better_position_worse_effect' | null
+  assist_character_id?: string | null
 }
 
 // FR-19: after an undo, the visible chat needs to shrink to match the
@@ -227,6 +230,7 @@ export function useSessionSocket(campaignId: string) {
           break
         case 'roll_proposed':
           setPendingRoll({
+            character_id: data.character_id,
             action: data.action,
             position: data.position,
             effect: data.effect,

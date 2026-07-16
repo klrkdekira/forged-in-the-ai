@@ -13,7 +13,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import type { RollDecision, RollProposal } from '@/hooks/use-session-socket'
+import type { CharacterSnapshot, RollDecision, RollProposal } from '@/hooks/use-session-socket'
 
 const POSITIONS = ['controlled', 'risky', 'desperate'] as const
 const EFFECTS = ['zero', 'limited', 'standard', 'great', 'extreme'] as const
@@ -33,12 +33,16 @@ function stepEffect(effect: RollProposal['effect'], delta: number) {
 // FR-16: shown whenever the GM agent proposes an action roll (position and
 // effect - Action Roll steps 1-4). The player negotiates bonus dice and any
 // trade-off (step 5, "Add Bonus Dice"/"Trading Position for Effect") before
-// the roll actually executes.
+// the roll actually executes. Also offers SRD "Teamwork"/"Assist": any other
+// PC in the session (solo play's one seat may control several, FR-25) can
+// take 1 stress to give the roller +1d.
 export function RollNegotiationDialog({
   proposal,
+  characters,
   onDecide,
 }: {
   proposal: RollProposal
+  characters: Record<string, CharacterSnapshot>
   onDecide: (decision: RollDecision) => void
 }) {
   const [pushDice, setPushDice] = useState(false)
@@ -46,6 +50,11 @@ export function RollNegotiationDialog({
   const [devilsBargainAccepted, setDevilsBargainAccepted] = useState(false)
   const [devilsBargainText, setDevilsBargainText] = useState('')
   const [trade, setTrade] = useState<Trade>('none')
+  const [assistCharacterId, setAssistCharacterId] = useState<string>('none')
+
+  const assistCandidates = Object.entries(characters).filter(
+    ([characterId]) => characterId !== proposal.character_id,
+  )
 
   let position = proposal.position
   let effect = proposal.effect
@@ -57,7 +66,8 @@ export function RollNegotiationDialog({
     effect = stepEffect(effect, -1)
   }
   if (pushEffect) effect = stepEffect(effect, 1)
-  const bonusDice = (pushDice ? 1 : 0) + (devilsBargainAccepted ? 1 : 0)
+  const assisted = assistCharacterId !== 'none'
+  const bonusDice = (pushDice ? 1 : 0) + (devilsBargainAccepted ? 1 : 0) + (assisted ? 1 : 0)
   const stressCost = (pushDice ? 2 : 0) + (pushEffect ? 2 : 0)
 
   function handleSubmit() {
@@ -68,6 +78,7 @@ export function RollNegotiationDialog({
         ? devilsBargainText.trim() || "Devil's Bargain accepted"
         : null,
       trade: trade === 'none' ? null : trade,
+      assist_character_id: assisted ? assistCharacterId : null,
     })
   }
 
@@ -146,6 +157,25 @@ export function RollNegotiationDialog({
               </div>
             )}
           </div>
+
+          {assistCandidates.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <span className="text-xs font-semibold text-muted-foreground">
+                Teamwork: assist
+              </span>
+              <RadioGroup value={assistCharacterId} onValueChange={setAssistCharacterId}>
+                <label className="flex items-center gap-2 text-sm">
+                  <RadioGroupItem value="none" /> No one assists
+                </label>
+                {assistCandidates.map(([characterId, character]) => (
+                  <label key={characterId} className="flex items-center gap-2 text-sm">
+                    <RadioGroupItem value={characterId} /> {character.name} assists (they take 1
+                    stress, +1d to this roll)
+                  </label>
+                ))}
+              </RadioGroup>
+            </div>
+          )}
 
           {stressCost > 0 && (
             <p className="text-xs text-muted-foreground">Costs {stressCost} stress.</p>

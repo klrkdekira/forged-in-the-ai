@@ -162,7 +162,13 @@ export function PlayPage() {
         )}
       </div>
 
-      {pendingRoll && <RollNegotiationDialog proposal={pendingRoll} onDecide={sendRollDecision} />}
+      {pendingRoll && state && (
+        <RollNegotiationDialog
+          proposal={pendingRoll}
+          characters={state.characters}
+          onDecide={sendRollDecision}
+        />
+      )}
     </div>
   )
 }

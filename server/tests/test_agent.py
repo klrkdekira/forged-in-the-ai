@@ -283,6 +283,7 @@ async def test_agent_pauses_a_roll_action_for_the_players_decision():
     proposed = await anext(turn)
     assert proposed.type == "roll_proposed"
     assert proposed.payload == {
+        "character_id": "pc-1",
         "action": "prowl",
         "position": "risky",
         "effect": "standard",
@@ -305,6 +306,124 @@ async def test_agent_pauses_a_roll_action_for_the_players_decision():
         if event["event_type"] == "stress_marked"
     ]
     assert stress_events[-1]["payload"]["amount"] == 2  # push_dice cost
+
+
+@pytest.mark.anyio
+async def test_agent_applies_assist_stress_and_bonus_die():
+    # SRD: "Teamwork"/"Assist" - "Take 1 stress and give them +1d to their roll."
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        calls.append(body)
+        if body.get("stream"):
+            return httpx.Response(
+                200, text='data: {"choices":[{"delta":{"content":"Rolled."}}]}\n\ndata: [DONE]\n\n'
+            )
+        if len(calls) == 1:
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [
+                        {
+                            "message": _tool_call_message(
+                                "roll_action",
+                                {
+                                    "action": "prowl",
+                                    "position": "risky",
+                                    "effect": "standard",
+                                    "character_id": "pc-1",
+                                },
+                            )
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(
+            200, json={"choices": [{"message": {"role": "assistant", "content": "placeholder"}}]}
+        )
+
+    client = LLMClient(
+        base_url="http://fake-llm/v1", model="test-model", transport=httpx.MockTransport(handler)
+    )
+    agent = GmAgent(client, _executor())
+    turn = agent.handle_player_message(_state_with_ai_companion(), "I sneak past the guards.")
+
+    proposed = await anext(turn)
+    assert proposed.payload["character_id"] == "pc-1"
+
+    tool_event = await turn.asend({"assist_character_id": "pc-2"})
+    assert tool_event.type == "tool_call"
+
+    remaining = [event async for event in turn]
+    await client.aclose()
+
+    done_event = next(e for e in remaining if e.type == "narration_done")
+    events = done_event.payload["state"]["log"]["events"]
+    action_roll = next(e for e in events if e["event_type"] == "action_roll")
+    assert action_roll["payload"]["bonus_dice"] == 1
+    assert action_roll["payload"]["assisted_by"] == "pc-2"
+    stress_events = [e for e in events if e["event_type"] == "stress_marked"]
+    assert stress_events[-1]["entity_id"] == "pc-2"
+    assert stress_events[-1]["payload"]["amount"] == 1
+
+
+@pytest.mark.anyio
+async def test_agent_ignores_an_assist_by_the_roller_or_an_unknown_character():
+    # A bad assist choice must degrade quietly, not crash the turn - same
+    # reasoning as the httpx/StructuredOutputError degrades around
+    # PlayerAgent's own calls.
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        calls.append(body)
+        if body.get("stream"):
+            return httpx.Response(
+                200, text='data: {"choices":[{"delta":{"content":"Rolled."}}]}\n\ndata: [DONE]\n\n'
+            )
+        if len(calls) == 1:
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [
+                        {
+                            "message": _tool_call_message(
+                                "roll_action",
+                                {
+                                    "action": "prowl",
+                                    "position": "risky",
+                                    "effect": "standard",
+                                    "character_id": "pc-1",
+                                },
+                            )
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(
+            200, json={"choices": [{"message": {"role": "assistant", "content": "placeholder"}}]}
+        )
+
+    client = LLMClient(
+        base_url="http://fake-llm/v1", model="test-model", transport=httpx.MockTransport(handler)
+    )
+    agent = GmAgent(client, _executor())
+    turn = agent.handle_player_message(_state_with_ai_companion(), "I sneak past the guards.")
+
+    await anext(turn)
+    tool_event = await turn.asend({"assist_character_id": "pc-1"})  # the roller, not a helper
+    assert tool_event.type == "tool_call"
+
+    remaining = [event async for event in turn]
+    await client.aclose()
+
+    done_event = next(e for e in remaining if e.type == "narration_done")
+    events = done_event.payload["state"]["log"]["events"]
+    action_roll = next(e for e in events if e["event_type"] == "action_roll")
+    assert action_roll["payload"]["bonus_dice"] == 0
+    assert "assisted_by" not in action_roll["payload"]
+    assert not any(e["event_type"] == "stress_marked" for e in events)
 
 
 @pytest.mark.anyio

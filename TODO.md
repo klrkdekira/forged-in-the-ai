@@ -904,15 +904,53 @@ stay open as well; most of them are blocked on items here.
       "Coin and Stash"); `pnpm build`/`tsc -b` succeeds. Not verified live
       in a headed browser - no headed browser is available in this
       environment, same caveat as the Konva views below.
-- [ ] **Assist and teamwork (FR-1, FR-2, FR-16).** No assist, setup, group
-      action, or protect mechanics exist anywhere: `engine/rolls.py` has no
-      teamwork code and `RollDecision` (`ai/tools.py`) offers only push,
-      Devil's Bargain, and the position/effect trade. The old blocker (a
-      single-PC `GameState`) is gone since FR-35 landed
-      `GameState.characters`. Engine first (SRD "Teamwork", with cited
-      tests), then extend `RollDecision` with an assist option (the helper
-      takes 1 stress, the roller gains 1d), then offer it in the roll
-      negotiation dialog and in `PlayerAgent.decide_roll`.
+- [x] **Assist and teamwork (FR-1, FR-2, FR-16).** Closed the "assist"
+      maneuver specifically (SRD "Teamwork"/"Assist"); group action,
+      protect, and set up remain unimplemented, see below. Engine:
+      `ASSIST_STRESS_COST`/`ASSIST_BONUS_DICE` constants in
+      `engine/rolls.py`, cited to the SRD's "Take 1 stress and give them
+      +1d" (`test_rolls.py`). `RollDecision` (`ai/tools.py`) gained
+      `assist_character_id`; `roll_action` gained an `assisted_by`
+      Python-only parameter (same shape as `bonus_dice`/`devils_bargain`),
+      recorded on the `action_roll` event payload for the audit trail.
+
+      `GmAgent._resolve_roll` (`ai/agent.py`) resolves the roller's own
+      `character_id` first (previously only resolved inside `roll_action`
+      itself, too late to validate against), then marks 1 stress on the
+      assisting character and adds the bonus die if `assist_character_id`
+      names a real PC other than the roller - an unknown id or the roller
+      "assisting" themselves is silently dropped rather than raised, same
+      degrade-not-crash reasoning as the httpx/`StructuredOutputError`
+      guards already around this call's callers (a bad choice from a
+      human's dialog or a companion's structured completion must not kill
+      the turn). `roll_proposed`'s event payload gained `character_id` -
+      the client had no way to know who was rolling before this, which
+      blocked building an assist picker at all (a real, if small, gap
+      surfaced while wiring this).
+
+      `PlayerAgent.decide_roll` (`ai/player_agent.py`) now tells the
+      companion agent which other PCs exist as assist candidates, so an
+      AI-controlled crewmate's own roll can be helped by a teammate
+      exactly like a human's roll would be. Web: `RollProposal` gained
+      `character_id`, `GameStateSnapshot` gained a typed `characters` map
+      (the WS payload already carried it - FR-25's multi-PC `GameState` -
+      just not typed on the client), and `RollNegotiationDialog` shows a
+      teamwork section listing every other PC when more than one exists,
+      submitting the chosen `assist_character_id` alongside the existing
+      push/bargain/trade-off choices. Covered by new `test_rolls.py`,
+      `test_agent.py` (assist applied; an invalid choice degrading
+      quietly), and `test_player_agent.py` cases; `pnpm build`/`tsc -b`
+      succeeds. Not verified live in a headed browser, same caveat as the
+      other UI items below.
+
+      Still open: group action (lead), protect, and set up are not
+      implemented at all - no engine code, no tools, no UI. Each is a
+      larger unit of work than assist (group action needs a "best of
+      several rolls" resolution and stress-per-straggler on the leader;
+      protect needs a way to redirect a pending consequence to a different
+      character before a resistance roll; set up needs to carry its
+      "which follow-up gets the bonus" state across a turn boundary) and
+      is left for a follow-up pass rather than folded into this one.
 - [ ] **Crafting (FR-1).** No crafting code at all (SRD "Crafting": the
       tinker long-term project, the quality level formula, inventing). At
       minimum encode the quality formula and a craft downtime path with
