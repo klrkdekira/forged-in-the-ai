@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
+import { Download, Trash2 } from 'lucide-react'
 
 import { apiClient } from '@/api/client'
 import type { components } from '@/api/schema'
@@ -16,9 +17,6 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 
-// FR-18: the campaign picker - create a new campaign, or resume one already
-// on disk. This is the entry point every /play/$campaignId link ultimately
-// depends on: there's no session without one.
 export default function App() {
   const [newCampaignOpen, setNewCampaignOpen] = useState(false)
   const [loadCampaignOpen, setLoadCampaignOpen] = useState(false)
@@ -49,20 +47,11 @@ export default function App() {
 type Character = components['schemas']['Character']
 type Crew = components['schemas']['Crew']
 
-// Uploaded sheets are trusted only as far as the server's own Pydantic
-// validation goes (ADR-0006: the server schema is the validator, this
-// client-side cast is just so TS doesn't fight an inherently-external blob).
 async function readJsonFile<T>(file: File): Promise<T> {
   const text = await file.text()
   return JSON.parse(text) as T
 }
 
-// FR-8/G2: players bring their existing character (and crew) sheets rather
-// than always starting from the fixed MVP starter - either a saved
-// guided-entry file (cli/guided_entry.py's own output, listed via
-// GET /api/characters) or a directly uploaded JSON export. There's no
-// saved-file list for crews (no guided crew entry flow exists), so a crew
-// is upload-only.
 function NewCampaignDialog({
   open,
   onOpenChange,
@@ -220,6 +209,9 @@ function LoadCampaignDialog({
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [importError, setImportError] = useState<string | null>(null)
+  const [campaignToDelete, setCampaignToDelete] = useState<{ id: string; name: string } | null>(
+    null,
+  )
 
   const campaigns = useQuery({
     queryKey: ['campaigns'],
@@ -251,6 +243,22 @@ function LoadCampaignDialog({
     },
   })
 
+  const deleteCampaign = useMutation({
+    mutationFn: async (campaignId: string) => {
+      const { error } = await apiClient.DELETE('/api/campaigns/{campaign_id}', {
+        params: { path: { campaign_id: campaignId } },
+      })
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] })
+      setCampaignToDelete(null)
+    },
+    onError: () => {
+      setImportError('Failed to delete campaign.')
+    },
+  })
+
   function handleOpenChange(next: boolean) {
     onOpenChange(next)
     if (next) {
@@ -264,10 +272,10 @@ function LoadCampaignDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Load Campaign</DialogTitle>
-          <DialogDescription>Pick a campaign to resume or import a campaign bundle.</DialogDescription>
+          <DialogDescription>Pick a campaign to resume, export, or delete.</DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-1 mt-2 max-h-64 overflow-auto">
+        <div className="flex flex-col gap-1.5 mt-2 max-h-64 overflow-auto">
           {campaigns.isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
           {campaigns.data?.length === 0 && (
             <p className="text-sm text-muted-foreground">No campaigns yet.</p>
@@ -275,26 +283,38 @@ function LoadCampaignDialog({
           {campaigns.data?.map((campaign) => (
             <div
               key={campaign.id}
-              className="flex items-center justify-between gap-2 p-1 rounded-md hover:bg-muted/40"
+              className="flex items-center justify-between gap-2 p-1.5 rounded-md hover:bg-muted/40 border border-transparent hover:border-border/30"
             >
               <Button
                 type="button"
                 variant="ghost"
-                className="justify-start flex-1"
+                className="justify-start flex-1 text-left truncate font-medium text-xs h-8"
                 onClick={() =>
                   navigate({ to: '/play/$campaignId', params: { campaignId: campaign.id } })
                 }
               >
                 {campaign.name}
               </Button>
-              <a
-                href={`/api/campaigns/${campaign.id}/export`}
-                download
-                className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground px-2"
-                title="Export campaign bundle"
-              >
-                Export
-              </a>
+              <div className="flex items-center gap-1">
+                <a
+                  href={`/api/campaigns/${campaign.id}/export`}
+                  download
+                  className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  title="Export campaign bundle"
+                >
+                  <Download className="size-3.5" />
+                </a>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-7 p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => setCampaignToDelete({ id: campaign.id, name: campaign.name })}
+                  title="Delete campaign"
+                >
+                  <Trash2 className="size-3.5" />
+                </Button>
+              </div>
             </div>
           ))}
         </div>
@@ -312,6 +332,39 @@ function LoadCampaignDialog({
           />
           {importError && <p className="mt-1 text-xs text-destructive">{importError}</p>}
         </div>
+
+        {campaignToDelete && (
+          <Dialog open modal onOpenChange={(o) => !o && setCampaignToDelete(null)}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-destructive flex items-center gap-2">
+                  <Trash2 className="size-5" /> Delete Campaign?
+                </DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to delete <strong>{campaignToDelete.name}</strong>? This will permanently delete its database file and event history. This action cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="mt-4 flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setCampaignToDelete(null)}
+                  disabled={deleteCampaign.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={() => deleteCampaign.mutate(campaignToDelete.id)}
+                  disabled={deleteCampaign.isPending}
+                >
+                  {deleteCampaign.isPending ? 'Deleting…' : 'Delete Permanently'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
       </DialogContent>
     </Dialog>
   )

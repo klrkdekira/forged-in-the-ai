@@ -1,8 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 
-import { useParams } from '@tanstack/react-router'
+import { useNavigate, useParams } from '@tanstack/react-router'
+import { Dices, Download, FolderCog, Trash2 } from 'lucide-react'
 
+import { apiClient } from '@/api/client'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { useLastCampaignId } from '@/hooks/use-last-campaign-id'
 import type { ControllerSnapshot } from '@/hooks/use-session-socket'
@@ -16,7 +26,6 @@ import { RelationshipMap } from './relationship-map'
 import { RollNegotiationDialog } from './roll-negotiation-dialog'
 import { TableViewPanel } from './table-view-panel'
 import { XCardDialog } from './x-card-dialog'
-import { Dices } from 'lucide-react'
 
 // FR-35: a character with no seat naming it is human-controlled by
 // default (engine.controller.is_ai_controlled) - looked up, never stored
@@ -46,6 +55,7 @@ export function PlayPage() {
     clearBusy,
     reconnect,
   } = useSessionSocket(campaignId)
+  const navigate = useNavigate()
   const [draft, setDraft] = useState('')
   const [sidePanel, setSidePanel] = useState<'sheet' | 'table' | 'journal' | 'relationships'>(
     'sheet',
@@ -53,7 +63,22 @@ export function PlayPage() {
   const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null)
   const [xCardOpen, setXCardOpen] = useState(false)
   const [diceRollerOpen, setDiceRollerOpen] = useState(false)
+  const [manageCampaignOpen, setManageCampaignOpen] = useState(false)
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  async function handleDeleteCampaign() {
+    setDeleting(true)
+    try {
+      await apiClient.DELETE('/api/campaigns/{campaign_id}', {
+        params: { path: { campaign_id: campaignId } },
+      })
+      navigate({ to: '/' })
+    } catch {
+      setDeleting(false)
+    }
+  }
 
   // FR-25/FR-35: the sheet panel used to always show state.character (the
   // primary PC computed field) - a companion's own sheet was never
@@ -120,6 +145,16 @@ export function PlayPage() {
               </span>
             </div>
           )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border-muted text-muted-foreground hover:text-foreground flex items-center gap-1.5"
+            onClick={() => setManageCampaignOpen(true)}
+          >
+            <FolderCog className="size-4" />
+            Campaign
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -339,6 +374,91 @@ export function PlayPage() {
       />
 
       <AnimatedDiceRoller open={diceRollerOpen} onOpenChange={setDiceRollerOpen} />
+
+      {/* Manage Campaign Dialog */}
+      <Dialog open={manageCampaignOpen} onOpenChange={setManageCampaignOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FolderCog className="size-5 text-primary" /> Manage Campaign
+            </DialogTitle>
+            <DialogDescription>
+              Export session backup or permanently delete this campaign.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-3 my-4">
+            <a
+              href={`/api/campaigns/${campaignId}/export`}
+              download
+              className="flex items-center justify-between p-3 rounded-lg border border-border/60 bg-muted/20 hover:bg-muted/50 transition-colors text-sm font-medium"
+            >
+              <div className="flex items-center gap-2">
+                <Download className="size-4 text-primary" />
+                <span>Export Campaign Bundle</span>
+              </div>
+              <span className="text-xs text-muted-foreground font-normal">JSON format</span>
+            </a>
+
+            <div className="flex items-center justify-between p-3 rounded-lg border border-destructive/30 bg-destructive/5 hover:bg-destructive/10 transition-colors text-sm">
+              <div className="flex items-center gap-2 text-destructive font-medium">
+                <Trash2 className="size-4" />
+                <span>Delete Campaign</span>
+              </div>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  setManageCampaignOpen(false)
+                  setConfirmDeleteOpen(true)
+                }}
+              >
+                Delete
+              </Button>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setManageCampaignOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Campaign Confirmation */}
+      <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive flex items-center gap-2">
+              <Trash2 className="size-5" /> Confirm Permanent Deletion
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this campaign? All SQLite database files, roll logs, and character progression will be permanently erased.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="mt-4 flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmDeleteOpen(false)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleDeleteCampaign}
+              disabled={deleting}
+            >
+              {deleting ? 'Deleting…' : 'Delete Campaign'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
