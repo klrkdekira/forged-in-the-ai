@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from cli.licensing_grep import find_pack_hits
 from engine.pack_loader import FORBIDDEN_TERMS, PackLoadError, load_pack, load_packs_dir
 from engine.packs import ContentPack
 
@@ -57,6 +58,12 @@ def test_load_pack_rejects_forbidden_core_book_content_case_insensitively(
 
     with pytest.raises(PackLoadError, match="forbidden core-book content"):
         load_pack(pack_path)
+
+
+def test_licensing_grep_rejects_non_text_assets_under_committed_packs() -> None:
+    hits = find_pack_hits("packs/reference.pdf")
+
+    assert "unsupported committed-pack file extension" in hits[0]
 
 
 def test_load_pack_rejects_a_real_playbook_name(tmp_path: Path) -> None:

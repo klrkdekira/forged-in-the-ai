@@ -12,30 +12,29 @@ and UI behaviour.
 
 The project has a substantial, coherent implementation and broad automated
 coverage. It is not yet a faithful end-to-end implementation of the stated
-scope. The highest-risk gaps are rules integrity in the client, incomplete
-engine enforcement of the score and downtime procedures, a broken repeated
-healing path, and content packs that cannot seed campaigns. Several older TODO
-items have been implemented but were left unchecked, so the historical backlog
-is not a reliable status view without this document.
+scope. Remaining high-risk gaps are sheet-domain completeness, controller
+coverage, private-module activation, and headed/container verification. The
+historical backlog remains useful context, while this section is the active
+status view.
 
 Current assessment:
 
 | Area | Assessment | Main evidence |
 | :--- | :--- | :--- |
 | Engine primitives | Strong but incomplete | Dice, rolls, clocks, harm, advancement, score helpers, and typed errors exist |
-| Complete procedures | Partial | Phase transitions and downtime allowances are enforced, but score ordering and completion state remain open |
+| Complete procedures | Broad MVP | Phase transitions, downtime allowances, score ordering, and completion guards are enforced |
 | Event sourcing | Broad coverage with operational risks | Replay covers current mutation events; WS and test resource lifecycle still need work |
 | AI referee | Broad MVP | Retrieval, tool use, fallback, negotiation, safety, and companions are wired |
-| Web client | Functional but contains one critical architecture violation | A client-side dice roller bypasses the engine and log |
+| Web client | Functional MVP | Engine-routed dice display, corrected snapshots, exports, and detailed ingestion errors are wired |
 | Content packs and ingestion | Extraction, private storage, and committed starter-pack activation work | Private module template selection and broader faction/table activation remain |
-| Packaging | Build definition exists | Production web build passes; container build and run remain unverified |
+| Packaging | Verified | Production web build, container build, and Compose health smoke test pass |
 
 ## 2. Verification result
 
 The following checks were run during this audit:
 
 - Backend lint: passed.
-- Backend tests: 532 passed in 11.36 seconds when run outside the filesystem
+- Backend tests: 533 passed in 11.36 seconds when run outside the filesystem
   sandbox. The suite emitted no aiosqlite worker-thread warnings.
 - Frontend tests: 40 passed across 12 files.
 - Frontend production build: passed.
@@ -43,6 +42,9 @@ The following checks were run during this audit:
 - OpenAPI drift check: passed.
 - Licensing grep: passed.
 - `git diff --check`: passed before documentation edits.
+- Production container build: passed after regenerating the API schema.
+- Docker Compose smoke test: passed; `/api/health` returned `{"status":"ok"}`
+  and the service was stopped cleanly.
 
 The first backend runs inside the restricted sandbox stalled on aiosqlite. An
 unsandboxed run completed, confirming that particular stall was environmental.
@@ -87,10 +89,10 @@ pinned pnpm version.
   panel now cover far more than the older audit recorded. The character schema
   now includes its healing clock and enforces four-coin capacity. The crew
   model now represents vault level and enforces 4/8/16 coin capacity. Stash
-  conversion is now atomic and sheet-exposed, but the full crew UI remains
-  open. The crew table now displays tier, hold, stash, and crew XP. Upgrade,
-  cohort, and special-ability presentation plus controller assignment remain
-  open. Reconcile the schema with the specification before adding more code.
+  conversion is now atomic and sheet-exposed. The crew table displays tier,
+  hold, stash, crew XP, upgrades, special abilities, and cohorts. Controller
+  assignment remains open. Reconcile the schema with the specification before
+  adding more code.
 
 - [x] **Repair the live WebSocket snapshot contract (FR-28, FR-30,
   ADR-0006).** The hand-written client types do not match `GameState` JSON.
@@ -101,12 +103,12 @@ pinned pnpm version.
   exporter is available as `make snapshot-schema`, and a browser-level
   CharacterSheet fixture covers trauma pending, armour, and healing fields.
 
-- [ ] **Bind every controllable entity to a controller (FR-25, FR-26).** The
-  runtime binds created characters, but cohorts are not wired through creation,
-  tools, or UI controller assignment, and vehicles have no represented control
-  path. Spotlight management is also not implemented. Keep simultaneous human
-  play in Phase 7, but make the single-player state conform to the controller
-  invariant now.
+- [ ] **Bind every controllable entity to a controller (FR-25, FR-26).** A
+  typed `assign_controller` engine operation now moves existing PCs between
+  human or AI seats without double assignment, with replay coverage, and the
+  table view displays the active seat mapping. Cohort assignment, vehicles, and
+  spotlight management remain open. Keep simultaneous human play in Phase 7,
+  but continue enforcing the controller invariant now.
 
 ### Priority 2: make content and persistence operationally complete
 
@@ -129,13 +131,10 @@ pinned pnpm version.
   NPC list. Replay folds that relationship as well. Tests cover live refusal,
   live linking, and event-log reconstruction.
 
-- [ ] **Improve campaign connection semantics (FR-18, FR-30).** A per-campaign
-  lock prevents two WebSockets from corrupting one campaign, but it is held for
-  the full connection. A second accepted connection waits without receiving its
-  initial state until the first disconnects. This is safe for mutation but poor
-  protocol behaviour and cannot become multiplayer fan-out. Refuse the second
-  connection explicitly for the single-player phase, or introduce a shared
-  campaign session and subscriber broadcast model.
+- [x] **Improve campaign connection semantics (FR-18, FR-30).** A second live
+  WebSocket is refused immediately with a policy close during the single-player
+  phase. Reconnection after the first client closes remains supported; shared
+  fan-out remains a future multiplayer concern.
 
 - [x] **Complete portability and sheet exports in the client (FR-8, NFR-5).**
   Campaign bundle import/export and independent character and crew JSON and
@@ -157,26 +156,26 @@ pinned pnpm version.
 
 - [ ] **Broaden the licensing firewall carefully (C3, C4).** Matching is now
   case-insensitive and committed packs are checked narrowly for assembled core
-  playbook and crew-type names. The automated check still has no coverage for
+  playbook and crew-type names. Committed `packs/` files now reject binary and
+  unsupported extensions, while the automated check still has no coverage for
   named core-book NPCs, maps, art, or official sheet PDFs beyond two setting
-  spellings and the pack assembly check. Add filename, binary-extension, and
-  narrowly verified name or structure rules without blocking legitimate SRD
-  text or ordinary English fixture names.
+  spellings and the pack assembly check. Add narrowly verified filename and
+  structure rules without blocking legitimate SRD text or ordinary English
+  fixture names.
 
-- [ ] **Type WebSocket client messages.** The server accepts untyped
-  dictionaries and can silently ignore unknown message types. Add Pydantic
-  message envelopes and explicit protocol errors. Snapshot response drift is a
-  separate Priority 1 defect above.
+- [x] **Type WebSocket client messages.** Discriminated Pydantic envelopes now
+  validate player messages, sheet operations, undo, X-card, and roll decisions.
+  Unknown or malformed messages receive explicit protocol errors. Snapshot
+  response drift is a separate Priority 1 defect above.
 
-- [ ] **Correct stale documentation and status counts.** `TODO.md` contains
-  historical prose that describes now-implemented gaps as open and test counts
-  that no longer match the suite. Keep historical analysis if useful, but mark
-  completed items and use this audit section as the active backlog.
+- [x] **Correct stale documentation and status counts.** This handoff now
+  records the current verification counts and marks the completed audit items.
+  Older TODO prose remains historical context; the prioritised section above is
+  the active backlog.
 
-- [ ] **Complete headed and container verification (FR-29, FR-34, NFR-7).** Run
-  the Konva maps in a headed browser, exercise resize and interaction paths,
-  then run `make build` and `docker compose up` on a Docker host. Record the
-  exact image and compose results.
+- [ ] **Complete headed and container verification (FR-29, FR-34, NFR-7).**
+  Container build and a Compose health smoke test now pass. A headed browser
+  run of the Konva maps, resize, and interaction paths remains open.
 
 - [ ] **Run the three outstanding acceptance playtests.** Complete a solo
   score and downtime cycle, a multi-session canon-consistency campaign, and an
@@ -189,11 +188,11 @@ The following older audit items are now present in live code and tests:
 
 - Player X-card flow, redirect support, lines and veils prompt guidance, and UI.
 - Trauma operations, armor use and restoration, character stash, load limits,
-  crew development, turf and claims, and replay cases. The trauma UI remains
-  broken by snapshot and overflow-state drift described above.
+  crew development, turf and claims, replay cases, and corrected trauma overflow
+  snapshot handling.
 - Faction creation in canon, faction clock association, and downtime reminders.
-- Referential checks for relationships and faction status, plus duplicate NPC
-  refusal. Optional NPC faction references still need validation.
+- Referential checks for relationships and faction status, duplicate NPC
+  refusal, and optional NPC faction references with replayed faction links.
 - Campaign-level JSON export and replay-based import, campaign deletion, and a
   web campaign export control.
 - Persistence before state-bearing WebSocket events and atomic base/latest
@@ -211,10 +210,11 @@ The following older audit items are now present in live code and tests:
   precede payoff or heat processing. Entering downtime requires an action roll.
 - Procedure persistence: campaign snapshot loading and event-log undo have
   explicit coverage for score flags and downtime activity counters.
-- Case-insensitive setting term checks and narrow pack-level checks for core
-  playbook and crew-type assemblies.
-- Upload size limits, clean extraction errors, and empty-text refusal on the
-  server. The UI still hides the returned detail.
+- Case-insensitive setting term checks, narrow pack-level checks for core
+  playbook and crew-type assemblies, and committed-pack binary-extension
+  refusal.
+- Upload size limits, clean extraction errors, empty-text refusal, and detailed
+  error propagation through the ingestion UI.
 
 These closures do not imply that the broader parent requirement is complete.
 For example, campaign export works while sheet export and web import remain

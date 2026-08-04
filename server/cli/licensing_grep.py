@@ -1,5 +1,6 @@
 import re
 import subprocess
+from pathlib import Path
 
 import click
 
@@ -54,7 +55,12 @@ def find_pack_hits(relative_path: str) -> list[str]:
     *assembled* under its name), not any bare mention of the word - the
     same reason those names aren't in FORBIDDEN_TERMS (see
     engine/pack_loader.py's own comment)."""
-    if not (relative_path.startswith("packs/") and relative_path.endswith(".json")):
+    if not relative_path.startswith("packs/"):
+        return []
+    suffix = Path(relative_path).suffix.lower()
+    if suffix not in {".json", ".md"}:
+        return [f"{relative_path}: unsupported committed-pack file extension {suffix or '<none>'}"]
+    if suffix != ".json":
         return []
     try:
         load_pack(REPO_ROOT / relative_path)

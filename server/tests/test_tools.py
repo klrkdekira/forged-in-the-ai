@@ -21,6 +21,7 @@ from ai.tools import (
     AdvanceCrewUpgradesArgs,
     AdvanceSpecialAbilityArgs,
     ApplyHarmArgs,
+    AssignControllerArgs,
     CashOutStashArgs,
     CraftArgs,
     CreateCharacterArgs,
@@ -415,6 +416,26 @@ def test_create_character_registers_a_human_seat_when_asked():
     )
 
     assert result.state.controllers["seat:pc-2"].kind == "human"
+
+
+def test_assign_controller_moves_a_character_without_double_assignment():
+    result = _executor().assign_controller(
+        _state(), AssignControllerArgs(seat_id="seat:player-2", character_id="pc-1", kind="ai")
+    )
+
+    assert result.state.controllers["seat:player-2"].character_ids == ["pc-1"]
+    assert all(
+        "pc-1" not in seat.character_ids
+        for seat_id, seat in result.state.controllers.items()
+        if seat_id != "seat:player-2"
+    )
+
+
+def test_assign_controller_refuses_an_unknown_character():
+    with pytest.raises(EngineError, match="unknown character"):
+        _executor().assign_controller(
+            _state(), AssignControllerArgs(seat_id="seat:player-2", character_id="missing")
+        )
 
 
 def test_create_character_refuses_a_duplicate_id():

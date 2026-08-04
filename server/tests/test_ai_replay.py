@@ -89,6 +89,21 @@ def test_replay_state_folds_a_created_characters_ai_controller_seat():
     assert replayed.controllers["seat:pc-2"].character_ids == ["pc-2"]
 
 
+def test_replay_state_folds_controller_reassignment():
+    base = _base_state()
+    log = base.log.append(
+        "controller",
+        "seat:player-2",
+        "controller_assigned",
+        {"seat_id": "seat:player-2", "character_id": "pc-1", "kind": "ai"},
+        AT,
+    )
+
+    replayed = replay_state(base, log.events)
+
+    assert replayed.controllers["seat:player-2"].character_ids == ["pc-1"]
+
+
 def test_replay_state_folds_clock_creation_and_ticks():
     base = _base_state()
     log = base.log

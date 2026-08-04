@@ -280,6 +280,12 @@ class CreateCharacterArgs(BaseModel):
     )
 
 
+class AssignControllerArgs(BaseModel):
+    seat_id: str = Field(..., description="Stable controller seat identifier")
+    character_id: str | None = Field(None, description="PC to assign to the seat")
+    kind: Literal["human", "ai"] = "human"
+
+
 class UpdateFactionStatusArgs(BaseModel):
     faction_id: str
     delta: int = Field(..., description="Change to apply, e.g. -1 or -2 after a hostile score")
@@ -643,6 +649,36 @@ class ToolExecutor:
                 update={"characters": characters, "controllers": controllers, "log": log}
             ),
             result={"character_id": args.character_id},
+        )
+
+    def assign_controller(self, state: GameState, args: AssignControllerArgs) -> ToolCallResult:
+        """FR-25/FR-26: assign one existing PC to exactly one controller seat."""
+        if args.character_id is None or args.character_id not in state.characters:
+            raise EngineError(f"unknown character {args.character_id!r}")
+        controllers = {
+            seat_id: seat.model_copy(
+                update={
+                    "character_ids": [
+                        cid for cid in seat.character_ids if cid != args.character_id
+                    ]
+                }
+            )
+            for seat_id, seat in state.controllers.items()
+        }
+        seat = controllers.get(args.seat_id, Controller(seat_id=args.seat_id, kind=args.kind))
+        controllers[args.seat_id] = seat.model_copy(
+            update={"kind": args.kind, "character_ids": [*seat.character_ids, args.character_id]}
+        )
+        log = state.log.append(
+            "controller",
+            args.seat_id,
+            "controller_assigned",
+            {"seat_id": args.seat_id, "character_id": args.character_id, "kind": args.kind},
+            self._clock(),
+        )
+        return ToolCallResult(
+            state=state.model_copy(update={"controllers": controllers, "log": log}),
+            result=controllers[args.seat_id].model_dump(mode="json"),
         )
 
     def roll_action(
@@ -2010,4 +2046,5 @@ SHEET_OPERATIONS: dict[str, type[BaseModel]] = {
     "adjust_crew_coin": AdjustCrewCoinArgs,
     "adjust_crew_turf": AdjustCrewTurfArgs,
     "develop_crew": DevelopCrewArgs,
+    "assign_controller": AssignControllerArgs,
 }

@@ -351,6 +351,23 @@ def test_session_ws_refuses_a_second_live_connection():
             assert error.value.code == 1008
 
 
+def test_session_ws_reports_an_explicit_protocol_error_for_unknown_message():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("the LLM should not be called")
+
+    app.dependency_overrides[get_llm_client] = lambda: _mock_client(handler)
+    with TestClient(app) as test_client:
+        campaign_id = _create_campaign(test_client)
+        with test_client.websocket_connect(f"/ws/session/{campaign_id}") as ws:
+            ws.receive_json()
+            ws.send_json({"type": "not-a-client-message"})
+
+            error = ws.receive_json()
+
+    assert error["type"] == "error"
+    assert "invalid client message" in error["message"]
+
+
 def test_session_ws_undoes_to_an_earlier_event_sequence():
     # FR-19: undo/rewind is an engine operation like sheet_operation - no
     # LLM call, and the truncation persists (a reconnect afterwards must

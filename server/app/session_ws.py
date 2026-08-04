@@ -2,9 +2,10 @@ import asyncio
 import random
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, WebSocketException, status
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 
 from ai.agent import GmAgent
 from ai.capability import get_or_probe_tool_calling
@@ -19,6 +20,48 @@ from state.db import app_db_path, campaign_db_path, make_engine, make_session_fa
 from state.migrations import run_campaign_migrations
 
 router = APIRouter()
+
+
+class PlayerMessage(BaseModel):
+    type: Literal["player_message"]
+    text: str = ""
+
+
+class SheetOperationMessage(BaseModel):
+    type: Literal["sheet_operation"]
+    name: str
+    args: dict[str, object] = Field(default_factory=dict)
+
+
+class UndoMessage(BaseModel):
+    type: Literal["undo"]
+    sequence: int
+
+
+class XCardMessage(BaseModel):
+    type: Literal["x_card"]
+    sequence: int | None = None
+    note: str | None = None
+    text: str | None = None
+
+
+class RollDecisionMessage(BaseModel):
+    type: Literal["roll_decision"]
+    decision: dict[str, object] = Field(default_factory=dict)
+
+
+ClientMessage = Annotated[
+    PlayerMessage | SheetOperationMessage | UndoMessage | XCardMessage | RollDecisionMessage,
+    Field(discriminator="type"),
+]
+_CLIENT_MESSAGE_ADAPTER = TypeAdapter(ClientMessage)
+
+
+def _parse_client_message(raw: object) -> tuple[dict, str | None]:
+    try:
+        return _CLIENT_MESSAGE_ADAPTER.validate_python(raw).model_dump(exclude_none=True), None
+    except ValidationError as error:
+        return {}, f"invalid client message: {error.errors()[0]['msg']}"
 
 # 2026-07-17 backlog item 2a: two WS connections open on the same
 # campaign_id each load their own GameState and mutate it independently -
@@ -151,7 +194,10 @@ async def session_ws(
         try:
             await websocket.send_json({"type": "state", "state": state.model_dump(mode="json")})
             while True:
-                message = await websocket.receive_json()
+                message, protocol_error = _parse_client_message(await websocket.receive_json())
+                if protocol_error is not None:
+                    await websocket.send_json({"type": "error", "message": protocol_error})
+                    continue
                 if message.get("type") == "sheet_operation":
                     state, reply = await _apply_sheet_operation(db_path, executor, state, message)
                     await websocket.send_json(reply)
@@ -238,7 +284,12 @@ async def session_ws(
                         # player's push/assist/Devil's Bargain/trade-off
                         # decision before the proposed roll actually
                         # executes.
-                        decision_message = await websocket.receive_json()
+                        decision_message, protocol_error = _parse_client_message(
+                            await websocket.receive_json()
+                        )
+                        if protocol_error is not None:
+                            await websocket.send_json({"type": "error", "message": protocol_error})
+                            decision_message = {}
                         to_send = (
                             decision_message.get("decision", {})
                             if decision_message.get("type") == "roll_decision"
