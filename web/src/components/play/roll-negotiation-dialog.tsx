@@ -14,6 +14,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import type { CharacterSnapshot, RollDecision, RollProposal } from '@/hooks/use-session-socket'
+import { AnimatedDiceRoller } from './animated-dice-roller'
+import { Dices } from 'lucide-react'
 
 const POSITIONS = ['controlled', 'risky', 'desperate'] as const
 const EFFECTS = ['zero', 'limited', 'standard', 'great', 'extreme'] as const
@@ -30,12 +32,6 @@ function stepEffect(effect: RollProposal['effect'], delta: number) {
   return EFFECTS[Math.max(0, Math.min(EFFECTS.length - 1, index + delta))]
 }
 
-// FR-16: shown whenever the GM agent proposes an action roll (position and
-// effect - Action Roll steps 1-4). The player negotiates bonus dice and any
-// trade-off (step 5, "Add Bonus Dice"/"Trading Position for Effect") before
-// the roll actually executes. Also offers SRD "Teamwork"/"Assist": any other
-// PC in the session (solo play's one seat may control several, FR-25) can
-// take 1 stress to give the roller +1d.
 export function RollNegotiationDialog({
   proposal,
   characters,
@@ -51,6 +47,7 @@ export function RollNegotiationDialog({
   const [devilsBargainText, setDevilsBargainText] = useState('')
   const [trade, setTrade] = useState<Trade>('none')
   const [assistCharacterId, setAssistCharacterId] = useState<string>('none')
+  const [showAnimation, setShowAnimation] = useState(false)
 
   const assistCandidates = Object.entries(characters).filter(
     ([characterId]) => characterId !== proposal.character_id,
@@ -70,7 +67,7 @@ export function RollNegotiationDialog({
   const bonusDice = (pushDice ? 1 : 0) + (devilsBargainAccepted ? 1 : 0) + (assisted ? 1 : 0)
   const stressCost = (pushDice ? 2 : 0) + (pushEffect ? 2 : 0)
 
-  function handleSubmit() {
+  function executeDecision() {
     onDecide({
       push_dice: pushDice,
       push_effect: pushEffect,
@@ -80,6 +77,30 @@ export function RollNegotiationDialog({
       trade: trade === 'none' ? null : trade,
       assist_character_id: assisted ? assistCharacterId : null,
     })
+  }
+
+  function handleSubmit() {
+    setShowAnimation(true)
+  }
+
+  if (showAnimation) {
+    return (
+      <AnimatedDiceRoller
+        open={showAnimation}
+        onOpenChange={(open) => {
+          setShowAnimation(open)
+          if (!open) executeDecision()
+        }}
+        poolSize={proposal.pool_size + bonusDice}
+        actionName={proposal.action}
+        position={position}
+        effect={effect}
+        onComplete={() => {
+          // Auto submit after short display delay
+          setTimeout(executeDecision, 800)
+        }}
+      />
+    )
   }
 
   return (

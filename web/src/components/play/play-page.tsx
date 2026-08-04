@@ -8,6 +8,7 @@ import { useLastCampaignId } from '@/hooks/use-last-campaign-id'
 import type { ControllerSnapshot } from '@/hooks/use-session-socket'
 import { useSessionSocket } from '@/hooks/use-session-socket'
 
+import { AnimatedDiceRoller } from './animated-dice-roller'
 import { CharacterSheetPanel } from './character-sheet-panel'
 import { ChatMessageView } from './chat-message-view'
 import { JournalPanel } from './journal-panel'
@@ -15,6 +16,7 @@ import { RelationshipMap } from './relationship-map'
 import { RollNegotiationDialog } from './roll-negotiation-dialog'
 import { TableViewPanel } from './table-view-panel'
 import { XCardDialog } from './x-card-dialog'
+import { Dices } from 'lucide-react'
 
 // FR-35: a character with no seat naming it is human-controlled by
 // default (engine.controller.is_ai_controlled) - looked up, never stored
@@ -50,6 +52,7 @@ export function PlayPage() {
   )
   const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null)
   const [xCardOpen, setXCardOpen] = useState(false)
+  const [diceRollerOpen, setDiceRollerOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   // FR-25/FR-35: the sheet panel used to always show state.character (the
@@ -117,6 +120,16 @@ export function PlayPage() {
               </span>
             </div>
           )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border-primary/40 text-primary hover:bg-primary/10 flex items-center gap-1.5"
+            onClick={() => setDiceRollerOpen(true)}
+          >
+            <Dices className="size-4" />
+            Roll Dice
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -324,6 +337,8 @@ export function PlayPage() {
         onOpenChange={setXCardOpen}
         onInvoke={(note, text) => sendXCard(note, undefined, text)}
       />
+
+      <AnimatedDiceRoller open={diceRollerOpen} onOpenChange={setDiceRollerOpen} />
     </div>
   )
 }
