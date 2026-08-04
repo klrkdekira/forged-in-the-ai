@@ -234,6 +234,12 @@ class UseArmorArgs(BaseModel):
     )
 
 
+class RestoreArmorArgs(BaseModel):
+    character_id: str | None = Field(
+        None, description="Which PC restores armor; only needed once more than one PC exists"
+    )
+
+
 class TransitionPhaseArgs(BaseModel):
     phase: CampaignPhase
 
@@ -776,6 +782,17 @@ class ToolExecutor:
         return ToolCallResult(
             state=state.model_copy(update={"characters": characters, "log": log}),
             result={"armor_type": args.armor_type},
+        )
+
+    def restore_armor(self, state: GameState, args: RestoreArmorArgs) -> ToolCallResult:
+        """SRD: "Armor" - restore all marked armor boxes."""
+        character_id = self.resolve_character_id(state, args.character_id)
+        character = restore_armor(state.characters[character_id])
+        log = state.log.append("character", character_id, "armor_restored", {}, self._clock())
+        characters = {**state.characters, character_id: character}
+        return ToolCallResult(
+            state=state.model_copy(update={"characters": characters, "log": log}),
+            result={"restored": True},
         )
 
     def heal_character(self, state: GameState, args: HealCharacterArgs) -> ToolCallResult:
@@ -1785,6 +1802,7 @@ SHEET_OPERATIONS: dict[str, type[BaseModel]] = {
     "mark_stress": MarkStressArgs,
     "mark_trauma": MarkTraumaArgs,
     "use_armor": UseArmorArgs,
+    "restore_armor": RestoreArmorArgs,
     "apply_harm": ApplyHarmArgs,
     "heal_character": HealCharacterArgs,
     "mark_xp": MarkXpArgs,

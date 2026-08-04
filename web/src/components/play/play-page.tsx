@@ -82,16 +82,33 @@ export function PlayPage() {
 
   return (
     <div className="flex flex-col gap-4 h-[calc(100vh-8rem)]">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            {state?.character.name ?? 'Play'}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {state ? `${state.character.playbook} · ${state.crew.name}` : 'Connecting…'}
-          </p>
+      <div className="flex items-center justify-between border-b border-border/40 pb-3">
+        <div className="flex items-center gap-3">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+              {state?.character.name ?? 'Play'}
+              {Boolean(state?.phase) && (
+                <span className="text-xs font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                  {String(state?.phase).replace('_', ' ')}
+                </span>
+              )}
+            </h1>
+            <p className="text-xs text-muted-foreground">
+              {state ? `${state.character.playbook} · ${state.crew.name}` : 'Connecting…'}
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
+          {state?.character && (
+            <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground mr-2">
+              <span className="px-2 py-1 rounded bg-muted/40 font-medium">
+                Stress: <strong className="text-foreground">{state.character.stress.marked}/9</strong>
+              </span>
+              <span className="px-2 py-1 rounded bg-muted/40 font-medium">
+                Coin: <strong className="text-foreground">{state.character.coin}</strong>
+              </span>
+            </div>
+          )}
           <Button
             type="button"
             variant="outline"
@@ -103,11 +120,11 @@ export function PlayPage() {
             X-Card
           </Button>
           <span
-            className={`text-xs rounded-full px-2 py-1 ${
-              connected ? 'bg-primary/10 text-primary' : 'bg-destructive/10 text-destructive'
+            className={`text-xs rounded-full px-2.5 py-1 font-semibold ${
+              connected ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-destructive/10 text-destructive'
             }`}
           >
-            {connected ? 'Connected' : 'Disconnected'}
+            {connected ? 'Live Session' : 'Disconnected'}
           </span>
         </div>
       </div>
@@ -123,6 +140,30 @@ export function PlayPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="flex gap-2">
+            <select
+              disabled={!connected || busy}
+              onChange={(e) => {
+                if (!e.target.value) return
+                const act = e.target.value
+                setDraft(`I attempt to use ${act.toUpperCase()} to `)
+                e.target.value = ''
+              }}
+              className="h-9 rounded-md border border-input bg-background px-2 text-xs font-medium text-muted-foreground hover:bg-muted/40 cursor-pointer"
+            >
+              <option value="">+ Roll Action...</option>
+              <option value="attune">Attune</option>
+              <option value="command">Command</option>
+              <option value="consort">Consort</option>
+              <option value="finesse">Finesse</option>
+              <option value="hunt">Hunt</option>
+              <option value="prowl">Prowl</option>
+              <option value="skirmish">Skirmish</option>
+              <option value="study">Study</option>
+              <option value="survey">Survey</option>
+              <option value="sway">Sway</option>
+              <option value="tinker">Tinker</option>
+              <option value="wreck">Wreck</option>
+            </select>
             <Input
               value={draft}
               onChange={(event) => setDraft(event.target.value)}

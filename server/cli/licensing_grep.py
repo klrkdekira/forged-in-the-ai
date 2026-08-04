@@ -18,7 +18,7 @@ FORBIDDEN_PATTERN = re.compile("|".join(re.escape(term) for term in FORBIDDEN_TE
 # enforce the firewall itself; code, packs, and fixtures otherwise are not.
 ALLOWLIST = re.compile(
     r"^("
-    r"NOTICE\.md|CLAUDE\.md|AGENTS\.md|README\.md|CONTRIBUTING\.md|TODO\.md|"
+    r"NOTICE\.md|CLAUDE\.md|AGENTS\.md|README\.md|CONTRIBUTING\.md|TODO\.md|HANDOFF\.md|"
     r"packs/README\.md|SPECIFICATION\.md|docs/.*\.md|"
     r"server/engine/pack_loader\.py|server/cli/licensing_grep\.py"
     r")$"

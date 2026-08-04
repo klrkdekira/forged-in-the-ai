@@ -11,38 +11,41 @@ import { ClaimMap } from './claim-map'
 import { DistrictMap } from './district-map'
 import { TickBoxes } from './tick-boxes'
 
-// FR-28/FR-29: the crew's heat/wanted level/rep/coin are clickable, same
-// engine-operation shape as the character sheet panel (previously
-// read-only - Table view v1 only wired up clocks and claims); active
-// clocks (clickable, same tick-box control as the sheet panel's
-// stress/XP), the crew's claims and the district map (each as a
-// generated Konva diagram, ADR-0007, alongside the precise text list -
-// the map is a fiction aid, not the only source of the detail), and
-// (once session zero has generated one, FR-36) the setting. Neither map
-// has stored positions/adjacency to lay out from yet, so both use a
-// computed ring layout (lib/map-layout.ts) rather than an authored one.
 export function TableViewPanel({
   clocks,
   crew,
   canon,
+  sessionZero,
   onOperate,
 }: {
   clocks: Record<string, ClockSnapshot>
   crew: CrewSnapshot
   canon: CanonSnapshot | null
+  sessionZero: SessionZeroSnapshot | null
   onOperate: (operation: SheetOperation) => void
 }) {
   const clockEntries = Object.entries(clocks)
 
   return (
     <div className="flex h-full flex-col gap-4 overflow-auto rounded-lg border border-border/50 bg-background/50 p-4 text-sm">
-      <div>
-        <h2 className="text-lg font-semibold text-foreground">{crew.name}</h2>
-        <p className="text-xs text-muted-foreground">{crew.crew_type}</p>
+      {/* Crew Header */}
+      <div className="flex flex-col gap-1.5 rounded-lg border border-border/40 bg-muted/20 p-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold tracking-tight text-foreground">{crew.name}</h2>
+          <span className="capitalize text-xs font-semibold px-2 py-0.5 rounded border border-border bg-muted/40">
+            {crew.crew_type}
+          </span>
+        </div>
       </div>
 
-      <div className="flex flex-col gap-1">
-        <span className="text-xs font-semibold text-muted-foreground">Heat</span>
+      {/* Heat Meter */}
+      <div className="flex flex-col gap-1.5 rounded-md border border-border/40 p-2.5 bg-background/40">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Heat
+          </span>
+          <span className="text-xs font-medium text-muted-foreground">{crew.heat.heat}/9</span>
+        </div>
         <TickBoxes
           segments={9}
           marked={crew.heat.heat}
@@ -55,8 +58,14 @@ export function TableViewPanel({
         />
       </div>
 
-      <div className="flex flex-col gap-1">
-        <span className="text-xs font-semibold text-muted-foreground">Wanted level</span>
+      {/* Wanted Level */}
+      <div className="flex flex-col gap-1.5 rounded-md border border-border/40 p-2.5 bg-background/40">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Wanted Level
+          </span>
+          <span className="text-xs font-medium text-muted-foreground">{crew.wanted_level}/4</span>
+        </div>
         <TickBoxes
           segments={4}
           marked={crew.wanted_level}
@@ -69,10 +78,35 @@ export function TableViewPanel({
         />
       </div>
 
-      <div className="flex flex-col gap-1">
-        <span className="text-xs font-semibold text-muted-foreground">
-          Rep (turf: {crew.rep.turf})
-        </span>
+      {/* Rep & Turf */}
+      <div className="flex flex-col gap-1.5 rounded-md border border-border/40 p-2.5 bg-background/40">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Rep ({crew.rep.rep}/{crew.rep.threshold})
+          </span>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span>Turf: {crew.rep.turf}</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              className="h-5 w-5 text-xs"
+              onClick={() => onOperate({ name: 'adjust_crew_turf', args: { amount: -1 } })}
+              disabled={crew.rep.turf <= 0}
+            >
+              -
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              className="h-5 w-5 text-xs"
+              onClick={() => onOperate({ name: 'adjust_crew_turf', args: { amount: 1 } })}
+            >
+              +
+            </Button>
+          </div>
+        </div>
         <TickBoxes
           segments={crew.rep.threshold}
           marked={crew.rep.rep}
@@ -85,8 +119,11 @@ export function TableViewPanel({
         />
       </div>
 
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-muted-foreground">Coin</span>
+      {/* Crew Coin / Vault */}
+      <div className="flex items-center justify-between rounded-md border border-border/40 p-2.5 bg-background/40">
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          Crew Vault Coin
+        </span>
         <div className="flex items-center gap-2">
           <Button
             type="button"
@@ -97,7 +134,7 @@ export function TableViewPanel({
           >
             -
           </Button>
-          <span className="w-6 text-center">{crew.coin}</span>
+          <span className="w-6 text-center font-bold text-foreground">{crew.coin}</span>
           <Button
             type="button"
             variant="outline"
@@ -109,11 +146,71 @@ export function TableViewPanel({
         </div>
       </div>
 
-      <div className="flex flex-col gap-2">
-        <span className="text-xs font-semibold text-muted-foreground">Setting</span>
+      {/* Active Clocks */}
+      <div className="flex flex-col gap-2 rounded-md border border-border/40 p-2.5 bg-background/40">
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          Progress Clocks ({clockEntries.length})
+        </span>
+        {clockEntries.length > 0 ? (
+          <ul className="flex flex-col gap-2">
+            {clockEntries.map(([clockId, clock]) => (
+              <li key={clockId} className="flex flex-col gap-1 rounded bg-muted/20 p-2 border border-border/30">
+                <div className="flex items-center justify-between text-xs font-medium">
+                  <span>{clock.name}</span>
+                  <span className="text-muted-foreground">{clock.filled}/{clock.segments}</span>
+                </div>
+                <TickBoxes
+                  segments={clock.segments}
+                  marked={clock.filled}
+                  onSetMarked={(marked) =>
+                    onOperate({
+                      name: 'tick_clock',
+                      args: { clock_id: clockId, amount: marked - clock.filled },
+                    })
+                  }
+                />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-muted-foreground">No active progress clocks.</p>
+        )}
+      </div>
+
+      {/* Claims */}
+      <div className="flex flex-col gap-2 rounded-md border border-border/40 p-2.5 bg-background/40">
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          Claims & Turf
+        </span>
+        {crew.claims.length > 0 ? (
+          <>
+            <ClaimMap claims={crew.claims} />
+            <ul className="flex flex-col gap-1 text-xs">
+              {crew.claims.map((claim) => (
+                <li key={claim.id} className="flex items-center justify-between">
+                  <span className={claim.controlled ? 'font-medium text-foreground' : 'text-muted-foreground'}>
+                    {claim.name} {claim.is_turf && '(Turf)'}
+                  </span>
+                  <span className={`text-[0.65rem] px-2 py-0.5 rounded font-medium ${claim.controlled ? 'bg-primary text-primary-foreground' : 'border border-border bg-muted/30 text-muted-foreground'}`}>
+                    {claim.controlled ? 'Controlled' : 'Contested'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <p className="text-xs text-muted-foreground">No claims established yet.</p>
+        )}
+      </div>
+
+      {/* Setting */}
+      <div className="flex flex-col gap-2 rounded-md border border-border/40 p-2.5 bg-background/40">
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          Setting & Canon
+        </span>
         {canon ? (
-          <div className="flex flex-col gap-1 text-xs">
-            <span className="font-medium text-foreground">{canon.setting_name}</span>
+          <div className="flex flex-col gap-1.5 text-xs">
+            <span className="font-bold text-foreground">{canon.setting_name}</span>
             {canon.tone && <span className="italic text-muted-foreground">{canon.tone}</span>}
             <span className="text-muted-foreground">
               Factions: {canon.factions.length > 0 ? canon.factions.join(', ') : 'none yet'}
@@ -127,9 +224,12 @@ export function TableViewPanel({
         )}
       </div>
 
+      {/* Safety Boundaries */}
       {sessionZero && (
-        <div className="flex flex-col gap-2 rounded-md border border-border/40 p-2 text-xs">
-          <span className="font-semibold text-muted-foreground">Safety Boundaries</span>
+        <div className="flex flex-col gap-2 rounded-md border border-border/40 p-2.5 bg-background/40 text-xs">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Safety Boundaries
+          </span>
           {sessionZero.lines.length > 0 && (
             <div>
               <span className="font-medium text-destructive">Lines: </span>
@@ -145,54 +245,11 @@ export function TableViewPanel({
           {sessionZero.tone && (
             <div>
               <span className="font-medium text-foreground">Tone: </span>
-              <span className="italic text-muted-foreground">{sessionZero.tone}</span>
+              <span className="text-muted-foreground">{sessionZero.tone}</span>
             </div>
           )}
         </div>
       )}
-
-      <div className="flex flex-col gap-3">
-        <span className="text-xs font-semibold text-muted-foreground">Active clocks</span>
-        {clockEntries.length > 0 ? (
-          clockEntries.map(([clockId, clock]) => (
-            <div key={clockId} className="flex flex-col gap-1">
-              <span className="text-xs">
-                {clock.name} <span className="text-muted-foreground capitalize">({clock.kind})</span>
-              </span>
-              <TickBoxes
-                segments={clock.segments}
-                marked={clock.filled}
-                onSetMarked={(marked) =>
-                  onOperate({
-                    name: 'tick_clock',
-                    args: { clock_id: clockId, amount: marked - clock.filled },
-                  })
-                }
-              />
-            </div>
-          ))
-        ) : (
-          <p className="text-xs text-muted-foreground">No clocks yet.</p>
-        )}
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <span className="text-xs font-semibold text-muted-foreground">Claims</span>
-        <ClaimMap claims={crew.claims} />
-        {crew.claims.length > 0 && (
-          <ul className="flex flex-col gap-1">
-            {crew.claims.map((claim) => (
-              <li key={claim.id} className="flex items-center justify-between text-xs">
-                <span>{claim.name}</span>
-                <span className="text-muted-foreground">
-                  {claim.controlled ? 'Controlled' : 'Contested'}
-                  {claim.is_turf ? ' · Turf' : ''}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
     </div>
   )
 }

@@ -6,4 +6,8 @@
 **/*.pyc
 **/.pytest_cache
 **/.ruff_cache
+**/.vite
+server/data
+*.db
+*.sqlite
 Blades-in-the-Dark-SRD.md

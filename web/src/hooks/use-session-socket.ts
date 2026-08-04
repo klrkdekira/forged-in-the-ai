@@ -23,18 +23,46 @@ export interface CharacterItemSnapshot {
   carried: boolean
 }
 
+export interface ArmorSnapshot {
+  used: boolean
+  heavy_used: boolean
+  special_used: boolean
+}
+
+export interface TraumaSnapshot {
+  conditions: string[]
+  retired: boolean
+}
+
 // FR-28: the character-sheet fields the interactive panel renders. Not
 // generated from the server's OpenAPI spec - GameState/Character are only
 // ever exchanged over the WS channel, which has no OpenAPI representation
 // (ADR-0002's generated-types contract covers REST endpoints).
 export interface CharacterSnapshot {
   name: string
+  alias?: string | null
+  look?: string | null
+  heritage?: string | null
+  heritage_detail?: string | null
+  background?: string | null
+  background_detail?: string | null
   playbook: string
+  action_ratings?: Record<string, number>
+  special_ability_ids?: string[]
   stress: { marked: number }
+  trauma?: TraumaSnapshot
   harm: { entries: HarmEntrySnapshot[] }
+  armor?: ArmorSnapshot
+  vice?: string | null
+  vice_detail?: string | null
+  vice_purveyor?: string | null
   coin: number
+  stash?: number
   load: number
+  load_level?: 'light' | 'normal' | 'heavy'
   items: CharacterItemSnapshot[]
+  friend?: string | null
+  rival?: string | null
   playbook_xp: XpTrackSnapshot
   attribute_xp: Record<'insight' | 'prowess' | 'resolve', XpTrackSnapshot>
   [key: string]: unknown
@@ -138,6 +166,7 @@ export interface ControllerSnapshot {
 }
 
 export interface GameStateSnapshot {
+  phase?: string
   character: CharacterSnapshot
   characters: Record<string, CharacterSnapshot>
   crew: CrewSnapshot
@@ -157,6 +186,7 @@ export interface SheetOperation {
     | 'mark_stress'
     | 'mark_trauma'
     | 'use_armor'
+    | 'restore_armor'
     | 'apply_harm'
     | 'heal_character'
     | 'mark_xp'

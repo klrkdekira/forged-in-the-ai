@@ -8,7 +8,8 @@ WORKDIR /app
 
 # Dependencies first so they cache independently of app code changes.
 COPY server/pyproject.toml server/uv.lock ./
-RUN uv sync --locked --no-dev --no-install-project
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-dev --no-install-project
 
 COPY server/app ./app
 COPY server/ai ./ai
@@ -17,7 +18,8 @@ COPY server/ingestion ./ingestion
 COPY server/state ./state
 COPY packs ./packs
 COPY NOTICE.md ./NOTICE.md
-RUN uv sync --locked --no-dev
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-dev
 
 FROM server-base AS openapi-export
 RUN uv run python -m app.export_openapi > /openapi.json
@@ -26,7 +28,8 @@ FROM node:24-slim AS web-build
 WORKDIR /web
 RUN corepack enable
 COPY web/package.json web/pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
 COPY web/ ./
 COPY --from=openapi-export /openapi.json /server/openapi.json
 # Schema contract (TODO.md Phase 0): fails the build if schema.d.ts is stale.
