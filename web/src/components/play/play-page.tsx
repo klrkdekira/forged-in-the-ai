@@ -39,6 +39,7 @@ export function PlayPage() {
     sendSheetOperation,
     sendUndo,
     sendXCard,
+    clearBusy,
   } = useSessionSocket(campaignId)
   const [draft, setDraft] = useState('')
   const [sidePanel, setSidePanel] = useState<'sheet' | 'table' | 'journal' | 'relationships'>(
@@ -135,7 +136,7 @@ export function PlayPage() {
             {messages.map((message, index) => (
               <ChatMessageView key={index} message={message} />
             ))}
-            {showTyping && <TypingIndicator />}
+            {showTyping && <TypingIndicator onCancel={clearBusy} />}
             <div ref={bottomRef} />
           </div>
 
@@ -292,16 +293,30 @@ export function PlayPage() {
   )
 }
 
-function TypingIndicator() {
+function TypingIndicator({ onCancel }: { onCancel?: () => void }) {
   return (
-    <div className="self-start flex items-center gap-1 rounded-lg bg-accent/40 px-3 py-2">
-      {[0, 1, 2].map((i) => (
-        <span
-          key={i}
-          className="size-1.5 animate-bounce rounded-full bg-muted-foreground"
-          style={{ animationDelay: `${i * 0.15}s` }}
-        />
-      ))}
+    <div className="self-start flex items-center gap-3 rounded-lg bg-accent/40 px-3 py-1.5 text-xs text-muted-foreground border border-border/30">
+      <div className="flex items-center gap-1">
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            className="size-1.5 animate-bounce rounded-full bg-muted-foreground"
+            style={{ animationDelay: `${i * 0.15}s` }}
+          />
+        ))}
+      </div>
+      <span>GM thinking…</span>
+      {onCancel && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-5 px-1.5 text-[0.65rem] text-muted-foreground hover:text-foreground hover:bg-background/50"
+          onClick={onCancel}
+        >
+          Unlock controls
+        </Button>
+      )}
     </div>
   )
 }

@@ -166,10 +166,10 @@ class GmAgent:
         for _ in range(MAX_TOOL_ROUNDS):
             try:
                 response = await self._get_response(messages)
-            except httpx.HTTPError as error:
-                # A slow/unreachable backend must not crash the WS
+            except Exception as error:
+                # A slow/unreachable backend or turn exception must not crash the WS
                 # connection outright (discovered live: an uncaught
-                # ReadTimeout here left the client stuck showing
+                # exception here left the client stuck showing
                 # "Disconnected" with no explanation and no way to
                 # recover short of a full page reload).
                 yield AgentTurnEvent(
@@ -308,7 +308,18 @@ class GmAgent:
                             {"role": "tool", "tool_call_id": call.id, "content": json.dumps(result)}
                         )
                         continue
-                    result, state = self._resolve_roll(state, proposal, decision)
+                    try:
+                        result, state = self._resolve_roll(state, proposal, decision)
+                    except Exception as error:
+                        result = {"error": str(error)}
+                        yield AgentTurnEvent(
+                            type="tool_call",
+                            payload={"name": call.name, "result": result, "events": []},
+                        )
+                        messages.append(
+                            {"role": "tool", "tool_call_id": call.id, "content": json.dumps(result)}
+                        )
+                        continue
                 else:
                     result = self._run_tool(state, call.name, call.arguments)
                     if "state" in result:
@@ -355,7 +366,7 @@ class GmAgent:
             async for chunk in self._client.stream_chat(messages):
                 narration_chunks.append(chunk)
                 yield AgentTurnEvent(type="narration_chunk", payload={"text": chunk})
-        except httpx.HTTPError as error:
+        except Exception as error:
             yield AgentTurnEvent(
                 type="error",
                 payload={

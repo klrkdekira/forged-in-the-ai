@@ -292,12 +292,17 @@ export function useSessionSocket(campaignId: string) {
     socketRef.current = socket
 
     socket.onopen = () => setConnected(true)
-    socket.onclose = () => setConnected(false)
+    socket.onclose = () => {
+      setConnected(false)
+      setBusy(false)
+      setPendingRoll(null)
+    }
     socket.onmessage = (event: MessageEvent<string>) => {
       const data = JSON.parse(event.data)
       switch (data.type) {
         case 'state':
           setState(data.state)
+          setBusy(false)
           break
         case 'roll_proposed':
           setPendingRoll({
@@ -311,6 +316,9 @@ export function useSessionSocket(campaignId: string) {
           break
         case 'tool_call':
           setPendingRoll(null)
+          if (data.state) {
+            setState(data.state)
+          }
           setMessages((prev) => [
             ...prev,
             { kind: 'tool', name: data.name, result: data.result, events: data.events ?? [] },
@@ -337,6 +345,9 @@ export function useSessionSocket(campaignId: string) {
           // FR-35: an AI crewmate's in-character line, labelled with its
           // own name - without this it would be invisible live and only
           // surface (mislabelled) after an undo rebuild.
+          if (data.state) {
+            setState(data.state)
+          }
           setMessages((prev) => [
             ...prev,
             { kind: 'companion', name: data.name, text: data.text },
@@ -349,6 +360,9 @@ export function useSessionSocket(campaignId: string) {
           // negotiation dialog. Fields ride flat alongside character_id/name
           // (matching every other event payload in this app), not nested
           // under a "decision" key.
+          if (data.state) {
+            setState(data.state)
+          }
           setMessages((prev) => [
             ...prev,
             {
@@ -366,6 +380,10 @@ export function useSessionSocket(campaignId: string) {
           break
         case 'error':
           setBusy(false)
+          setPendingRoll(null)
+          if (data.state) {
+            setState(data.state)
+          }
           setMessages((prev) => [...prev, { kind: 'error', message: data.message }])
           break
         case 'undo_done':
@@ -408,6 +426,11 @@ export function useSessionSocket(campaignId: string) {
     [],
   )
 
+  const clearBusy = useCallback(() => {
+    setBusy(false)
+    setPendingRoll(null)
+  }, [])
+
   return {
     connected,
     busy,
@@ -419,5 +442,6 @@ export function useSessionSocket(campaignId: string) {
     sendSheetOperation,
     sendUndo,
     sendXCard,
+    clearBusy,
   }
 }

@@ -204,6 +204,15 @@ async def session_ws(
                         event = await (turn.asend(to_send) if to_send is not None else anext(turn))
                     except StopAsyncIteration:
                         break
+                    except Exception as error:
+                        await websocket.send_json(
+                            {
+                                "type": "error",
+                                "message": f"Turn execution error: {error}",
+                                "state": state.model_dump(mode="json"),
+                            }
+                        )
+                        break
                     to_send = None
                     if "state" in event.payload:
                         # 2026-07-17 backlog item 2b: every event that
