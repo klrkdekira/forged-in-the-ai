@@ -1,3 +1,4 @@
+import asyncio
 import json
 from collections.abc import AsyncIterator
 
@@ -22,6 +23,8 @@ class ChatResponse(BaseModel):
 # long context attached. Discovered live against a real backend - the
 # mocked test suite's instant responses never exercise this.
 DEFAULT_TIMEOUT_SECONDS = 120.0
+MAX_RETRIES = 3
+RETRY_BACKOFF_SECONDS = 0.1
 
 
 class LLMClient:
@@ -63,29 +66,68 @@ class LLMClient:
         payload: dict = {"model": self._model, "messages": messages}
         if tools:
             payload["tools"] = tools
-        response = await self._http.post("/chat/completions", json=payload)
-        response.raise_for_status()
-        message = response.json()["choices"][0]["message"]
-        tool_calls = [
-            ToolCall(
-                id=call["id"],
-                name=call["function"]["name"],
-                arguments=call["function"]["arguments"],
-            )
-            for call in message.get("tool_calls") or []
-        ]
-        return ChatResponse(content=message.get("content"), tool_calls=tool_calls)
+
+        for attempt in range(MAX_RETRIES):
+            try:
+                response = await self._http.post("/chat/completions", json=payload)
+                response.raise_for_status()
+                message = response.json()["choices"][0]["message"]
+                tool_calls = [
+                    ToolCall(
+                        id=call["id"],
+                        name=call["function"]["name"],
+                        arguments=call["function"]["arguments"],
+                    )
+                    for call in message.get("tool_calls") or []
+                ]
+                return ChatResponse(content=message.get("content"), tool_calls=tool_calls)
+            except (
+                httpx.ConnectError,
+                httpx.TimeoutException,
+                httpx.NetworkError,
+                httpx.HTTPStatusError,
+            ) as error:
+                if (
+                    isinstance(error, httpx.HTTPStatusError)
+                    and error.response.status_code not in (429, 500, 502, 503, 504)
+                ):
+                    raise error
+                if attempt < MAX_RETRIES - 1:
+                    await asyncio.sleep(RETRY_BACKOFF_SECONDS * (2**attempt))
+                else:
+                    raise error
+
+        raise RuntimeError("Chat request failed after retries")
 
     async def stream_chat(self, messages: list[dict]) -> AsyncIterator[str]:
         payload = {"model": self._model, "messages": messages, "stream": True}
-        async with self._http.stream("POST", "/chat/completions", json=payload) as response:
-            response.raise_for_status()
-            async for line in response.aiter_lines():
-                if not line.startswith("data: "):
-                    continue
-                data = line.removeprefix("data: ").strip()
-                if data == "[DONE]":
-                    break
-                delta = json.loads(data)["choices"][0]["delta"].get("content")
-                if delta:
-                    yield delta
+        for attempt in range(MAX_RETRIES):
+            try:
+                async with self._http.stream("POST", "/chat/completions", json=payload) as response:
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if not line.startswith("data: "):
+                            continue
+                        data = line.removeprefix("data: ").strip()
+                        if data == "[DONE]":
+                            break
+                        delta = json.loads(data)["choices"][0]["delta"].get("content")
+                        if delta:
+                            yield delta
+                return
+            except (
+                httpx.ConnectError,
+                httpx.TimeoutException,
+                httpx.NetworkError,
+                httpx.HTTPStatusError,
+            ) as error:
+                if (
+                    isinstance(error, httpx.HTTPStatusError)
+                    and error.response.status_code not in (429, 500, 502, 503, 504)
+                ):
+                    raise error
+                if attempt < MAX_RETRIES - 1:
+                    await asyncio.sleep(RETRY_BACKOFF_SECONDS * (2**attempt))
+                else:
+                    raise error
+

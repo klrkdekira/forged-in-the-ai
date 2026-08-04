@@ -30,6 +30,8 @@ export function PlayPage() {
   useLastCampaignId(campaignId)
   const {
     connected,
+    reconnecting,
+    reconnectAttempt,
     busy,
     messages,
     state,
@@ -40,6 +42,7 @@ export function PlayPage() {
     sendUndo,
     sendXCard,
     clearBusy,
+    reconnect,
   } = useSessionSocket(campaignId)
   const [draft, setDraft] = useState('')
   const [sidePanel, setSidePanel] = useState<'sheet' | 'table' | 'journal' | 'relationships'>(
@@ -95,7 +98,11 @@ export function PlayPage() {
               )}
             </h1>
             <p className="text-xs text-muted-foreground">
-              {state ? `${state.character.playbook} · ${state.crew.name}` : 'Connecting…'}
+              {state
+                ? `${state.character.playbook} · ${state.crew.name}`
+                : reconnecting
+                ? `Reconnecting to server (attempt ${reconnectAttempt})…`
+                : 'Connecting…'}
             </p>
           </div>
         </div>
@@ -121,12 +128,40 @@ export function PlayPage() {
             X-Card
           </Button>
           <span
-            className={`text-xs rounded-full px-2.5 py-1 font-semibold ${
-              connected ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-destructive/10 text-destructive'
+            className={`text-xs rounded-full px-2.5 py-1 font-semibold flex items-center gap-1.5 ${
+              connected
+                ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                : reconnecting
+                ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20 animate-pulse'
+                : 'bg-destructive/10 text-destructive border border-destructive/20'
             }`}
           >
-            {connected ? 'Live Session' : 'Disconnected'}
+            <span
+              className={`size-1.5 rounded-full ${
+                connected
+                  ? 'bg-emerald-500'
+                  : reconnecting
+                  ? 'bg-amber-500'
+                  : 'bg-destructive'
+              }`}
+            />
+            {connected
+              ? 'Live Session'
+              : reconnecting
+              ? `Reconnecting (${reconnectAttempt})`
+              : 'Disconnected'}
           </span>
+          {!connected && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10"
+              onClick={reconnect}
+            >
+              Reconnect
+            </Button>
+          )}
         </div>
       </div>
 

@@ -276,33 +276,58 @@ export function messagesFromLog(events: JournalEntry[]): ChatMessage[] {
 // event from the server.
 export function useSessionSocket(campaignId: string) {
   const [connected, setConnected] = useState(false)
+  const [reconnecting, setReconnecting] = useState(false)
+  const [reconnectAttempt, setReconnectAttempt] = useState(0)
   const [busy, setBusy] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [state, setState] = useState<GameStateSnapshot | null>(null)
   const [pendingRoll, setPendingRoll] = useState<RollProposal | null>(null)
   const socketRef = useRef<WebSocket | null>(null)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const attemptRef = useRef<number>(0)
+  const unmountedRef = useRef<boolean>(false)
 
-  useEffect(() => {
-    setMessages([])
-    setState(null)
-    setPendingRoll(null)
+  const connect = useCallback(() => {
+    if (unmountedRef.current) return
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const socket = new WebSocket(`${protocol}//${window.location.host}/ws/session/${campaignId}`)
     socketRef.current = socket
 
-    socket.onopen = () => setConnected(true)
+    socket.onopen = () => {
+      setConnected(true)
+      setReconnecting(false)
+      setReconnectAttempt(0)
+      attemptRef.current = 0
+    }
+
     socket.onclose = () => {
       setConnected(false)
       setBusy(false)
       setPendingRoll(null)
+
+      if (!unmountedRef.current) {
+        attemptRef.current += 1
+        setReconnecting(true)
+        setReconnectAttempt(attemptRef.current)
+        const delay = Math.min(1000 * Math.pow(1.5, attemptRef.current - 1), 10000)
+        timerRef.current = setTimeout(() => {
+          connect()
+        }, delay)
+      }
     }
+
     socket.onmessage = (event: MessageEvent<string>) => {
       const data = JSON.parse(event.data)
       switch (data.type) {
         case 'state':
           setState(data.state)
           setBusy(false)
+          setMessages((prev) => (prev.length === 0 ? messagesFromLog(data.state.log.events) : prev))
           break
         case 'roll_proposed':
           setPendingRoll({
@@ -395,9 +420,34 @@ export function useSessionSocket(campaignId: string) {
           break
       }
     }
-
-    return () => socket.close()
   }, [campaignId])
+
+  useEffect(() => {
+    unmountedRef.current = false
+    setMessages([])
+    setState(null)
+    setPendingRoll(null)
+    attemptRef.current = 0
+
+    connect()
+
+    return () => {
+      unmountedRef.current = true
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+      }
+      socketRef.current?.close()
+    }
+  }, [campaignId, connect])
+
+  const manualReconnect = useCallback(() => {
+    if (socketRef.current) {
+      socketRef.current.close()
+    }
+    attemptRef.current = 0
+    setReconnecting(true)
+    connect()
+  }, [connect])
 
   const sendMessage = useCallback((text: string) => {
     setMessages((prev) => [...prev, { kind: 'player', text }])
@@ -433,6 +483,8 @@ export function useSessionSocket(campaignId: string) {
 
   return {
     connected,
+    reconnecting,
+    reconnectAttempt,
     busy,
     messages,
     state,
@@ -443,5 +495,6 @@ export function useSessionSocket(campaignId: string) {
     sendUndo,
     sendXCard,
     clearBusy,
+    reconnect: manualReconnect,
   }
 }
