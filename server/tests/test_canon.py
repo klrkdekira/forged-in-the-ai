@@ -4,7 +4,7 @@ from engine.campaign import CampaignCanon, SessionZeroConfig
 from engine.character import Character
 from engine.clocks import Clock, ClockKind
 from engine.crew import Crew
-from engine.entities import Npc, Score
+from engine.entities import Faction, Npc, Score
 from engine.relationships import FactionStatus, Relationship, RelationshipKind
 from engine.session import Session
 
@@ -119,3 +119,22 @@ def test_render_canon_includes_relationships_only_when_present():
 
     assert "Test Character -> n1: rival" in relationships_section.text
     assert "betrayed the crew" in relationships_section.text
+
+
+def test_render_canon_includes_known_factions_with_their_clocks():
+    # FR-14/FR-15: canon factions render with the faction_id every tool
+    # call needs, plus any linked clocks.
+    state = _state(
+        factions={
+            "red-circle": Faction(
+                id="red-circle", name="The Red Circle", tier=2, clock_ids=["rc-plot"]
+            )
+        },
+        clocks={"rc-plot": Clock(name="Seize the docks", kind=ClockKind.FACTION, segments=6)},
+    )
+
+    assert not any(s.title == "Known factions" for s in render_canon(_state()))
+    faction_section = next(s for s in render_canon(state) if s.title == "Known factions")
+
+    assert "red-circle: The Red Circle (Tier 2)" in faction_section.text
+    assert "Seize the docks 0/6" in faction_section.text

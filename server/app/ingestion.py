@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
 from pydantic import BaseModel, Field
 
 from ai.llm_client import LLMClient
@@ -9,8 +9,16 @@ from ingestion.module_extraction import ModuleDraft, extract_module_draft
 from ingestion.module_review import finalize_module
 from ingestion.text_extraction import UnsupportedFormatError, extract_text
 from state.db import app_db_path, make_engine, make_session_factory
-from state.module_store import ModuleIdError, list_modules, load_module, save_module
-from state.srd_index import chunk_module_prose, index_module_chunks
+from state.module_store import (
+    ModuleIdError,
+    delete_module,
+    list_modules,
+    load_module,
+    save_module,
+)
+from state.srd_index import chunk_module_prose, delete_module_chunks, index_module_chunks
+
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25MB cap
 
 router = APIRouter(prefix="/api/ingestion", tags=["ingestion"])
 
@@ -79,10 +87,24 @@ async def extract_uploaded_text(file: UploadFile) -> ExtractedText:
         raise HTTPException(status_code=400, detail="uploaded file has no filename")
 
     content = await file.read()
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=400, detail="uploaded file exceeds 25MB size limit")
+
     try:
         text = extract_text(file.filename, content)
     except UnsupportedFormatError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(status_code=400, detail=f"could not extract text: {error}") from error
+
+    if not text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "extracted text is empty - verify the file contains readable text "
+                "(not scanned image PDFs)"
+            ),
+        )
 
     return ExtractedText(filename=file.filename, text=text, char_count=len(text))
 
@@ -178,3 +200,26 @@ async def get_module_endpoint(
     if pack is None:
         raise HTTPException(status_code=404, detail=f"unknown module {module_id!r}")
     return pack
+
+
+@router.delete("/modules/{module_id}", status_code=204, response_model=None)
+async def delete_module_endpoint(
+    module_id: str, settings: Settings = Depends(get_settings)
+) -> Response:
+    """FR-23/FR-24: deletes a saved private module file and its retrieval chunks."""
+    try:
+        deleted = delete_module(settings.data_dir, module_id)
+    except ModuleIdError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"unknown module {module_id!r}")
+
+    engine = make_engine(app_db_path(settings.data_dir))
+    try:
+        async with make_session_factory(engine)() as session:
+            await delete_module_chunks(session, module_id)
+    finally:
+        await engine.dispose()
+
+    return Response(status_code=204)

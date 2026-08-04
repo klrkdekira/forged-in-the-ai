@@ -1,0 +1,48 @@
+# Exclude patterns for rsync (rsync -av --exclude-from=.rsyncignore ...).
+# rsync doesn't understand git's own ignore rules, so this restates what
+# .gitignore/.dockerignore/web/.gitignore already keep out of the repo,
+# plus local-only runtime state that isn't tracked at all.
+#
+# .git/ is deliberately not excluded here - it's needed on the receiving end.
+
+# Python
+__pycache__/
+*.py[codz]
+*.egg-info/
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Node / web build
+node_modules/
+dist/
+dist-ssr/
+web/src/routeTree.gen.ts
+web/src/api/.schema.check.d.ts
+
+# Secrets and machine-local config
+.env
+.claude/settings.local.json
+
+# Generated / regenerated-on-demand artefacts
+server/openapi.json
+
+# Local dev user-data (ADR-0005) and the Docker bind-mount volume
+# (compose.yml); Docker itself uses a named volume for /data, not this.
+server/data/
+_volumes/
+
+# Local-only source material (licensing firewall, NOTICE.md/CLAUDE.md):
+# the gitignored SRD copy and any full-book PDF, never redistributed.
+Blades-in-the-Dark-SRD.md
+*.pdf
+
+# OS / editor cruft
+.DS_Store
+*.swp
+.vscode/
+.idea/

@@ -1,10 +1,12 @@
 import asyncio
+import random
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
+from ai.tools import MarkStressArgs, ToolExecutor
 from app.campaigns import _new_game_state
 from app.main import app
 from app.settings import get_settings
@@ -104,3 +106,87 @@ def test_export_recap_404s_for_an_unknown_campaign() -> None:
         response = client.get("/api/campaigns/does-not-exist/recap")
 
     assert response.status_code == 404
+
+
+def test_export_campaign_returns_the_log_and_both_snapshots(tmp_path: Path) -> None:
+    with TestClient(app) as client:
+        campaign = client.post("/api/campaigns", json={"name": "The Reckoning"}).json()
+
+        db_path = campaign_db_path(tmp_path, campaign["id"])
+        state = asyncio.run(load_state(db_path))
+        executor = ToolExecutor(rng=random.Random(1), clock=lambda: datetime.now(UTC))
+        result = executor.mark_stress(state, MarkStressArgs(amount=2))
+        asyncio.run(save_state(db_path, result.state))
+
+        response = client.get(f"/api/campaigns/{campaign['id']}/export")
+
+    assert response.status_code == 200
+    assert "attachment" in response.headers["content-disposition"]
+    body = response.json()
+    assert body["campaign_id"] == campaign["id"]
+    assert body["name"] == "The Reckoning"
+    assert "stress_marked" in body["log_jsonl"]
+    # NFR-5: the base snapshot never picks up the play that happened after
+    # creation - only the latest one does.
+    assert body["base_state"]["characters"]["pc-1"]["stress"]["marked"] == 0
+    assert body["latest_state"]["characters"]["pc-1"]["stress"]["marked"] == 2
+
+
+def test_export_campaign_404s_for_an_unknown_campaign() -> None:
+    with TestClient(app) as client:
+        response = client.get("/api/campaigns/does-not-exist/export")
+
+    assert response.status_code == 404
+
+
+def test_import_campaign_round_trips_a_played_campaign_into_a_fresh_one(
+    tmp_path: Path,
+) -> None:
+    # NFR-5/ADR-0005: "a canonical JSONL event-log export (plus JSON
+    # snapshots) that round-trips through import; a test enforces the
+    # round-trip."
+    with TestClient(app) as client:
+        campaign = client.post("/api/campaigns", json={"name": "The Reckoning"}).json()
+        campaign_id = campaign["id"]
+
+        db_path = campaign_db_path(tmp_path, campaign_id)
+        state = asyncio.run(load_state(db_path))
+        executor = ToolExecutor(rng=random.Random(1), clock=lambda: datetime.now(UTC))
+        result = executor.mark_stress(state, MarkStressArgs(amount=2))
+        state = executor.log_event(result.state, "session", "current", "narration", {"text": "Ok."})
+        asyncio.run(save_state(db_path, state))
+        original_state = asyncio.run(load_state(db_path))
+
+        bundle = client.get(f"/api/campaigns/{campaign_id}/export").json()
+
+        import_response = client.post("/api/campaigns/import", json=bundle)
+
+    assert import_response.status_code == 200
+    new_campaign = import_response.json()
+    assert new_campaign["id"] != campaign_id
+    assert new_campaign["name"] == "The Reckoning"
+
+    imported_state = asyncio.run(load_state(campaign_db_path(tmp_path, new_campaign["id"])))
+    assert imported_state == original_state
+
+
+def test_delete_campaign_removes_the_index_row_and_the_campaign_file(tmp_path: Path) -> None:
+    with TestClient(app) as client:
+        campaign = client.post("/api/campaigns", json={"name": "Doomed"}).json()
+        campaign_id = campaign["id"]
+        db_path = campaign_db_path(tmp_path, campaign_id)
+        assert db_path.exists()
+
+        delete_response = client.delete(f"/api/campaigns/{campaign_id}")
+        list_response = client.get("/api/campaigns")
+
+    assert delete_response.status_code == 204
+    assert not db_path.exists()
+    assert campaign_id not in {row["id"] for row in list_response.json()}
+
+
+def test_delete_campaign_is_idempotent_for_an_already_removed_campaign(tmp_path: Path) -> None:
+    with TestClient(app) as client:
+        response = client.delete("/api/campaigns/never-existed")
+
+    assert response.status_code == 204

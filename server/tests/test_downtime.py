@@ -25,6 +25,10 @@ def test_acquire_asset_roll_sets_quality_relative_to_tier():
 
 
 def test_acquire_asset_roll_never_goes_below_zero_quality():
+    # Implementation invariant, not an SRD rule: the SRD's "1-3: Tier -1"
+    # would be negative at Tier 0, and quality levels start at zero
+    # (SRD "Quality/Tier"), so the engine floors the result rather than
+    # producing a quality the game has no meaning for.
     rng = random.Random(2)
     result = next(
         r for r in (acquire_asset_roll(0, rng) for _ in range(200)) if r.band is RollBand.BAD
@@ -71,6 +75,9 @@ def test_craft_roll_adds_one_per_coin_spent_beyond_tier_plus_two():
 
 
 def test_craft_roll_never_goes_below_zero_quality():
+    # Implementation invariant, same reasoning as the acquire-asset floor
+    # above: quality levels start at zero, so "1-3: Tier -1" at Tier 0
+    # floors rather than going negative.
     rng = random.Random(8)
     result = next(
         r

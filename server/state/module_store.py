@@ -60,3 +60,14 @@ def list_modules(data_dir: Path) -> list[ContentPack]:
     if not directory.exists():
         return []
     return load_packs_dir(directory, private=True)
+
+
+def delete_module(data_dir: Path, pack_id: str) -> bool:
+    """FR-23: deletes a saved private module file. Returns True if the
+    file existed and was deleted, False if it was already absent."""
+    _validate_pack_id(pack_id)
+    path = modules_dir(data_dir) / f"{pack_id}.json"
+    if not path.exists():
+        return False
+    path.unlink()
+    return True

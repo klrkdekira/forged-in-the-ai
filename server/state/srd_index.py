@@ -158,6 +158,13 @@ async def index_module_chunks(
     await session.commit()
 
 
+async def delete_module_chunks(session: AsyncSession, pack_id: str) -> None:
+    """FR-24: deletes all index chunks for a given module id."""
+    source = module_source(pack_id)
+    await session.execute(text("DELETE FROM srd_chunks WHERE source = :source"), {"source": source})
+    await session.commit()
+
+
 async def search_srd(session: AsyncSession, query: str, limit: int = 5) -> list[SrdSearchHit]:
     """FR-13/FR-24: lexical (BM25) retrieval over the whole indexed corpus
     - SRD chunks and every indexed module's, ranked together in one query

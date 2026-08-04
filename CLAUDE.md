@@ -7,6 +7,7 @@ Python/FastAPI server plus React/TS web client, single container image.
 
 - `SPECIFICATION.md`: requirements (FR-x), constraints (C-x), NFRs, domain model. Defines the scope; authoritative.
 - `TODO.md`: phased plan; your task maps to items here.
+- `HANDOFF.md`: current progress analysis, test harness guide, and audited gap backlog.
 - `docs/adr/`: 0001 LLM API, 0002 stack, 0003 grounding/model choice, 0004 containers, 0005 SQLite/services, 0006 web libraries. Do not contradict an accepted ADR; if you must, write a superseding one.
 - `Blades-in-the-Dark-SRD.md`: the rules text (CC-BY 3.0). Cite section headings when encoding rules. Local-only and gitignored, never committed; if missing, fetch it (see the SRD section in README.md).
 

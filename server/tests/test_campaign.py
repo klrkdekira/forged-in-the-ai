@@ -32,3 +32,13 @@ def test_campaign_canon_grows_with_new_locations():
 
     assert grown.locations == ["The Docks", "The Old Quarter"]
     assert canon.locations == ["The Docks"]
+
+
+def test_campaign_canon_grows_with_new_factions():
+    # FR-15: factions join canon mid-play the same way locations do.
+    canon = CampaignCanon(setting_name="Test City", factions=["The Circle"])
+
+    grown = canon.with_faction("The Silver Nails")
+
+    assert grown.factions == ["The Circle", "The Silver Nails"]
+    assert canon.factions == ["The Circle"]

@@ -1,15 +1,18 @@
 import pytest
 
-from engine.character import Attribute, Character, CharacterItem, XpTrack
-from engine.crew import Crew
+from engine.character import Attribute, Character, CharacterItem, LoadLevel, XpTrack
+from engine.crew import Claim, Crew
 from engine.crew_mechanics import Hold, RepTrack
 from engine.errors import EngineError
 from engine.operations import (
+    InvalidArmorTypeError,
     InvalidTraumaConditionError,
     add_heat,
     adjust_coin,
     adjust_crew_coin,
     adjust_crew_rep,
+    adjust_crew_turf,
+    adjust_stash,
     adjust_wanted_level,
     develop_crew,
     flashback,
@@ -20,7 +23,11 @@ from engine.operations import (
     mark_playbook_xp,
     mark_stress,
     mark_trauma,
+    restore_armor,
+    set_claim_controlled,
     set_item_carried,
+    set_load_level,
+    use_armor,
 )
 
 
@@ -260,3 +267,153 @@ def test_set_item_carried_refuses_an_unknown_item():
 
     with pytest.raises(EngineError):
         set_item_carried(character, "not-an-item", True)
+
+
+def test_use_armor_marks_the_matching_box():
+    # SRD: "Armor" - "you can mark an armor box to reduce or avoid a
+    # consequence, instead of rolling to resist".
+    character = _character(armor={"has_armor": True, "has_heavy_armor": True})
+
+    used = use_armor(character, "standard")
+    assert used.armor.armor_used
+    assert not used.armor.heavy_armor_used
+
+    both = use_armor(used, "heavy")
+    assert both.armor.heavy_armor_used
+
+
+def test_use_armor_refuses_an_unknown_armor_type():
+    with pytest.raises(InvalidArmorTypeError):
+        use_armor(_character(armor={"has_armor": True}), "ceramic")
+
+
+def test_use_armor_refuses_a_box_already_marked():
+    # SRD: "Armor" - "When an armor box is marked, it can't be used again
+    # until it's restored."
+    character = _character(armor={"has_armor": True, "armor_used": True})
+
+    with pytest.raises(EngineError):
+        use_armor(character, "standard")
+
+
+def test_restore_armor_clears_every_marked_box():
+    # SRD: "Armor" - "All of your armor is restored when you choose your
+    # load for the next score."
+    character = _character(
+        armor={
+            "has_armor": True,
+            "has_special_armor": True,
+            "armor_used": True,
+            "special_armor_used": True,
+        }
+    )
+
+    restored = restore_armor(character)
+
+    assert not restored.armor.armor_used
+    assert not restored.armor.special_armor_used
+
+
+def test_adjust_stash_gains_and_removes():
+    # SRD: "Stash & Retirement" - "Put coin in your character's stash...
+    # If you want to pull coin out of your stash, you may do so, at a cost."
+    character = _character(stash=4)
+
+    gained = adjust_stash(character, 3)
+    removed = adjust_stash(gained, -2)
+
+    assert gained.stash == 7
+    assert removed.stash == 5
+
+
+def test_adjust_stash_refuses_to_go_negative():
+    with pytest.raises(EngineError):
+        adjust_stash(_character(stash=1), -2)
+
+
+def test_adjust_stash_clamps_at_the_tracker_maximum():
+    # SRD: "Stash & Retirement" - the tracker's best outcome is "Stash 40:
+    # Fine."; there is nothing beyond the 40th box to mark.
+    character = _character(stash=39)
+
+    assert adjust_stash(character, 5).stash == 40
+
+
+def test_set_load_level_declares_the_load_for_the_score():
+    # SRD: "Loadout" - "For each operation, decide what your character's
+    # load will be."
+    character = set_load_level(_character(), LoadLevel.HEAVY)
+
+    assert character.load_level is LoadLevel.HEAVY
+
+
+def test_set_load_level_refuses_a_level_below_the_current_load():
+    # SRD: "Loadout" - "1-3 load: Light"; four carried items cannot fit a
+    # light load, and the engine refuses rather than dropping items.
+    character = _character(
+        load=4,
+        items=[CharacterItem(item_id=f"item-{i}", carried=True) for i in range(4)],
+    )
+
+    with pytest.raises(EngineError):
+        set_load_level(character, LoadLevel.LIGHT)
+
+
+def test_set_item_carried_refuses_past_the_load_limit():
+    # SRD: "Loadout" - "you may say that your character has an item on
+    # hand... up to a number of items equal to your chosen load."
+    character = _character(
+        load_level=LoadLevel.LIGHT,
+        load=3,
+        items=[
+            CharacterItem(item_id="lockpicks", carried=True),
+            CharacterItem(item_id="pistol", carried=True),
+            CharacterItem(item_id="rope", carried=True),
+            CharacterItem(item_id="lantern"),
+        ],
+    )
+
+    with pytest.raises(EngineError):
+        set_item_carried(character, "lantern", True)
+
+
+def test_adjust_crew_turf_caps_at_the_srd_maximum():
+    # SRD: "Turf" - "You can hold a maximum of 6 turf."
+    crew = _crew()
+
+    assert adjust_crew_turf(crew, 8).rep.turf == 6
+    assert adjust_crew_turf(crew, -1).rep.turf == 0
+
+
+def test_set_claim_controlled_seizes_and_loses_an_existing_claim():
+    # SRD: "Seizing a claim" / "Losing a claim".
+    crew = _crew(claims=[Claim(id="docks", name="The Docks", is_turf=True)])
+
+    seized = set_claim_controlled(crew, "docks", True)
+    assert seized.claims[0].controlled
+    assert seized.rep.turf == 1  # SRD: "Some claims count as turf."
+
+    lost = set_claim_controlled(seized, "docks", False)
+    assert not lost.claims[0].controlled
+    assert lost.rep.turf == 0
+
+
+def test_set_claim_controlled_adds_a_named_claim_not_on_the_map():
+    # SRD: "Claims" - "you may... even seek out a special claim not on
+    # your map"; recording it needs an explicit name, never a guess.
+    crew = set_claim_controlled(_crew(), "vice-den", True, name="Undertow Vice Den", is_turf=False)
+
+    assert crew.claims[0].name == "Undertow Vice Den"
+    assert crew.rep.turf == 0
+
+
+def test_set_claim_controlled_refuses_an_unknown_claim_without_a_name():
+    with pytest.raises(EngineError):
+        set_claim_controlled(_crew(), "nope", True)
+
+
+def test_set_claim_controlled_refuses_a_no_op_toggle():
+    crew = _crew(claims=[Claim(id="docks", name="The Docks")])
+
+    with pytest.raises(EngineError):
+        set_claim_controlled(crew, "docks", False)

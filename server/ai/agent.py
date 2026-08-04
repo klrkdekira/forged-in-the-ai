@@ -173,7 +173,17 @@ class GmAgent:
                 # "Disconnected" with no explanation and no way to
                 # recover short of a full page reload).
                 yield AgentTurnEvent(
-                    type="error", payload={"message": f"LLM request failed: {error}"}
+                    type="error",
+                    # 2026-07-17 backlog item 2b: carries "state" so
+                    # session_ws.py persists the player_message logged
+                    # above even when the turn dies on its very first LLM
+                    # call - otherwise that log entry would live only in
+                    # this generator's local `state` and vanish with the
+                    # connection.
+                    payload={
+                        "message": f"LLM request failed: {error}",
+                        "state": state.model_dump(mode="json"),
+                    },
                 )
                 return
             if not response.tool_calls:
@@ -257,7 +267,17 @@ class GmAgent:
                         )
                         yield AgentTurnEvent(
                             type="companion_roll_decision",
-                            payload={"character_id": character_id, **decision_payload},
+                            payload={
+                                "character_id": character_id,
+                                **decision_payload,
+                                # FR-18: this event appends to the log
+                                # (a companion's roll choice, FR-35) -
+                                # session_ws.py persists whenever a
+                                # "state" key rides along, same as
+                                # narration_done, so a disconnect right
+                                # after this doesn't lose the record.
+                                "state": state.model_dump(mode="json"),
+                            },
                         )
                     else:
                         decision_payload = yield AgentTurnEvent(
@@ -268,9 +288,26 @@ class GmAgent:
                                 "position": proposal.position.value,
                                 "effect": proposal.effect.name.lower(),
                                 "pool_size": pool_size,
+                                "devils_bargain": proposal.devils_bargain,
                             },
                         )
                         decision = RollDecision.model_validate(decision_payload or {})
+                    if decision.declined:
+                        result = {
+                            "declined": True,
+                            "message": (
+                                "Player declined the proposed action roll to reconsider "
+                                "their approach."
+                            ),
+                        }
+                        yield AgentTurnEvent(
+                            type="tool_call",
+                            payload={"name": call.name, "result": result, "events": []},
+                        )
+                        messages.append(
+                            {"role": "tool", "tool_call_id": call.id, "content": json.dumps(result)}
+                        )
+                        continue
                     result, state = self._resolve_roll(state, proposal, decision)
                 else:
                     result = self._run_tool(state, call.name, call.arguments)
@@ -283,15 +320,30 @@ class GmAgent:
                 new_events = [
                     event.model_dump(mode="json") for event in state.log.events[events_before:]
                 ]
-                yield AgentTurnEvent(
-                    type="tool_call",
-                    payload={"name": call.name, "result": result, "events": new_events},
-                )
+                tool_call_payload = {"name": call.name, "result": result, "events": new_events}
+                if new_events:
+                    # FR-18/2026-07-17 backlog item 2b: session_ws.py
+                    # persists whenever a "state" key rides along (same
+                    # check as narration_done), so a mid-turn tool call
+                    # that actually changed state is saved immediately
+                    # rather than only at the end of the turn - a
+                    # disconnect right after a shown roll/tool result
+                    # must not lose it. Omitted when no event was logged
+                    # (a refused/erroring call): nothing changed, nothing
+                    # to save.
+                    tool_call_payload["state"] = state.model_dump(mode="json")
+                yield AgentTurnEvent(type="tool_call", payload=tool_call_payload)
                 messages.append(
                     {"role": "tool", "tool_call_id": call.id, "content": json.dumps(result)}
                 )
         else:
-            yield AgentTurnEvent(type="error", payload={"message": "too many tool calls in a row"})
+            yield AgentTurnEvent(
+                type="error",
+                payload={
+                    "message": "too many tool calls in a row",
+                    "state": state.model_dump(mode="json"),
+                },
+            )
             return
 
         # A fresh streaming call for the same context, discarding the
@@ -304,7 +356,13 @@ class GmAgent:
                 narration_chunks.append(chunk)
                 yield AgentTurnEvent(type="narration_chunk", payload={"text": chunk})
         except httpx.HTTPError as error:
-            yield AgentTurnEvent(type="error", payload={"message": f"LLM request failed: {error}"})
+            yield AgentTurnEvent(
+                type="error",
+                payload={
+                    "message": f"LLM request failed: {error}",
+                    "state": state.model_dump(mode="json"),
+                },
+            )
             return
 
         narration_text = "".join(narration_chunks)
@@ -341,7 +399,16 @@ class GmAgent:
                 )
                 yield AgentTurnEvent(
                     type="companion_message",
-                    payload={"character_id": character_id, "name": character.name, "text": line},
+                    payload={
+                        "character_id": character_id,
+                        "name": character.name,
+                        "text": line,
+                        # 2026-07-17 backlog item 2b: also appends to the
+                        # log (FR-35's companion colour line) - persisted
+                        # the same way as every other "state"-carrying
+                        # event, rather than only at narration_done below.
+                        "state": state.model_dump(mode="json"),
+                    },
                 )
 
         yield AgentTurnEvent(

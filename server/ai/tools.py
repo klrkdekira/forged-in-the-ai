@@ -1,4 +1,5 @@
 import random
+import re
 from collections.abc import Callable, Sequence
 from datetime import datetime
 from typing import Literal
@@ -11,16 +12,17 @@ from engine.advancement import (
     advance_crew_special_ability,
     advance_crew_upgrades,
     advance_special_ability,
+    crew_profit_share,
     earns_desperate_roll_xp,
     xp_attribute_for_action,
 )
 from engine.campaign import CampaignCanon, SessionZeroConfig
-from engine.character import Action, Attribute, Character
+from engine.character import LOAD_LIMITS, Action, Attribute, Character, LoadLevel
 from engine.clocks import Clock, ClockKind
 from engine.controller import Controller
 from engine.crew import Crew
 from engine.downtime import acquire_asset_roll, craft_roll, indulge_vice_roll
-from engine.entities import Npc, Score
+from engine.entities import Faction, Npc, Score
 from engine.errors import EngineError
 from engine.events import EventLog
 from engine.operations import (
@@ -28,7 +30,10 @@ from engine.operations import (
     adjust_coin,
     adjust_crew_coin,
     adjust_crew_rep,
+    adjust_crew_turf,
+    adjust_stash,
     adjust_wanted_level,
+    develop_crew,
     flashback,
     heal_character,
     mark_attribute_xp,
@@ -36,7 +41,12 @@ from engine.operations import (
     mark_harm,
     mark_playbook_xp,
     mark_stress,
+    mark_trauma,
+    restore_armor,
+    set_claim_controlled,
     set_item_carried,
+    set_load_level,
+    use_armor,
 )
 from engine.packs import EntanglementEntry
 from engine.relationships import FactionStatus, Relationship, RelationshipKind
@@ -45,6 +55,13 @@ from engine.score import downtime_ticks, engagement_roll, entanglement_roll, pay
 from engine.session import CampaignPhase, Session
 
 _DEFAULT_CHARACTER_ID = "pc-1"
+
+
+def _slug(name: str) -> str:
+    """A deterministic id from a display name (e.g. "The Rustworks
+    Combine" -> "the-rustworks-combine") - a pure function, not a guess,
+    so replays and callers derive the same id from the same name."""
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 
 
 class GameState(BaseModel):
@@ -68,6 +85,9 @@ class GameState(BaseModel):
     clocks: dict[str, Clock] = Field(default_factory=dict)
     npcs: dict[str, Npc] = Field(default_factory=dict)
     scores: dict[str, Score] = Field(default_factory=dict)
+    factions: dict[str, Faction] = Field(
+        default_factory=dict, description="Canon factions, keyed by faction_id (FR-15)"
+    )
     faction_statuses: dict[str, FactionStatus] = Field(
         default_factory=dict, description="Keyed by faction_id"
     )
@@ -110,6 +130,9 @@ class RollActionArgs(BaseModel):
     effect: Effect = Field(
         ..., description="limited, standard, great, zero, or extreme (name or Effect's int value)"
     )
+    devils_bargain: str | None = Field(
+        None, description="Optional GM-offered Devil's Bargain text/price (+1d for accepting)"
+    )
     character_id: str | None = Field(
         None, description="Which PC is rolling; only needed once more than one PC exists"
     )
@@ -145,6 +168,7 @@ class RollDecision(BaseModel):
         description="SRD 'Teamwork'/'Assist': another PC helping this roll - they take 1 "
         "stress, this roll gets +1d",
     )
+    declined: bool = Field(False, description="Player declined the proposed action roll")
 
 
 class RollFortuneArgs(BaseModel):
@@ -163,6 +187,11 @@ class CreateClockArgs(BaseModel):
     name: str
     kind: ClockKind
     segments: int
+    faction_id: str | None = Field(
+        None,
+        description="For a faction's own clock (SRD 'Faction Clocks'): the canon faction "
+        "this clock belongs to, so downtime can enumerate it (FR-14)",
+    )
 
 
 class TickClockArgs(BaseModel):
@@ -182,6 +211,26 @@ class MarkStressArgs(BaseModel):
     amount: int = Field(..., description="Positive to mark, negative to clear")
     character_id: str | None = Field(
         None, description="Which PC marks stress; only needed once more than one PC exists"
+    )
+
+
+class MarkTraumaArgs(BaseModel):
+    condition: str = Field(
+        ...,
+        description="The SRD trauma condition the player chose: cold, haunted, obsessed, "
+        "paranoid, reckless, soft, unstable, or vicious",
+    )
+    character_id: str | None = Field(
+        None, description="Which PC takes trauma; only needed once more than one PC exists"
+    )
+
+
+class UseArmorArgs(BaseModel):
+    armor_type: Literal["standard", "heavy", "special"] = Field(
+        "standard", description="Which armor box to mark"
+    )
+    character_id: str | None = Field(
+        None, description="Which PC uses armor; only needed once more than one PC exists"
     )
 
 
@@ -230,9 +279,13 @@ class UpdateFactionStatusArgs(BaseModel):
 
 
 class UpdateRelationshipArgs(BaseModel):
-    subject_type: str = Field(..., description="e.g. 'character', 'crew', 'npc'")
-    subject_id: str
-    object_type: str = Field(..., description="e.g. 'npc', 'faction', 'crew'")
+    subject_type: str = Field(..., description="One of: character, npc, crew, faction, location")
+    subject_id: str = Field(
+        ...,
+        description="An existing entity's id (character_id/npc_id/faction_id, "
+        "the crew's name, or a canon location name)",
+    )
+    object_type: str = Field(..., description="One of: character, npc, crew, faction, location")
     object_id: str
     kind: RelationshipKind
     status: str | None = Field(
@@ -246,6 +299,13 @@ class AddCanonFactArgs(BaseModel):
 
 class AddCanonLocationArgs(BaseModel):
     location: str = Field(..., description="A new location the fiction has just introduced")
+
+
+class AddCanonFactionArgs(BaseModel):
+    faction_id: str = Field(..., description="A stable id for this faction, e.g. 'red-sashes'")
+    name: str
+    tier: int = Field(0, description="The faction's Tier (SRD 'The Faction Game')")
+    notes: str | None = Field(None, description="What the fiction has established about them")
 
 
 class SetSessionZeroConfigArgs(BaseModel):
@@ -313,6 +373,20 @@ class SetItemCarriedArgs(BaseModel):
     )
 
 
+class SetLoadLevelArgs(BaseModel):
+    level: LoadLevel
+    character_id: str | None = Field(
+        None, description="Which PC's load level; only needed once more than one PC exists"
+    )
+
+
+class AdjustStashArgs(BaseModel):
+    amount: int = Field(..., description="Positive to add stash, negative to remove it")
+    character_id: str | None = Field(
+        None, description="Which PC's stash; only needed once more than one PC exists"
+    )
+
+
 class RollEngagementArgs(BaseModel):
     pool_size: int = Field(
         ...,
@@ -346,6 +420,27 @@ class AdjustCrewRepArgs(BaseModel):
 
 class AdjustCrewCoinArgs(BaseModel):
     amount: int = Field(..., description="Positive to gain crew coin, negative to spend it")
+
+
+class AdjustCrewTurfArgs(BaseModel):
+    amount: int = Field(..., description="Turf gained (positive) or lost (negative)")
+
+
+class SetClaimControlledArgs(BaseModel):
+    claim_id: str
+    controlled: bool = Field(..., description="True when seized, false when lost")
+    name: str | None = Field(
+        None, description="Required only when seizing a claim not yet on the crew's map"
+    )
+    is_turf: bool = Field(
+        False, description="Whether a newly-recorded claim counts as turf (SRD 'Turf')"
+    )
+
+
+class DevelopCrewArgs(BaseModel):
+    """SRD: "Development" - no fields; what happens (hold strengthens, or
+    coin buys the next Tier) is entirely determined by the crew's current
+    hold, rep, and coin."""
 
 
 class RollEntanglementArgs(BaseModel):
@@ -574,18 +669,29 @@ class ToolExecutor:
         )
 
     def create_clock(self, state: GameState, args: CreateClockArgs) -> ToolCallResult:
-        """SRD: "Progress clocks"."""
+        """SRD: "Progress clocks". A `faction_id` links the clock to a
+        canon faction (SRD: "Faction Clocks"), so the transition into
+        downtime can enumerate each faction's clocks deterministically
+        (FR-14) instead of relying on the model to remember them."""
+        if args.faction_id is not None and args.faction_id not in state.factions:
+            raise EngineError(f"no canon faction {args.faction_id!r} in this session")
         clock = Clock(name=args.name, kind=args.kind, segments=args.segments)
-        log = state.log.append(
-            "clock",
-            args.clock_id,
-            "clock_created",
-            {"name": args.name, "kind": args.kind.value, "segments": args.segments},
-            self._clock(),
-        )
+        payload = {"name": args.name, "kind": args.kind.value, "segments": args.segments}
+        if args.faction_id is not None:
+            payload["faction_id"] = args.faction_id
+        log = state.log.append("clock", args.clock_id, "clock_created", payload, self._clock())
         clocks = {**state.clocks, args.clock_id: clock}
+        factions = state.factions
+        if args.faction_id is not None:
+            faction = state.factions[args.faction_id]
+            factions = {
+                **factions,
+                args.faction_id: faction.model_copy(
+                    update={"clock_ids": [*faction.clock_ids, args.clock_id]}
+                ),
+            }
         return ToolCallResult(
-            state=state.model_copy(update={"clocks": clocks, "log": log}),
+            state=state.model_copy(update={"clocks": clocks, "factions": factions, "log": log}),
             result=clock.model_dump(mode="json"),
         )
 
@@ -630,6 +736,47 @@ class ToolExecutor:
         characters = {**state.characters, character_id: mutation.character}
         state = state.model_copy(update={"characters": characters, "log": log})
         return ToolCallResult(state=state, result={"triggered_trauma": mutation.triggered_trauma})
+
+    def mark_trauma(self, state: GameState, args: MarkTraumaArgs) -> ToolCallResult:
+        """SRD: "Trauma" - "When you take trauma, circle one of your trauma
+        conditions"; the condition is the player's choice, recorded after
+        `mark_stress`/`flashback` reports `triggered_trauma`. The result
+        reports `retired` - "When you mark your fourth trauma condition...
+        You must retire them" - a fiction-level outcome the GM narrates,
+        not a further mutation."""
+        character_id = self.resolve_character_id(state, args.character_id)
+        character = mark_trauma(state.characters[character_id], args.condition)
+        log = state.log.append(
+            "character",
+            character_id,
+            "trauma_marked",
+            {"condition": args.condition, "retired": character.trauma.is_retired},
+            self._clock(),
+        )
+        characters = {**state.characters, character_id: character}
+        return ToolCallResult(
+            state=state.model_copy(update={"characters": characters, "log": log}),
+            result={"condition": args.condition, "retired": character.trauma.is_retired},
+        )
+
+    def use_armor(self, state: GameState, args: UseArmorArgs) -> ToolCallResult:
+        """SRD: "Armor" - "mark an armor box to reduce or avoid a
+        consequence, instead of rolling to resist". Restoration happens on
+        the transition into the next score (`transition_phase`)."""
+        character_id = self.resolve_character_id(state, args.character_id)
+        character = use_armor(state.characters[character_id], args.armor_type)
+        log = state.log.append(
+            "character",
+            character_id,
+            "armor_used",
+            {"armor_type": args.armor_type},
+            self._clock(),
+        )
+        characters = {**state.characters, character_id: character}
+        return ToolCallResult(
+            state=state.model_copy(update={"characters": characters, "log": log}),
+            result={"armor_type": args.armor_type},
+        )
 
     def heal_character(self, state: GameState, args: HealCharacterArgs) -> ToolCallResult:
         """SRD: "Recover". Part of `SHEET_OPERATIONS` (FR-28), not
@@ -713,6 +860,43 @@ class ToolExecutor:
             result={"load": character.load},
         )
 
+    def set_load_level(self, state: GameState, args: SetLoadLevelArgs) -> ToolCallResult:
+        """SRD: "Loadout" - the player declares light/normal/heavy for the
+        score. `SHEET_OPERATIONS` only (FR-28), like `set_item_carried`."""
+        character_id = self.resolve_character_id(state, args.character_id)
+        character = set_load_level(state.characters[character_id], args.level)
+        log = state.log.append(
+            "character",
+            character_id,
+            "load_level_set",
+            {"level": args.level.value},
+            self._clock(),
+        )
+        characters = {**state.characters, character_id: character}
+        return ToolCallResult(
+            state=state.model_copy(update={"characters": characters, "log": log}),
+            result={"level": args.level.value, "limit": LOAD_LIMITS[args.level]},
+        )
+
+    def adjust_stash(self, state: GameState, args: AdjustStashArgs) -> ToolCallResult:
+        """SRD: "Stash & Retirement". `SHEET_OPERATIONS` only (FR-28), like
+        `adjust_coin`; the SRD's own payout path ("Profits") is chained by
+        `develop_crew` instead."""
+        character_id = self.resolve_character_id(state, args.character_id)
+        character = adjust_stash(state.characters[character_id], args.amount)
+        log = state.log.append(
+            "character",
+            character_id,
+            "stash_adjusted",
+            {"amount": args.amount},
+            self._clock(),
+        )
+        characters = {**state.characters, character_id: character}
+        return ToolCallResult(
+            state=state.model_copy(update={"characters": characters, "log": log}),
+            result={"stash": character.stash},
+        )
+
     def roll_engagement(self, state: GameState, args: RollEngagementArgs) -> ToolCallResult:
         """SRD: "Engagement Roll" - sets the crew's starting position for the score."""
         roll = engagement_roll(args.pool_size, self._rng)
@@ -790,6 +974,69 @@ class ToolExecutor:
         return ToolCallResult(
             state=state.model_copy(update={"crew": crew, "log": log}),
             result={"coin": crew.coin},
+        )
+
+    def adjust_crew_turf(self, state: GameState, args: AdjustCrewTurfArgs) -> ToolCallResult:
+        """SRD: "Turf" - each turf held reduces the rep threshold by one,
+        max 6. For turf outside the claim map; `set_claim_controlled`
+        manages a turf claim's own mark."""
+        crew = adjust_crew_turf(state.crew, args.amount)
+        log = state.log.append(
+            "crew", crew.name, "crew_turf_adjusted", {"amount": args.amount}, self._clock()
+        )
+        return ToolCallResult(
+            state=state.model_copy(update={"crew": crew, "log": log}),
+            result={"turf": crew.rep.turf, "threshold": crew.rep.threshold},
+        )
+
+    def set_claim_controlled(
+        self, state: GameState, args: SetClaimControlledArgs
+    ) -> ToolCallResult:
+        """SRD: "Seizing a claim" / "Losing a claim"."""
+        crew = set_claim_controlled(
+            state.crew, args.claim_id, args.controlled, name=args.name, is_turf=args.is_turf
+        )
+        claim = next(c for c in crew.claims if c.id == args.claim_id)
+        log = state.log.append(
+            "crew",
+            crew.name,
+            "claim_controlled_set",
+            {
+                "claim_id": args.claim_id,
+                "controlled": args.controlled,
+                "name": claim.name,
+                "is_turf": claim.is_turf,
+            },
+            self._clock(),
+        )
+        return ToolCallResult(
+            state=state.model_copy(update={"crew": crew, "log": log}),
+            result={**claim.model_dump(mode="json"), "turf": crew.rep.turf},
+        )
+
+    def develop_crew(self, state: GameState, args: DevelopCrewArgs) -> ToolCallResult:
+        """SRD: "Development" - weak hold becomes strong, or coin buys the
+        next Tier; either way rep resets. Then "Profits": "Every time the
+        crew advances, each PC gets stash equal to the crew Tier+2" -
+        chained here as per-character `stash_adjusted` events (the crew's
+        Tier after the advance, the moment the profits are handed out)."""
+        crew = develop_crew(state.crew)
+        log = state.log.append(
+            "crew",
+            crew.name,
+            "crew_developed",
+            {"tier": crew.tier, "hold": crew.hold.value},
+            self._clock(),
+        )
+        state = state.model_copy(update={"crew": crew, "log": log})
+        share = crew_profit_share(crew.tier)
+        for character_id in state.characters:
+            state = self.adjust_stash(
+                state, AdjustStashArgs(amount=share, character_id=character_id)
+            ).state
+        return ToolCallResult(
+            state=state,
+            result={"tier": crew.tier, "hold": crew.hold.value, "profit_share_per_pc": share},
         )
 
     def roll_entanglement(self, state: GameState, args: RollEntanglementArgs) -> ToolCallResult:
@@ -1040,13 +1287,62 @@ class ToolExecutor:
         )
 
     def transition_phase(self, state: GameState, args: TransitionPhaseArgs) -> ToolCallResult:
-        """SRD: "The Game Structure"."""
+        """SRD: "The Game Structure". Two phase-keyed side effects:
+
+        Into a score: armor restores (SRD: "Armor" - "All of your armor is
+        restored when you choose your load for the next score"). The
+        transition into the score phase is the engine-visible moment
+        closest to choosing load for the next score, so it's the hook -
+        one `armor_restored` event per character with a marked box.
+
+        Into downtime: the result enumerates every canon faction and its
+        clocks (FR-14) - engine-enumerated so the SRD's "NPC & faction
+        downtime" maneuvers work from state, not model memory. The tool
+        result is the smallest deterministic channel: it lands exactly at
+        the moment the downtime procedure tells the GM to move factions,
+        without re-injecting the list into every turn's context."""
         session = state.session.transition_to(args.phase)
         log = state.log.append(
             "session", "current", "phase_transitioned", {"phase": args.phase.value}, self._clock()
         )
         state = state.model_copy(update={"session": session, "log": log})
-        return ToolCallResult(state=state, result={"phase": args.phase.value})
+        result: dict = {"phase": args.phase.value}
+        if args.phase is CampaignPhase.SCORE:
+            for character_id, character in list(state.characters.items()):
+                if not character.armor.any_used:
+                    continue
+                restored = restore_armor(character)
+                log = state.log.append(
+                    "character", character_id, "armor_restored", {}, self._clock()
+                )
+                state = state.model_copy(
+                    update={
+                        "characters": {**state.characters, character_id: restored},
+                        "log": log,
+                    }
+                )
+        if args.phase is CampaignPhase.DOWNTIME:
+            result["factions"] = [
+                {
+                    "faction_id": faction_id,
+                    "name": faction.name,
+                    "tier": faction.tier,
+                    "status": state.faction_statuses[faction_id].status
+                    if faction_id in state.faction_statuses
+                    else 0,
+                    "clocks": [
+                        {"clock_id": clock_id, **state.clocks[clock_id].model_dump(mode="json")}
+                        for clock_id in faction.clock_ids
+                        if clock_id in state.clocks
+                    ],
+                }
+                for faction_id, faction in state.factions.items()
+            ]
+            result["faction_downtime_reminder"] = (
+                "SRD 'NPC & faction downtime': advance faction project clocks and choose "
+                "a downtime maneuver or two for each faction you're interested in."
+            )
+        return ToolCallResult(state=state, result=result)
 
     def create_score(self, state: GameState, args: CreateScoreArgs) -> ToolCallResult:
         """SPECIFICATION.md §5: "Score" - the target and plan, set once
@@ -1091,7 +1387,11 @@ class ToolExecutor:
 
     def create_npc(self, state: GameState, args: CreateNpcArgs) -> ToolCallResult:
         """SPECIFICATION.md §5: "NPC ... lightweight entities with tags and
-        the fiction established about them"."""
+        the fiction established about them". Refuses a duplicate id (FR-12,
+        same as `create_character`) - overwriting an existing NPC would be
+        a free-form state edit in disguise."""
+        if args.npc_id in state.npcs:
+            raise EngineError(f"npc {args.npc_id!r} already exists in this session")
         npc = Npc(id=args.npc_id, name=args.name, tags=args.tags, faction_id=args.faction_id)
         log = state.log.append(
             "npc", args.npc_id, "npc_created", npc.model_dump(mode="json"), self._clock()
@@ -1102,11 +1402,37 @@ class ToolExecutor:
             result=npc.model_dump(mode="json"),
         )
 
+    def _assert_entity_exists(self, state: GameState, entity_type: str, entity_id: str) -> None:
+        """FR-12: canon tools refuse ids for entities that don't exist,
+        rather than minting canon by typo. What "exists" means per type:
+        characters and npcs and factions by their state dict key, the crew
+        by its name (the id its own events already use), locations by
+        their canon-list name."""
+        exists_by_type: dict[str, Callable[[str], bool]] = {
+            "character": lambda entity_id: entity_id in state.characters,
+            "npc": lambda entity_id: entity_id in state.npcs,
+            "crew": lambda entity_id: entity_id == state.crew.name,
+            "faction": lambda entity_id: entity_id in state.factions,
+            "location": lambda entity_id: (
+                state.canon is not None and entity_id in state.canon.locations
+            ),
+        }
+        if entity_type not in exists_by_type:
+            raise EngineError(
+                f"unknown entity type {entity_type!r}; expected one of "
+                f"{', '.join(sorted(exists_by_type))}"
+            )
+        if not exists_by_type[entity_type](entity_id):
+            raise EngineError(f"no {entity_type} {entity_id!r} in this session")
+
     def update_faction_status(
         self, state: GameState, args: UpdateFactionStatusArgs
     ) -> ToolCallResult:
         """SRD: "Faction Status" (-3 to +3); FR-33's typed Relationship
-        special case (engine.relationships.FactionStatus)."""
+        special case (engine.relationships.FactionStatus). Refuses a
+        faction that hasn't joined canon (`add_canon_faction`) - status
+        with a faction that doesn't exist is a free-form edit (FR-12)."""
+        self._assert_entity_exists(state, "faction", args.faction_id)
         current = state.faction_statuses.get(
             args.faction_id, FactionStatus(crew_id=state.crew.name, faction_id=args.faction_id)
         )
@@ -1127,7 +1453,11 @@ class ToolExecutor:
     def update_relationship(self, state: GameState, args: UpdateRelationshipArgs) -> ToolCallResult:
         """FR-33/FR-34: a typed edge between any two entities - a
         betrayal, a favour owed, a new contact - recorded the moment it
-        happens in the fiction, not guessed at from narration later."""
+        happens in the fiction, not guessed at from narration later. Both
+        ends must already exist (FR-12): an edge to an entity nobody
+        created would dangle in the relationship map."""
+        self._assert_entity_exists(state, args.subject_type, args.subject_id)
+        self._assert_entity_exists(state, args.object_type, args.object_id)
         key = f"{args.subject_type}:{args.subject_id}:{args.object_type}:{args.object_id}"
         current = state.relationships.get(
             key,
@@ -1181,19 +1511,33 @@ class ToolExecutor:
     def set_campaign_canon(self, state: GameState, args: SetCampaignCanonArgs) -> ToolCallResult:
         """FR-36: session zero's setting generation - an original city
         sketch (never a core-book setting, C3), the one-time creation of
-        canon. `add_canon_fact` is for growing it afterwards, not this."""
+        canon. `add_canon_fact` is for growing it afterwards, not this.
+
+        Faction names are chained through `add_canon_faction` (ids slugged
+        deterministically from the names) rather than stored as bare
+        strings, so session-zero factions are first-class from the start:
+        `update_faction_status` and faction clocks need a faction_id to
+        exist (FR-12/FR-14/FR-15)."""
         canon = CampaignCanon(
             setting_name=args.setting_name,
             tone=args.tone,
-            factions=args.factions,
+            factions=[],
             locations=args.locations,
         )
         log = state.log.append(
             "canon", args.setting_name, "canon_set", canon.model_dump(mode="json"), self._clock()
         )
+        state = state.model_copy(update={"canon": canon, "log": log})
+        faction_ids = []
+        for name in args.factions:
+            faction_id = _slug(name)
+            state = self.add_canon_faction(
+                state, AddCanonFactionArgs(faction_id=faction_id, name=name)
+            ).state
+            faction_ids.append(faction_id)
         return ToolCallResult(
-            state=state.model_copy(update={"canon": canon, "log": log}),
-            result={"setting_name": args.setting_name},
+            state=state,
+            result={"setting_name": args.setting_name, "faction_ids": faction_ids},
         )
 
     def add_canon_fact(self, state: GameState, args: AddCanonFactArgs) -> ToolCallResult:
@@ -1211,6 +1555,33 @@ class ToolExecutor:
         )
         return ToolCallResult(
             state=state.model_copy(update={"canon": canon, "log": log}), result={"fact": args.fact}
+        )
+
+    def add_canon_faction(self, state: GameState, args: AddCanonFactionArgs) -> ToolCallResult:
+        """FR-15: a faction the fiction has just introduced joins canon,
+        the same way locations do - as a structured `Faction` entity
+        (SPECIFICATION.md §5) keyed by faction_id, plus its name on the
+        canon list the Setting section renders. The entity shape (rather
+        than a bare name) is what lets `update_faction_status` check
+        existence and `create_clock(faction_id=...)` attach faction
+        clocks for downtime enumeration (FR-14)."""
+        if state.canon is None:
+            raise EngineError("no campaign canon set for this session")
+        if args.faction_id in state.factions:
+            raise EngineError(f"faction {args.faction_id!r} already exists in this session")
+        faction = Faction(id=args.faction_id, name=args.name, tier=args.tier, notes=args.notes)
+        canon = state.canon.with_faction(args.name)
+        log = state.log.append(
+            "faction",
+            args.faction_id,
+            "canon_faction_added",
+            faction.model_dump(mode="json"),
+            self._clock(),
+        )
+        factions = {**state.factions, args.faction_id: faction}
+        return ToolCallResult(
+            state=state.model_copy(update={"canon": canon, "factions": factions, "log": log}),
+            result={"faction_id": args.faction_id},
         )
 
     def add_canon_location(self, state: GameState, args: AddCanonLocationArgs) -> ToolCallResult:
@@ -1257,6 +1628,14 @@ TOOL_SPECS: dict[str, tuple[type[BaseModel], str]] = {
     "tick_clock": (TickClockArgs, "Tick an existing progress clock."),
     "apply_harm": (ApplyHarmArgs, "Record harm on the current character."),
     "mark_stress": (MarkStressArgs, "Mark or clear stress on the current character."),
+    "mark_trauma": (
+        MarkTraumaArgs,
+        "Record the trauma condition the player chose after their stress track overflowed.",
+    ),
+    "use_armor": (
+        UseArmorArgs,
+        "Mark an armor box to reduce or avoid a consequence, instead of rolling to resist.",
+    ),
     "transition_phase": (TransitionPhaseArgs, "Move the campaign to its next phase."),
     "create_score": (CreateScoreArgs, "Start a new score: the target and plan."),
     "update_score": (
@@ -1306,6 +1685,23 @@ TOOL_SPECS: dict[str, tuple[type[BaseModel], str]] = {
         "Add rep to the crew, outside of a score's payoff.",
     ),
     "adjust_crew_coin": (AdjustCrewCoinArgs, "Add or spend the crew's own coin."),
+    "adjust_crew_turf": (
+        AdjustCrewTurfArgs,
+        "Add or remove crew turf gained outside the claim map (lowers the rep threshold).",
+    ),
+    "set_claim_controlled": (
+        SetClaimControlledArgs,
+        "Record a claim seized (or lost) after the score that took it; turf claims also mark turf.",
+    ),
+    "develop_crew": (
+        DevelopCrewArgs,
+        "Develop the crew once its rep tracker is full: strengthen hold or pay coin to "
+        "raise Tier, and pay each PC the profit share into their stash.",
+    ),
+    "add_canon_faction": (
+        AddCanonFactionArgs,
+        "Introduce a new faction as campaign canon, with a stable faction_id.",
+    ),
     "roll_entanglement": (
         RollEntanglementArgs,
         "Roll for an entanglement from the crew's current wanted level and heat.",
@@ -1376,22 +1772,31 @@ def tool_definitions() -> list[dict]:
 # adjudicates, the model narrates" splits the AI's tool surface from the
 # UI's own engine-operation calls, so none of this is in tool_definitions()
 # for the LLM to invoke on the player's behalf, except where the SRD gives
-# the GM a hand in it too: mark_stress/apply_harm/tick_clock/mark_xp (the
-# TRAIN downtime activity) are shared with TOOL_SPECS - the same
-# ToolExecutor method, reachable from either surface. add_crew_heat/
-# adjust_wanted_level/adjust_crew_rep/adjust_crew_coin are the crew-sheet
-# equivalent of adjust_coin - direct bookkeeping a player can tick on the
-# crew half of the sheet, same shared-method shape.
+# the GM a hand in it too: mark_stress/mark_trauma/use_armor/apply_harm/
+# tick_clock/mark_xp (the TRAIN downtime activity) are shared with
+# TOOL_SPECS - the same ToolExecutor method, reachable from either surface.
+# add_crew_heat/adjust_wanted_level/adjust_crew_rep/adjust_crew_coin/
+# adjust_crew_turf/develop_crew are the crew-sheet equivalent of
+# adjust_coin - direct bookkeeping a player can tick on the crew half of
+# the sheet, same shared-method shape. adjust_stash/set_load_level are
+# sheet-only, like adjust_coin/set_item_carried: the player's own
+# retirement fund and loadout declaration, never a GM call.
 SHEET_OPERATIONS: dict[str, type[BaseModel]] = {
     "mark_stress": MarkStressArgs,
+    "mark_trauma": MarkTraumaArgs,
+    "use_armor": UseArmorArgs,
     "apply_harm": ApplyHarmArgs,
     "heal_character": HealCharacterArgs,
     "mark_xp": MarkXpArgs,
     "adjust_coin": AdjustCoinArgs,
+    "adjust_stash": AdjustStashArgs,
     "set_item_carried": SetItemCarriedArgs,
+    "set_load_level": SetLoadLevelArgs,
     "tick_clock": TickClockArgs,
     "add_crew_heat": AddCrewHeatArgs,
     "adjust_wanted_level": AdjustWantedLevelArgs,
     "adjust_crew_rep": AdjustCrewRepArgs,
     "adjust_crew_coin": AdjustCrewCoinArgs,
+    "adjust_crew_turf": AdjustCrewTurfArgs,
+    "develop_crew": DevelopCrewArgs,
 }

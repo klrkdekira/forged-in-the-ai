@@ -7,11 +7,14 @@ from ai.tools import (
     SHEET_OPERATIONS,
     AcquireAssetArgs,
     AddCanonFactArgs,
+    AddCanonFactionArgs,
     AddCanonLocationArgs,
     AddCrewHeatArgs,
     AdjustCoinArgs,
     AdjustCrewCoinArgs,
     AdjustCrewRepArgs,
+    AdjustCrewTurfArgs,
+    AdjustStashArgs,
     AdjustWantedLevelArgs,
     AdvanceActionRatingArgs,
     AdvanceCrewSpecialAbilityArgs,
@@ -23,6 +26,7 @@ from ai.tools import (
     CreateClockArgs,
     CreateNpcArgs,
     CreateScoreArgs,
+    DevelopCrewArgs,
     FlashbackArgs,
     GameState,
     HealCharacterArgs,
@@ -31,6 +35,7 @@ from ai.tools import (
     LongTermProjectArgs,
     MarkCrewXpArgs,
     MarkStressArgs,
+    MarkTraumaArgs,
     MarkXpArgs,
     RecoverArgs,
     ReduceHeatArgs,
@@ -41,7 +46,9 @@ from ai.tools import (
     RollFortuneArgs,
     RollResistanceArgs,
     SetCampaignCanonArgs,
+    SetClaimControlledArgs,
     SetItemCarriedArgs,
+    SetLoadLevelArgs,
     SetSessionZeroConfigArgs,
     TickClockArgs,
     ToolExecutor,
@@ -49,6 +56,7 @@ from ai.tools import (
     UpdateFactionStatusArgs,
     UpdateRelationshipArgs,
     UpdateScoreArgs,
+    UseArmorArgs,
     tool_definitions,
 )
 from engine.campaign import CampaignCanon
@@ -109,6 +117,8 @@ def test_tool_definitions_cover_every_registered_tool():
         "tick_clock",
         "apply_harm",
         "mark_stress",
+        "mark_trauma",
+        "use_armor",
         "transition_phase",
         "create_score",
         "update_score",
@@ -118,6 +128,7 @@ def test_tool_definitions_cover_every_registered_tool():
         "update_relationship",
         "add_canon_fact",
         "add_canon_location",
+        "add_canon_faction",
         "invoke_x_card",
         "set_session_zero_config",
         "set_campaign_canon",
@@ -127,6 +138,9 @@ def test_tool_definitions_cover_every_registered_tool():
         "adjust_wanted_level",
         "adjust_crew_rep",
         "adjust_crew_coin",
+        "adjust_crew_turf",
+        "set_claim_controlled",
+        "develop_crew",
         "roll_entanglement",
         "acquire_asset",
         "indulge_vice",
@@ -378,20 +392,31 @@ def test_mark_stress_refuses_an_unknown_character_id():
         _executor().mark_stress(_state(), MarkStressArgs(amount=1, character_id="nope"))
 
 
+def _state_with_faction(faction_id: str = "f1", name: str = "The Circle") -> GameState:
+    state = _state().model_copy(update={"canon": CampaignCanon(setting_name="Test City")})
+    return (
+        _executor()
+        .add_canon_faction(state, AddCanonFactionArgs(faction_id=faction_id, name=name))
+        .state
+    )
+
+
 def test_update_faction_status_starts_from_neutral_and_applies_delta():
     # SRD: "Faction Status" - "zero (neutral) being the default"
     result = _executor().update_faction_status(
-        _state(), UpdateFactionStatusArgs(faction_id="f1", delta=-2)
+        _state_with_faction(), UpdateFactionStatusArgs(faction_id="f1", delta=-2)
     )
 
     assert result.result["status"] == -2
-    assert result.state.faction_statuses["f1"].history == [1]
+    # history holds the faction_status_changed event's own sequence; the
+    # canon_faction_added event that introduced "f1" is sequence 1.
+    assert result.state.faction_statuses["f1"].history == [2]
 
 
 def test_update_faction_status_accumulates_across_calls():
     executor = _executor()
     state = executor.update_faction_status(
-        _state(), UpdateFactionStatusArgs(faction_id="f1", delta=-1)
+        _state_with_faction(), UpdateFactionStatusArgs(faction_id="f1", delta=-1)
     ).state
 
     result = executor.update_faction_status(
@@ -399,16 +424,32 @@ def test_update_faction_status_accumulates_across_calls():
     )
 
     assert result.result["status"] == -2
-    assert result.state.faction_statuses["f1"].history == [1, 2]
+    assert result.state.faction_statuses["f1"].history == [2, 3]
+
+
+def test_update_faction_status_refuses_an_unknown_faction():
+    # FR-12: status with a faction nobody introduced is a free-form edit.
+    with pytest.raises(EngineError, match="no faction"):
+        _executor().update_faction_status(
+            _state(), UpdateFactionStatusArgs(faction_id="nope", delta=-1)
+        )
+
+
+def _state_with_npc(state: GameState | None = None) -> GameState:
+    return (
+        _executor().create_npc(state or _state(), CreateNpcArgs(npc_id="n1", name="Test NPC")).state
+    )
 
 
 def test_update_relationship_creates_a_new_edge():
-    # FR-33: recorded the moment it happens in the fiction.
+    # FR-33: recorded the moment it happens in the fiction. Characters are
+    # referenced by their character_id key ("pc-1"), the same id every
+    # character-tagged event uses - not their display name.
     result = _executor().update_relationship(
-        _state(),
+        _state_with_npc(),
         UpdateRelationshipArgs(
             subject_type="character",
-            subject_id="Test",
+            subject_id="pc-1",
             object_type="npc",
             object_id="n1",
             kind=RelationshipKind.ALLY,
@@ -416,7 +457,7 @@ def test_update_relationship_creates_a_new_edge():
         ),
     )
 
-    key = "character:Test:npc:n1"
+    key = "character:pc-1:npc:n1"
     assert result.state.relationships[key].kind is RelationshipKind.ALLY
     assert result.state.relationships[key].status == "owes a favour"
     assert result.state.log.events[-1].event_type == "relationship_updated"
@@ -426,18 +467,18 @@ def test_update_relationship_changes_kind_on_the_same_edge():
     executor = _executor()
     args = UpdateRelationshipArgs(
         subject_type="character",
-        subject_id="Test",
+        subject_id="pc-1",
         object_type="npc",
         object_id="n1",
         kind=RelationshipKind.ALLY,
     )
-    state = executor.update_relationship(_state(), args).state
+    state = executor.update_relationship(_state_with_npc(), args).state
 
     betrayed = executor.update_relationship(
         state,
         UpdateRelationshipArgs(
             subject_type="character",
-            subject_id="Test",
+            subject_id="pc-1",
             object_type="npc",
             object_id="n1",
             kind=RelationshipKind.RIVAL,
@@ -445,9 +486,72 @@ def test_update_relationship_changes_kind_on_the_same_edge():
         ),
     )
 
-    key = "character:Test:npc:n1"
+    key = "character:pc-1:npc:n1"
     assert betrayed.state.relationships[key].kind is RelationshipKind.RIVAL
-    assert betrayed.state.relationships[key].history == [1, 2]
+    # npc_created is sequence 1, so the two edge updates are 2 and 3.
+    assert betrayed.state.relationships[key].history == [2, 3]
+
+
+def test_update_relationship_refuses_a_missing_entity_on_either_end():
+    # FR-12: both ends must exist - an edge to an entity nobody created
+    # would dangle in the relationship map.
+    with pytest.raises(EngineError, match="no npc"):
+        _executor().update_relationship(
+            _state(),
+            UpdateRelationshipArgs(
+                subject_type="character",
+                subject_id="pc-1",
+                object_type="npc",
+                object_id="never-created",
+                kind=RelationshipKind.ALLY,
+            ),
+        )
+
+    with pytest.raises(EngineError, match="no character"):
+        _executor().update_relationship(
+            _state_with_npc(),
+            UpdateRelationshipArgs(
+                subject_type="character",
+                subject_id="Test",  # the display name, not the "pc-1" id
+                object_type="npc",
+                object_id="n1",
+                kind=RelationshipKind.ALLY,
+            ),
+        )
+
+
+def test_update_relationship_refuses_an_unknown_entity_type():
+    with pytest.raises(EngineError, match="unknown entity type"):
+        _executor().update_relationship(
+            _state(),
+            UpdateRelationshipArgs(
+                subject_type="ghost",
+                subject_id="pc-1",
+                object_type="npc",
+                object_id="n1",
+                kind=RelationshipKind.ALLY,
+            ),
+        )
+
+
+def test_update_relationship_accepts_the_crew_by_name_and_a_canon_location():
+    state = _state_with_npc().model_copy(
+        update={"canon": CampaignCanon(setting_name="Test City", locations=["The Docks"])}
+    )
+
+    result = _executor().update_relationship(
+        state,
+        UpdateRelationshipArgs(
+            subject_type="crew",
+            subject_id="Test Crew",
+            object_type="location",
+            object_id="The Docks",
+            kind=RelationshipKind.ALLY,
+            status="operates from here",
+        ),
+    )
+
+    assert "crew:Test Crew:location:The Docks" in result.state.relationships
 
 
 def test_add_canon_fact_grows_the_campaign_canon():
@@ -511,8 +615,24 @@ def test_set_campaign_canon_creates_the_setting():
     assert result.state.canon.setting_name == "Harrow's Reach"
     assert result.state.canon.factions == ["The Rustworks Combine"]
     assert result.state.canon.locations == ["The Sunken Market"]
-    assert result.state.log.events[-1].event_type == "canon_set"
+    assert [e.event_type for e in result.state.log.events] == [
+        "canon_set",
+        "canon_faction_added",
+    ]
     assert result.result["setting_name"] == "Harrow's Reach"
+
+
+def test_set_campaign_canon_makes_session_zero_factions_first_class():
+    # FR-15: a session-zero faction is a Faction entity from the start
+    # (deterministic slug id), so update_faction_status and faction clocks
+    # can reference it without a separate introduction step.
+    result = _executor().set_campaign_canon(
+        _state(),
+        SetCampaignCanonArgs(setting_name="Harrow's Reach", factions=["The Rustworks Combine"]),
+    )
+
+    assert result.result["faction_ids"] == ["the-rustworks-combine"]
+    assert result.state.factions["the-rustworks-combine"].name == "The Rustworks Combine"
 
 
 def test_invoke_x_card_logs_an_event():
@@ -964,3 +1084,262 @@ def test_advance_crew_upgrades_marks_two_boxes():
 
     assert result.state.crew.upgrade_ids == ["quality", "quality"]
     assert result.state.log.events[-1].event_type == "crew_upgrades_advanced"
+
+
+def test_mark_trauma_records_the_players_chosen_condition():
+    # SRD: "Trauma" - "When you take trauma, circle one of your trauma
+    # conditions like Cold, Reckless, Unstable".
+    result = _executor().mark_trauma(_state(), MarkTraumaArgs(condition="haunted"))
+
+    assert result.state.character.trauma.conditions == ["haunted"]
+    assert not result.result["retired"]
+    event = result.state.log.events[-1]
+    assert event.event_type == "trauma_marked"
+    assert event.payload == {"condition": "haunted", "retired": False}
+
+
+def test_mark_trauma_reports_retirement_on_the_fourth_condition():
+    # SRD: "Trauma" - "When you mark your fourth trauma condition, your
+    # character cannot continue... You must retire them".
+    character = Character(
+        name="Test",
+        playbook="Test Playbook",
+        trauma={"conditions": ["cold", "reckless", "unstable"]},
+    )
+
+    result = _executor().mark_trauma(_state(character), MarkTraumaArgs(condition="haunted"))
+
+    assert result.result["retired"]
+    assert result.state.log.events[-1].payload["retired"]
+
+
+def test_mark_trauma_refuses_a_condition_the_srd_does_not_define():
+    with pytest.raises(EngineError):
+        _executor().mark_trauma(_state(), MarkTraumaArgs(condition="brave"))
+
+
+def _state_with_armor(**armor_fields) -> GameState:
+    character = Character(
+        name="Test", playbook="Test Playbook", armor={"has_armor": True, **armor_fields}
+    )
+    return _state(character)
+
+
+def test_use_armor_marks_the_box_and_logs_it():
+    # SRD: "Armor" - "you can mark an armor box to reduce or avoid a
+    # consequence, instead of rolling to resist".
+    result = _executor().use_armor(_state_with_armor(), UseArmorArgs(armor_type="standard"))
+
+    assert result.state.character.armor.armor_used
+    event = result.state.log.events[-1]
+    assert event.event_type == "armor_used"
+    assert event.payload == {"armor_type": "standard"}
+
+
+def test_use_armor_refuses_a_box_already_marked():
+    # SRD: "Armor" - "When an armor box is marked, it can't be used again
+    # until it's restored."
+    state = _state_with_armor(armor_used=True)
+
+    with pytest.raises(EngineError):
+        _executor().use_armor(state, UseArmorArgs(armor_type="standard"))
+
+
+def test_transition_into_a_score_restores_used_armor():
+    # SRD: "Armor" - "All of your armor is restored when you choose your
+    # load for the next score" - hooked to the transition into the score
+    # phase, the engine-visible moment closest to choosing load.
+    state = _state_with_armor(armor_used=True)
+
+    result = _executor().transition_phase(state, TransitionPhaseArgs(phase=CampaignPhase.SCORE))
+
+    assert not result.state.character.armor.armor_used
+    assert result.state.log.events[-1].event_type == "armor_restored"
+
+
+def test_transition_into_a_score_logs_no_restore_when_no_armor_was_used():
+    result = _executor().transition_phase(_state(), TransitionPhaseArgs(phase=CampaignPhase.SCORE))
+
+    assert result.state.log.events[-1].event_type == "phase_transitioned"
+
+
+def test_transition_into_downtime_enumerates_canon_factions_and_their_clocks():
+    # FR-14: faction downtime works from an engine-enumerated list, not
+    # model memory - the transition's own tool result carries it.
+    executor = _executor()
+    state = _state_with_faction(faction_id="red-circle", name="The Red Circle")
+    state = executor.transition_phase(state, TransitionPhaseArgs(phase=CampaignPhase.SCORE)).state
+    state = executor.create_clock(
+        state,
+        CreateClockArgs(
+            clock_id="rc-plot",
+            name="Seize the docks",
+            kind=ClockKind.FACTION,
+            segments=6,
+            faction_id="red-circle",
+        ),
+    ).state
+    state = executor.tick_clock(state, TickClockArgs(clock_id="rc-plot", amount=2)).state
+    state = executor.update_faction_status(
+        state, UpdateFactionStatusArgs(faction_id="red-circle", delta=-1)
+    ).state
+
+    result = executor.transition_phase(state, TransitionPhaseArgs(phase=CampaignPhase.DOWNTIME))
+
+    assert result.result["phase"] == "downtime"
+    (faction,) = result.result["factions"]
+    assert faction["faction_id"] == "red-circle"
+    assert faction["name"] == "The Red Circle"
+    assert faction["status"] == -1
+    (clock,) = faction["clocks"]
+    assert clock["clock_id"] == "rc-plot"
+    assert clock["filled"] == 2
+    assert "NPC & faction downtime" in result.result["faction_downtime_reminder"]
+
+
+def test_create_clock_refuses_an_unknown_faction_id():
+    with pytest.raises(EngineError, match="no canon faction"):
+        _executor().create_clock(
+            _state(),
+            CreateClockArgs(
+                clock_id="c1", name="Plot", kind=ClockKind.FACTION, segments=6, faction_id="nope"
+            ),
+        )
+
+
+def test_adjust_stash_updates_the_character_and_logs_it():
+    # SRD: "Stash & Retirement" - the retirement fund on the sheet.
+    character = Character(name="Test", playbook="Test Playbook", stash=3)
+
+    result = _executor().adjust_stash(_state(character), AdjustStashArgs(amount=2))
+
+    assert result.result["stash"] == 5
+    assert result.state.log.events[-1].event_type == "stash_adjusted"
+
+
+def test_adjust_stash_refuses_to_go_negative():
+    with pytest.raises(EngineError, match="cannot remove"):
+        _executor().adjust_stash(_state(), AdjustStashArgs(amount=-1))
+
+
+def test_set_load_level_records_the_declared_load():
+    # SRD: "Loadout" - "For each operation, decide what your character's
+    # load will be... 1-3 load: Light."
+    result = _executor().set_load_level(_state(), SetLoadLevelArgs(level="light"))
+
+    assert result.result == {"level": "light", "limit": 3}
+    assert result.state.character.load_level.value == "light"
+    assert result.state.log.events[-1].event_type == "load_level_set"
+
+
+def test_set_item_carried_refuses_past_the_declared_load_limit():
+    # SRD: "Loadout" - "up to a number of items equal to your chosen load".
+    character = Character(
+        name="Test",
+        playbook="Test Playbook",
+        load_level="light",
+        load=3,
+        items=[
+            CharacterItem(item_id="lockpicks", carried=True),
+            CharacterItem(item_id="pistol", carried=True),
+            CharacterItem(item_id="rope", carried=True),
+            CharacterItem(item_id="lantern"),
+        ],
+    )
+
+    with pytest.raises(EngineError, match="load limit"):
+        _executor().set_item_carried(
+            _state(character), SetItemCarriedArgs(item_id="lantern", carried=True)
+        )
+
+
+def test_develop_crew_strengthens_hold_and_pays_the_profit_share():
+    # SRD: "Development" - filling the tracker with weak hold makes it
+    # strong; "Profits" - "Every time the crew advances, each PC gets
+    # stash equal to the crew Tier+2".
+    state = _state().model_copy(
+        update={
+            "crew": Crew(
+                name="Test Crew", crew_type="Test Type", tier=1, hold="weak", rep={"rep": 12}
+            )
+        }
+    )
+
+    result = _executor().develop_crew(state, DevelopCrewArgs())
+
+    assert result.result == {"tier": 1, "hold": "strong", "profit_share_per_pc": 3}
+    assert result.state.crew.hold.value == "strong"
+    assert result.state.crew.rep.rep == 0
+    assert result.state.character.stash == 3
+    types = [e.event_type for e in result.state.log.events]
+    assert types == ["crew_developed", "stash_adjusted"]
+
+
+def test_develop_crew_refuses_below_the_rep_threshold():
+    # SRD: "Development" - "You need 12 rep to fill the rep tracker".
+    with pytest.raises(EngineError, match="rep threshold"):
+        _executor().develop_crew(_state(), DevelopCrewArgs())
+
+
+def test_adjust_crew_turf_lowers_the_rep_threshold():
+    # SRD: "Turf" - "Each piece of turf you hold reduces the rep cost to
+    # develop by one."
+    result = _executor().adjust_crew_turf(_state(), AdjustCrewTurfArgs(amount=2))
+
+    assert result.result == {"turf": 2, "threshold": 10}
+    assert result.state.log.events[-1].event_type == "crew_turf_adjusted"
+
+
+def test_set_claim_controlled_seizes_a_new_named_claim_with_turf():
+    # SRD: "Seizing a claim" - "if you succeed, you seize the claim";
+    # "Some claims count as turf."
+    result = _executor().set_claim_controlled(
+        _state(),
+        SetClaimControlledArgs(claim_id="docks", controlled=True, name="The Docks", is_turf=True),
+    )
+
+    claim = result.state.crew.claims[0]
+    assert claim.controlled and claim.is_turf
+    assert result.result["turf"] == 1
+    assert result.state.log.events[-1].event_type == "claim_controlled_set"
+
+
+def test_set_claim_controlled_refuses_an_unknown_claim_without_a_name():
+    with pytest.raises(EngineError, match="no claim"):
+        _executor().set_claim_controlled(
+            _state(), SetClaimControlledArgs(claim_id="nope", controlled=True)
+        )
+
+
+def test_add_canon_faction_grows_canon_and_creates_the_entity():
+    # FR-15: a faction introduced mid-play joins canon like a location does.
+    state = _state().model_copy(update={"canon": CampaignCanon(setting_name="Test City")})
+
+    result = _executor().add_canon_faction(
+        state, AddCanonFactionArgs(faction_id="red-circle", name="The Red Circle", tier=2)
+    )
+
+    assert result.state.canon.factions == ["The Red Circle"]
+    assert result.state.factions["red-circle"].tier == 2
+    assert result.state.log.events[-1].event_type == "canon_faction_added"
+
+
+def test_add_canon_faction_refuses_without_canon_set():
+    with pytest.raises(EngineError, match="no campaign canon"):
+        _executor().add_canon_faction(_state(), AddCanonFactionArgs(faction_id="f1", name="Anyone"))
+
+
+def test_add_canon_faction_refuses_a_duplicate_id():
+    with pytest.raises(EngineError, match="already exists"):
+        _executor().add_canon_faction(
+            _state_with_faction(), AddCanonFactionArgs(faction_id="f1", name="Someone Else")
+        )
+
+
+def test_create_npc_refuses_a_duplicate_id():
+    # FR-12: overwriting an existing NPC would be a free-form edit in
+    # disguise, same reasoning as create_character's duplicate refusal.
+    state = _state_with_npc()
+
+    with pytest.raises(EngineError, match="already exists"):
+        _executor().create_npc(state, CreateNpcArgs(npc_id="n1", name="Someone Else"))

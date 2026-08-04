@@ -49,6 +49,60 @@ def test_load_pack_rejects_forbidden_core_book_content(tmp_path: Path) -> None:
         load_pack(pack_path)
 
 
+def test_load_pack_rejects_forbidden_core_book_content_case_insensitively(
+    tmp_path: Path,
+) -> None:
+    forbidden_term = FORBIDDEN_TERMS[0].upper()
+    pack_path = _write_pack(tmp_path / "forbidden.json", description=f"A tale of {forbidden_term}.")
+
+    with pytest.raises(PackLoadError, match="forbidden core-book content"):
+        load_pack(pack_path)
+
+
+def test_load_pack_rejects_a_real_playbook_name(tmp_path: Path) -> None:
+    pack_path = _write_pack(
+        tmp_path / "real_playbook.json",
+        playbooks=[{"id": "cutter", "name": "Cutter", "xp_trigger": "violence"}],
+    )
+
+    with pytest.raises(PackLoadError, match="Cutter"):
+        load_pack(pack_path)
+
+
+def test_load_pack_rejects_a_real_crew_type_name_case_insensitively(tmp_path: Path) -> None:
+    pack_path = _write_pack(
+        tmp_path / "real_crew_type.json",
+        crew_types=[{"id": "hawkers", "name": "hawkers"}],
+    )
+
+    with pytest.raises(PackLoadError, match="hawkers"):
+        load_pack(pack_path)
+
+
+def test_load_pack_allows_a_real_playbook_name_when_private(tmp_path: Path) -> None:
+    # FR-23/C6: a book owner's own private module may legitimately name a
+    # real playbook - the firewall guards distribution, not local use.
+    pack_path = _write_pack(
+        tmp_path / "private_playbook.json",
+        playbooks=[{"id": "cutter", "name": "Cutter", "xp_trigger": "violence"}],
+    )
+
+    pack = load_pack(pack_path, private=True)
+
+    assert pack.playbooks[0].name == "Cutter"
+
+
+def test_load_pack_allows_an_original_playbook_name(tmp_path: Path) -> None:
+    pack_path = _write_pack(
+        tmp_path / "original_playbook.json",
+        playbooks=[{"id": "wayfarer", "name": "Wayfarer", "xp_trigger": "travel"}],
+    )
+
+    pack = load_pack(pack_path)
+
+    assert pack.playbooks[0].name == "Wayfarer"
+
+
 def test_load_packs_dir_loads_all_json_files_in_order(tmp_path: Path) -> None:
     _write_pack(tmp_path / "b.json", id="b")
     _write_pack(tmp_path / "a.json", id="a")

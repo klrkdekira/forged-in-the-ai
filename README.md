@@ -6,10 +6,7 @@ the AI runs the fiction, NPCs, and factions while a deterministic rules
 engine rolls the dice and keeps an auditable record of the world state.
 Single-player first, multiplayer later.
 
-**Status: Phases 0-3 done.** Foundations, the rules engine core (dice,
-rolls, clocks, stress/harm), character/crew/world-state schemas, and the
-score/downtime campaign loop are done; see [TODO.md](TODO.md) for
-progress. No AI yet: everything so far is a headless, tested rules engine.
+**Status: Phases 0-6 complete.** Foundations, rules engine core, world state, score/downtime loop, AI referee MVP, campaign continuity/undo, and rulebook ingestion pipeline are built and tested. See [TODO.md](TODO.md) and [HANDOFF.md](HANDOFF.md).
 
 **Stack** (ADR-0002): Python/FastAPI and Pydantic server, React and TypeScript
 (Vite) web client with interactive sheets and maps, monorepo, LLM via any
@@ -37,6 +34,7 @@ container replacement.
 
 | Document | Purpose |
 |---|---|
+| [HANDOFF.md](HANDOFF.md) | Comprehensive progress analysis, test harness guide, and audited gap backlog |
 | [SPECIFICATION.md](SPECIFICATION.md) | Scope, requirements, architecture principles, open decisions |
 | [TODO.md](TODO.md) | Phased implementation plan |
 | [NOTICE.md](NOTICE.md) | SRD attribution and content policy (what may never be committed) |

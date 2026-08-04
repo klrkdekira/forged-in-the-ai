@@ -45,8 +45,7 @@ async def structured_completion[T: BaseModel](
                 {
                     "role": "user",
                     "content": (
-                        f"That wasn't valid JSON matching the schema: {last_error}. "
-                        "Try again."
+                        f"That wasn't valid JSON matching the schema: {last_error}. Try again."
                     ),
                 },
             ]

@@ -14,6 +14,25 @@ _BASE_SNAPSHOT_ID = 0
 _LATEST_SNAPSHOT_ID = 1
 
 
+def _event_rows(events: list[Event], *, since: int) -> list[EventRow]:
+    """Every event past `since` (exclusive), as rows ready to insert - the
+    log is append-only, so anything at or before the last stored sequence
+    is already there. Shared by `save_state` (since=max stored sequence)
+    and `create_campaign` (since=0, a fresh file has nothing stored yet)."""
+    return [
+        EventRow(
+            sequence=event.sequence,
+            entity_type=event.entity_type,
+            entity_id=event.entity_id,
+            event_type=event.event_type,
+            payload=event.payload,
+            occurred_at=event.occurred_at,
+        )
+        for event in events
+        if event.sequence > since
+    ]
+
+
 async def save_state(db_path: Path, state: GameState) -> None:
     """FR-18/FR-19: upsert the cached (latest) snapshot, and append only
     the tail of the event log past what's already stored - the log is
@@ -24,18 +43,7 @@ async def save_state(db_path: Path, state: GameState) -> None:
         session_factory = make_session_factory(engine)
         async with session_factory() as session, session.begin():
             max_sequence = await session.scalar(select(func.max(EventRow.sequence))) or 0
-            session.add_all(
-                EventRow(
-                    sequence=event.sequence,
-                    entity_type=event.entity_type,
-                    entity_id=event.entity_id,
-                    event_type=event.event_type,
-                    payload=event.payload,
-                    occurred_at=event.occurred_at,
-                )
-                for event in state.log.events
-                if event.sequence > max_sequence
-            )
+            session.add_all(_event_rows(state.log.events, since=max_sequence))
             state_json = state.model_dump_json()
             await session.execute(
                 sqlite_insert(Snapshot)
@@ -82,15 +90,22 @@ async def load_base_state(db_path: Path) -> GameState:
 
 async def create_campaign(db_path: Path, initial_state: GameState) -> None:
     """Migrates a fresh campaign-<id>.db to head and writes its starting
-    snapshot as both the base (immutable) and the latest cache, so a WS
-    connection can always find a loadable state."""
+    snapshot as both the base (immutable) and the latest cache, in one
+    transaction (2026-07-17 backlog item 2c): a reader can never observe a
+    campaign file with only one of the two snapshots written. `initial_state`
+    is usually a bare fresh GameState with no log events yet, but
+    `import_campaign` (app/campaigns.py) also calls this with an imported
+    export's own base snapshot, which is why event rows are written here
+    too rather than assumed empty."""
     run_campaign_migrations(db_path)
-    await save_state(db_path, initial_state)
     engine = make_engine(db_path)
     try:
         session_factory = make_session_factory(engine)
         async with session_factory() as session, session.begin():
-            session.add(Snapshot(id=_BASE_SNAPSHOT_ID, state_json=initial_state.model_dump_json()))
+            session.add_all(_event_rows(initial_state.log.events, since=0))
+            state_json = initial_state.model_dump_json()
+            session.add(Snapshot(id=_BASE_SNAPSHOT_ID, state_json=state_json))
+            session.add(Snapshot(id=_LATEST_SNAPSHOT_ID, state_json=state_json))
     finally:
         await engine.dispose()
 

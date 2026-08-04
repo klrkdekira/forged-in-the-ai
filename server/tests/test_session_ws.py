@@ -384,3 +384,22 @@ def test_session_ws_closes_when_the_llm_is_not_configured(monkeypatch):
                     pass
         finally:
             get_settings.cache_clear()
+
+
+def test_session_ws_handles_x_card_message_and_logs_event():
+    # FR-17: safety tool invocation over WS logs the event and updates state.
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("the LLM should not be called when no redirect text is provided")
+
+    app.dependency_overrides[get_llm_client] = lambda: _mock_client(handler)
+
+    with TestClient(app) as test_client:
+        campaign_id = _create_campaign(test_client)
+        with test_client.websocket_connect(f"/ws/session/{campaign_id}") as ws:
+            ws.receive_json()  # initial state
+            ws.send_json({"type": "x_card", "note": "pacing pause"})
+
+            done = ws.receive_json()
+            assert done["type"] == "x_card_done"
+            assert done["note"] == "pacing pause"
+            assert done["state"]["log"]["events"][-1]["event_type"] == "x_card_invoked"

@@ -47,6 +47,16 @@ export function summarize(entry: JournalEntry): string {
       return `${entry.entity_id} took harm: ${p.name} (L${p.level})`
     case 'harm_healed':
       return `${entry.entity_id} healed one level of harm`
+    case 'trauma_marked':
+      return `${entry.entity_id} took trauma: ${p.condition}` + (p.retired ? ' (retired)' : '')
+    case 'armor_used':
+      return `${entry.entity_id} used ${p.armor_type} armor`
+    case 'armor_restored':
+      return `${entry.entity_id} restored their armor`
+    case 'stash_adjusted':
+      return `${entry.entity_id} ${Number(p.amount) >= 0 ? 'stashed' : 'removed'} ${Math.abs(Number(p.amount))} stash`
+    case 'load_level_set':
+      return `${entry.entity_id} set load to ${p.level}`
     case 'xp_marked':
       return `${entry.entity_id} marked XP (${p.track})`
     case 'coin_adjusted':
@@ -67,6 +77,8 @@ export function summarize(entry: JournalEntry): string {
       return `Canon: ${p.fact}`
     case 'canon_location_added':
       return `Location discovered: ${p.location}`
+    case 'canon_faction_added':
+      return `Faction introduced: ${p.name} (Tier ${p.tier})`
     case 'canon_set':
       return `Setting created: ${p.setting_name}`
     case 'session_zero_configured':
@@ -104,6 +116,12 @@ export function summarize(entry: JournalEntry): string {
       return `Crew gained special ability: ${p.ability_id}`
     case 'crew_upgrades_advanced':
       return `Crew upgrades marked: ${(p.upgrade_ids as string[]).join(', ')}`
+    case 'crew_developed':
+      return `Crew developed: Tier ${p.tier}, ${p.hold} hold`
+    case 'crew_turf_adjusted':
+      return `Crew turf ${Number(p.amount) >= 0 ? '+' : ''}${p.amount}`
+    case 'claim_controlled_set':
+      return `Claim ${p.controlled ? 'seized' : 'lost'}: ${p.name}` + (p.is_turf ? ' (turf)' : '')
     case 'companion_roll_decision':
       return `${entry.entity_id} ${describeRollDecision(p)}`
     default:

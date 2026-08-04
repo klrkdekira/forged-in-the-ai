@@ -237,3 +237,25 @@ async def test_save_module_endpoint_indexes_source_text_for_retrieval():
             await engine.dispose()
 
     assert any(hit.source == "module:my-hack" for hit in hits)
+
+
+@pytest.mark.anyio
+async def test_delete_module_endpoint_removes_file_and_retrieval_chunks():
+    body = _save_module_body(id="my-hack")
+    body["source_text"] = "A house rule about grappling hooks."
+
+    with TestClient(app) as client:
+        client.post("/api/ingestion/modules", json=body)
+        delete_response = client.delete("/api/ingestion/modules/my-hack")
+        get_response = client.get("/api/ingestion/modules/my-hack")
+
+        engine = make_engine(app_db_path(get_settings().data_dir))
+        try:
+            async with make_session_factory(engine)() as session:
+                hits = await search_srd(session, "grappling")
+        finally:
+            await engine.dispose()
+
+    assert delete_response.status_code == 204
+    assert get_response.status_code == 404
+    assert not any(hit.source == "module:my-hack" for hit in hits)

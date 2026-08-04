@@ -219,6 +219,8 @@ function LoadCampaignDialog({
 }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const [importError, setImportError] = useState<string | null>(null)
+
   const campaigns = useQuery({
     queryKey: ['campaigns'],
     queryFn: async () => {
@@ -229,36 +231,86 @@ function LoadCampaignDialog({
     enabled: open,
   })
 
+  const importCampaign = useMutation({
+    mutationFn: async (file: File) => {
+      const exportData = await readJsonFile<components['schemas']['CampaignExport']>(file)
+      const { data, error } = await apiClient.POST('/api/campaigns/import', {
+        body: exportData,
+      })
+      if (error) throw error
+      return data
+    },
+    onSuccess: (campaign) => {
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] })
+      setImportError(null)
+      onOpenChange(false)
+      navigate({ to: '/play/$campaignId', params: { campaignId: campaign.id } })
+    },
+    onError: () => {
+      setImportError('Failed to import campaign bundle. Check that the file is a valid export.')
+    },
+  })
+
   function handleOpenChange(next: boolean) {
     onOpenChange(next)
-    if (next) queryClient.invalidateQueries({ queryKey: ['campaigns'] })
+    if (next) {
+      setImportError(null)
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] })
+    }
   }
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Load Campaign</DialogTitle>
-          <DialogDescription>Pick a campaign to resume.</DialogDescription>
+          <DialogDescription>Pick a campaign to resume or import a campaign bundle.</DialogDescription>
         </DialogHeader>
+
         <div className="flex flex-col gap-1 mt-2 max-h-64 overflow-auto">
           {campaigns.isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
           {campaigns.data?.length === 0 && (
             <p className="text-sm text-muted-foreground">No campaigns yet.</p>
           )}
           {campaigns.data?.map((campaign) => (
-            <Button
+            <div
               key={campaign.id}
-              type="button"
-              variant="ghost"
-              className="justify-start"
-              onClick={() =>
-                navigate({ to: '/play/$campaignId', params: { campaignId: campaign.id } })
-              }
+              className="flex items-center justify-between gap-2 p-1 rounded-md hover:bg-muted/40"
             >
-              {campaign.name}
-            </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="justify-start flex-1"
+                onClick={() =>
+                  navigate({ to: '/play/$campaignId', params: { campaignId: campaign.id } })
+                }
+              >
+                {campaign.name}
+              </Button>
+              <a
+                href={`/api/campaigns/${campaign.id}/export`}
+                download
+                className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground px-2"
+                title="Export campaign bundle"
+              >
+                Export
+              </a>
+            </div>
           ))}
+        </div>
+
+        <div className="mt-4 flex flex-col gap-1 border-t border-border/40 pt-3">
+          <span className="text-xs font-semibold text-muted-foreground">Import Campaign Bundle</span>
+          <input
+            type="file"
+            accept="application/json"
+            className="block text-xs"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) importCampaign.mutate(file)
+            }}
+          />
+          {importError && <p className="mt-1 text-xs text-destructive">{importError}</p>}
         </div>
       </DialogContent>
     </Dialog>

@@ -14,6 +14,7 @@ import { JournalPanel } from './journal-panel'
 import { RelationshipMap } from './relationship-map'
 import { RollNegotiationDialog } from './roll-negotiation-dialog'
 import { TableViewPanel } from './table-view-panel'
+import { XCardDialog } from './x-card-dialog'
 
 // FR-35: a character with no seat naming it is human-controlled by
 // default (engine.controller.is_ai_controlled) - looked up, never stored
@@ -37,12 +38,14 @@ export function PlayPage() {
     sendRollDecision,
     sendSheetOperation,
     sendUndo,
+    sendXCard,
   } = useSessionSocket(campaignId)
   const [draft, setDraft] = useState('')
   const [sidePanel, setSidePanel] = useState<'sheet' | 'table' | 'journal' | 'relationships'>(
     'sheet',
   )
   const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null)
+  const [xCardOpen, setXCardOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   // FR-25/FR-35: the sheet panel used to always show state.character (the
@@ -88,13 +91,25 @@ export function PlayPage() {
             {state ? `${state.character.playbook} · ${state.crew.name}` : 'Connecting…'}
           </p>
         </div>
-        <span
-          className={`text-xs rounded-full px-2 py-1 ${
-            connected ? 'bg-primary/10 text-primary' : 'bg-destructive/10 text-destructive'
-          }`}
-        >
-          {connected ? 'Connected' : 'Disconnected'}
-        </span>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border-destructive/40 text-destructive hover:bg-destructive/10"
+            onClick={() => setXCardOpen(true)}
+            disabled={!connected}
+          >
+            X-Card
+          </Button>
+          <span
+            className={`text-xs rounded-full px-2 py-1 ${
+              connected ? 'bg-primary/10 text-primary' : 'bg-destructive/10 text-destructive'
+            }`}
+          >
+            {connected ? 'Connected' : 'Disconnected'}
+          </span>
+        </div>
       </div>
 
       <div className="flex flex-1 gap-4 overflow-hidden">
@@ -193,6 +208,7 @@ export function PlayPage() {
                   clocks={state.clocks}
                   crew={state.crew}
                   canon={state.canon}
+                  sessionZero={state.session_zero}
                   onOperate={sendSheetOperation}
                 />
               )}
@@ -225,6 +241,12 @@ export function PlayPage() {
           onDecide={sendRollDecision}
         />
       )}
+
+      <XCardDialog
+        open={xCardOpen}
+        onOpenChange={setXCardOpen}
+        onInvoke={(note, text) => sendXCard(note, undefined, text)}
+      />
     </div>
   )
 }

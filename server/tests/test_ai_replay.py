@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from ai.replay import replay_state
 from ai.tools import GameState
+from engine.campaign import CampaignCanon
 from engine.character import Action, Attribute, Character
 from engine.crew import Crew
 from engine.session import CampaignPhase, Session
@@ -406,3 +407,105 @@ def test_replay_state_reproduces_a_truncated_prefix_of_the_log():
 
     assert replayed.character.stress.marked == 2
     assert replayed.character.coin == 0
+
+
+def test_replay_state_folds_trauma_and_armor_events():
+    # SRD: "Trauma" - conditions are permanent; SRD: "Armor" - a marked
+    # box stays marked until restored. Undo/rewind must keep both.
+    base = _base_state().model_copy(
+        update={
+            "characters": {
+                "pc-1": Character(name="Scoundrel", playbook="Cutter", armor={"has_armor": True})
+            }
+        }
+    )
+    log = base.log
+    log = log.append(
+        "character", "pc-1", "trauma_marked", {"condition": "haunted", "retired": False}, AT
+    )
+    log = log.append("character", "pc-1", "armor_used", {"armor_type": "standard"}, AT)
+
+    replayed = replay_state(base, log.events)
+
+    assert replayed.character.trauma.conditions == ["haunted"]
+    assert replayed.character.armor.armor_used
+
+    restored_log = log.append("character", "pc-1", "armor_restored", {}, AT)
+    restored = replay_state(base, restored_log.events)
+
+    assert not restored.character.armor.armor_used
+
+
+def test_replay_state_folds_stash_and_load_level():
+    base = _base_state()
+    log = base.log
+    log = log.append("character", "pc-1", "stash_adjusted", {"amount": 3}, AT)
+    log = log.append("character", "pc-1", "load_level_set", {"level": "light"}, AT)
+
+    replayed = replay_state(base, log.events)
+
+    assert replayed.character.stash == 3
+    assert replayed.character.load_level.value == "light"
+
+
+def test_replay_state_folds_crew_development_turf_and_claims():
+    # SRD: "Development" / "Turf" / "Seizing a claim".
+    base = _base_state().model_copy(
+        update={
+            "crew": Crew(
+                name="The Fifth Foxglove",
+                crew_type="Assassins",
+                hold="weak",
+                rep={"rep": 12},
+            )
+        }
+    )
+    log = base.log
+    log = log.append(
+        "crew", "The Fifth Foxglove", "crew_developed", {"tier": 0, "hold": "strong"}, AT
+    )
+    log = log.append("crew", "The Fifth Foxglove", "crew_turf_adjusted", {"amount": 1}, AT)
+    log = log.append(
+        "crew",
+        "The Fifth Foxglove",
+        "claim_controlled_set",
+        {"claim_id": "docks", "controlled": True, "name": "The Docks", "is_turf": True},
+        AT,
+    )
+
+    replayed = replay_state(base, log.events)
+
+    assert replayed.crew.hold.value == "strong"
+    assert replayed.crew.rep.rep == 0
+    assert replayed.crew.rep.turf == 2  # 1 direct + 1 from the turf claim
+    assert replayed.crew.claims[0].controlled
+
+
+def test_replay_state_folds_canon_factions_and_their_clocks():
+    # FR-14/FR-15: undo/rewind must not drop a faction or unlink its clock.
+    base = _base_state().model_copy(
+        update={
+            "canon": CampaignCanon(setting_name="Harrow's Reach"),
+        }
+    )
+    log = base.log
+    log = log.append(
+        "faction",
+        "red-circle",
+        "canon_faction_added",
+        {"id": "red-circle", "name": "The Red Circle", "tier": 2},
+        AT,
+    )
+    log = log.append(
+        "clock",
+        "rc-plot",
+        "clock_created",
+        {"name": "Seize the docks", "kind": "faction", "segments": 6, "faction_id": "red-circle"},
+        AT,
+    )
+
+    replayed = replay_state(base, log.events)
+
+    assert replayed.factions["red-circle"].name == "The Red Circle"
+    assert replayed.factions["red-circle"].clock_ids == ["rc-plot"]
+    assert replayed.canon.factions == ["The Red Circle"]

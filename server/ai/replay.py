@@ -6,17 +6,20 @@ from engine.advancement import (
     advance_special_ability,
 )
 from engine.campaign import CampaignCanon, SessionZeroConfig
-from engine.character import Action, Attribute, Character
+from engine.character import Action, Attribute, Character, LoadLevel
 from engine.clocks import Clock, ClockKind
 from engine.controller import Controller
-from engine.entities import Npc, Score
+from engine.entities import Faction, Npc, Score
 from engine.events import Event, EventLog
 from engine.operations import (
     add_heat,
     adjust_coin,
     adjust_crew_coin,
     adjust_crew_rep,
+    adjust_crew_turf,
+    adjust_stash,
     adjust_wanted_level,
+    develop_crew,
     flashback,
     heal_character,
     mark_attribute_xp,
@@ -24,7 +27,12 @@ from engine.operations import (
     mark_harm,
     mark_playbook_xp,
     mark_stress,
+    mark_trauma,
+    restore_armor,
+    set_claim_controlled,
     set_item_carried,
+    set_load_level,
+    use_armor,
 )
 from engine.relationships import FactionStatus, Relationship, RelationshipKind
 from engine.session import CampaignPhase
@@ -53,6 +61,7 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
     clocks = dict(base.clocks)
     npcs = dict(base.npcs)
     scores = dict(base.scores)
+    factions = dict(base.factions)
     faction_statuses = dict(base.faction_statuses)
     relationships = dict(base.relationships)
     canon = base.canon
@@ -79,6 +88,24 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
             ).character
         elif event.event_type == "harm_healed":
             characters[event.entity_id] = heal_character(characters[event.entity_id])
+        elif event.event_type == "trauma_marked":
+            characters[event.entity_id] = mark_trauma(
+                characters[event.entity_id], payload["condition"]
+            )
+        elif event.event_type == "armor_used":
+            characters[event.entity_id] = use_armor(
+                characters[event.entity_id], payload["armor_type"]
+            )
+        elif event.event_type == "armor_restored":
+            characters[event.entity_id] = restore_armor(characters[event.entity_id])
+        elif event.event_type == "stash_adjusted":
+            characters[event.entity_id] = adjust_stash(
+                characters[event.entity_id], payload["amount"]
+            )
+        elif event.event_type == "load_level_set":
+            characters[event.entity_id] = set_load_level(
+                characters[event.entity_id], LoadLevel(payload["level"])
+            )
         elif event.event_type == "xp_marked":
             if payload["track"] == "playbook":
                 characters[event.entity_id] = mark_playbook_xp(
@@ -103,6 +130,12 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
                 kind=ClockKind(payload["kind"]),
                 segments=payload["segments"],
             )
+            faction_id = payload.get("faction_id")
+            if faction_id in factions:
+                faction = factions[faction_id]
+                factions[faction_id] = faction.model_copy(
+                    update={"clock_ids": [*faction.clock_ids, event.entity_id]}
+                )
         elif event.event_type == "clock_ticked":
             clocks[event.entity_id] = clocks[event.entity_id].tick(payload["amount"])
         elif event.event_type == "phase_transitioned":
@@ -122,6 +155,10 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
             canon = canon.with_fact(payload["fact"])
         elif event.event_type == "canon_location_added" and canon is not None:
             canon = canon.with_location(payload["location"])
+        elif event.event_type == "canon_faction_added":
+            factions[event.entity_id] = Faction.model_validate(payload)
+            if canon is not None:
+                canon = canon.with_faction(payload["name"])
         elif event.event_type == "session_zero_configured":
             session_zero = SessionZeroConfig.model_validate(payload)
         elif event.event_type == "canon_set":
@@ -148,6 +185,18 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
             crew = adjust_crew_rep(crew, payload["amount"])
         elif event.event_type == "crew_coin_adjusted":
             crew = adjust_crew_coin(crew, payload["amount"])
+        elif event.event_type == "crew_turf_adjusted":
+            crew = adjust_crew_turf(crew, payload["amount"])
+        elif event.event_type == "claim_controlled_set":
+            crew = set_claim_controlled(
+                crew,
+                payload["claim_id"],
+                payload["controlled"],
+                name=payload.get("name"),
+                is_turf=payload.get("is_turf", False),
+            )
+        elif event.event_type == "crew_developed":
+            crew = develop_crew(crew)
         elif event.event_type == "crew_xp_marked":
             crew = mark_crew_xp(crew, payload["amount"])
         elif event.event_type == "payoff":
@@ -183,6 +232,7 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
             "clocks": clocks,
             "npcs": npcs,
             "scores": scores,
+            "factions": factions,
             "faction_statuses": faction_statuses,
             "relationships": relationships,
             "canon": canon,

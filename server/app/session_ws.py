@@ -1,3 +1,4 @@
+import asyncio
 import random
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,6 +19,33 @@ from state.db import app_db_path, campaign_db_path, make_engine, make_session_fa
 from state.migrations import run_campaign_migrations
 
 router = APIRouter()
+
+# 2026-07-17 backlog item 2a: two WS connections open on the same
+# campaign_id each load their own GameState and mutate it independently -
+# `save_state`'s "sequence > max_sequence" filter then silently drops
+# whichever connection's events lose the race, and the snapshot upsert is
+# last-writer-wins, so the loser's play is gone with no error anywhere.
+# One in-process `asyncio.Lock` per campaign (keyed by db_path, so app.db
+# and every campaign-<id>.db each get an independent lock), held for the
+# whole connection: a second connection to the same campaign simply waits
+# for the first to disconnect rather than racing it - the coarsest
+# correct fix, appropriate here since GameState itself is a per-connection
+# in-memory copy, not a shared/lockable object a finer-grained lock could
+# protect mid-turn. Cross-connection fan-out (both seeing live updates at
+# once) stays out of scope (Phase 7 multiplayer); this only prevents
+# corruption. The dict is never evicted - fine for the small, long-lived
+# set of campaigns one process serves; a bounded cache would only matter
+# at a scale this single-player server doesn't operate at.
+_campaign_locks: dict[str, asyncio.Lock] = {}
+
+
+def _campaign_lock(db_path: Path) -> asyncio.Lock:
+    key = str(db_path)
+    lock = _campaign_locks.get(key)
+    if lock is None:
+        lock = asyncio.Lock()
+        _campaign_locks[key] = lock
+    return lock
 
 
 def get_llm_client(settings: Settings = Depends(get_settings)) -> LLMClient:
@@ -84,82 +112,125 @@ async def session_ws(
     state change comes from a tool call (FR-12); the client only ever
     sends player messages."""
     await websocket.accept()
-    executor = ToolExecutor(
-        rng=random.Random(),
-        clock=lambda: datetime.now(UTC),
-        entanglements=load_entanglements(settings),
-    )
-    # FR-13/FR-24: the SRD-plus-modules retrieval index lives in app.db,
-    # a separate file from this campaign's own db_path (ADR-0005) - its
-    # own short-lived engine/session factory, disposed with the
-    # connection rather than reused across connections.
-    retrieval_engine = make_engine(app_db_path(settings.data_dir))
-    retrieval_sessions = make_session_factory(retrieval_engine)
-    # NFR-6: probed once per (base_url, model) and cached in app.db - a
-    # weak tool-caller told to use `tools=` anyway will sometimes print its
-    # own ad hoc tool-call syntax as plain narration instead of the tool
-    # ever actually running (discovered live); GmAgent falls back to a
-    # structured-completion tool choice instead when this is False.
-    async with retrieval_sessions() as probe_session:
-        supports_tool_calling = await get_or_probe_tool_calling(
-            probe_session, client, client.base_url, client.model
+    # 2026-07-17 backlog item 2a: held for the whole connection - see the
+    # module comment on `_campaign_locks`. State is loaded only after the
+    # lock is acquired, so a connection that waited behind another one
+    # sees whatever that connection last persisted, not a stale copy.
+    async with _campaign_lock(db_path):
+        executor = ToolExecutor(
+            rng=random.Random(),
+            clock=lambda: datetime.now(UTC),
+            entanglements=load_entanglements(settings),
         )
-    agent = GmAgent(client, executor, retrieval_sessions, supports_tool_calling)
-    state = await load_state(db_path)
+        # FR-13/FR-24: the SRD-plus-modules retrieval index lives in
+        # app.db, a separate file from this campaign's own db_path
+        # (ADR-0005) - its own short-lived engine/session factory,
+        # disposed with the connection rather than reused across
+        # connections.
+        retrieval_engine = make_engine(app_db_path(settings.data_dir))
+        retrieval_sessions = make_session_factory(retrieval_engine)
+        # NFR-6: probed once per (base_url, model) and cached in app.db - a
+        # weak tool-caller told to use `tools=` anyway will sometimes print
+        # its own ad hoc tool-call syntax as plain narration instead of the
+        # tool ever actually running (discovered live); GmAgent falls back
+        # to a structured-completion tool choice instead when this is
+        # False.
+        async with retrieval_sessions() as probe_session:
+            supports_tool_calling = await get_or_probe_tool_calling(
+                probe_session, client, client.base_url, client.model
+            )
+        agent = GmAgent(client, executor, retrieval_sessions, supports_tool_calling)
+        state = await load_state(db_path)
 
-    try:
-        await websocket.send_json({"type": "state", "state": state.model_dump(mode="json")})
-        while True:
-            message = await websocket.receive_json()
-            if message.get("type") == "sheet_operation":
-                state, reply = await _apply_sheet_operation(db_path, executor, state, message)
-                await websocket.send_json(reply)
-                continue
-            if message.get("type") == "undo":
-                # FR-19: an engine operation like any other (CLAUDE.md) -
-                # bypasses the GM agent entirely, and undo_to already
-                # persists (truncates events, overwrites the snapshot)
-                # before returning, so there's nothing left to save here.
-                sequence = message.get("sequence")
-                if not isinstance(sequence, int):
+        try:
+            await websocket.send_json({"type": "state", "state": state.model_dump(mode="json")})
+            while True:
+                message = await websocket.receive_json()
+                if message.get("type") == "sheet_operation":
+                    state, reply = await _apply_sheet_operation(db_path, executor, state, message)
+                    await websocket.send_json(reply)
+                    continue
+                if message.get("type") == "undo":
+                    # FR-19: an engine operation like any other (CLAUDE.md)
+                    # - bypasses the GM agent entirely, and undo_to already
+                    # persists (truncates events, overwrites the snapshot)
+                    # before returning, so there's nothing left to save
+                    # here.
+                    sequence = message.get("sequence")
+                    if not isinstance(sequence, int):
+                        await websocket.send_json(
+                            {"type": "error", "message": "undo requires an integer sequence"}
+                        )
+                        continue
+                    state = await undo_to(db_path, sequence)
                     await websocket.send_json(
-                        {"type": "error", "message": "undo requires an integer sequence"}
+                        {"type": "undo_done", "state": state.model_dump(mode="json")}
                     )
                     continue
-                state = await undo_to(db_path, sequence)
-                await websocket.send_json(
-                    {"type": "undo_done", "state": state.model_dump(mode="json")}
-                )
-                continue
-            if message.get("type") != "player_message":
-                continue
+                if message.get("type") == "x_card":
+                    # FR-17: safety tool invocation - optionally rewinds to a safe sequence
+                    # and logs an x_card_invoked event before notifying the client and GM.
+                    sequence = message.get("sequence")
+                    if isinstance(sequence, int):
+                        state = await undo_to(db_path, sequence)
+                    note = message.get("note") or "X-card invoked by player"
+                    from ai.tools import InvokeXCardArgs
 
-            turn = agent.handle_player_message(state, message.get("text", ""))
-            to_send = None
-            while True:
-                try:
-                    event = await (turn.asend(to_send) if to_send is not None else anext(turn))
-                except StopAsyncIteration:
-                    break
-                to_send = None
-                if event.type == "narration_done":
-                    # Persisted before the client is told, same reasoning
-                    # as _apply_sheet_operation's ordering.
-                    state = GameState.model_validate(event.payload["state"])
+                    res = executor.invoke_x_card(state, InvokeXCardArgs(note=note))
+                    state = res.state
                     await save_state(db_path, state)
-                await websocket.send_json({"type": event.type, **event.payload})
-                if event.type == "roll_proposed":
-                    # FR-16: pause the tool-calling loop for the player's
-                    # push/assist/Devil's Bargain/trade-off decision before
-                    # the proposed roll actually executes.
-                    decision_message = await websocket.receive_json()
-                    to_send = (
-                        decision_message.get("decision", {})
-                        if decision_message.get("type") == "roll_decision"
-                        else {}
+                    await websocket.send_json(
+                        {
+                            "type": "x_card_done",
+                            "state": state.model_dump(mode="json"),
+                            "note": note,
+                        }
                     )
-    except WebSocketDisconnect:
-        pass
-    finally:
-        await client.aclose()
-        await retrieval_engine.dispose()
+                    redirect_text = message.get("text")
+                    if redirect_text:
+                        message = {
+                            "type": "player_message",
+                            "text": f"[SAFETY / X-CARD REDIRECT]: {redirect_text}",
+                        }
+                    else:
+                        continue
+                if message.get("type") != "player_message":
+                    continue
+
+                turn = agent.handle_player_message(state, message.get("text", ""))
+                to_send = None
+                while True:
+                    try:
+                        event = await (turn.asend(to_send) if to_send is not None else anext(turn))
+                    except StopAsyncIteration:
+                        break
+                    to_send = None
+                    if "state" in event.payload:
+                        # 2026-07-17 backlog item 2b: every event that
+                        # carries a "state" key just mutated it (tool
+                        # calls, companion rolls/messages, narration_done,
+                        # and an error that still logged the player's own
+                        # message before failing) - persisted before the
+                        # client is told, same ordering
+                        # `_apply_sheet_operation` already uses, so a
+                        # disconnect right after a shown roll/tool result
+                        # can't lose it.
+                        state = GameState.model_validate(event.payload["state"])
+                        await save_state(db_path, state)
+                    await websocket.send_json({"type": event.type, **event.payload})
+                    if event.type == "roll_proposed":
+                        # FR-16: pause the tool-calling loop for the
+                        # player's push/assist/Devil's Bargain/trade-off
+                        # decision before the proposed roll actually
+                        # executes.
+                        decision_message = await websocket.receive_json()
+                        to_send = (
+                            decision_message.get("decision", {})
+                            if decision_message.get("type") == "roll_decision"
+                            else {}
+                        )
+        except WebSocketDisconnect:
+            pass
+        finally:
+            await client.aclose()
+            await retrieval_engine.dispose()

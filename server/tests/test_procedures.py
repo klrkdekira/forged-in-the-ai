@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from ai.context import ContextBudget, estimate_tokens
 from ai.procedures import PROCEDURES, SESSION_ZERO_PROCEDURE
 from ai.system_prompt import build_system_prompt
 from engine.pack_loader import load_pack
@@ -29,6 +30,17 @@ def test_build_system_prompt_includes_every_procedure():
 def test_build_system_prompt_states_the_engine_adjudicates_principle():
     # CLAUDE.md: "The engine adjudicates, the model narrates."
     assert "tool call" in build_system_prompt()
+
+
+def test_system_prompt_fits_its_fixed_static_context_budget():
+    # NFR-4: `ContextBudget.system_and_procedures` is a fixed-static
+    # section - assemble_turn_context never trims the system prompt at
+    # runtime (truncating a procedure mid-sentence would be worse than the
+    # overrun), so this test is the enforcement: the largest prompt
+    # variant (session zero included) must fit the budget.
+    largest_prompt = build_system_prompt(needs_session_zero=True)
+
+    assert estimate_tokens(largest_prompt) <= ContextBudget().system_and_procedures
 
 
 def test_build_system_prompt_includes_session_zero_only_when_needed():

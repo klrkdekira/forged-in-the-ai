@@ -213,7 +213,11 @@ refer to that document. Each phase should end in something playable/testable.
 - [x] Session WebSocket channel: server-authoritative state deltas from the
       event log, single-player first (FR-30) (`app/session_ws.py`,
       `/ws/session`; verified end to end against the user's real vLLM
-      backend, not just mocked)
+      backend, not just mocked. Correction from the 2026-07-17 audit: the
+      server pushes the full state snapshot on every message, not deltas -
+      recorded here as the accepted single-player simplification of FR-30's
+      "state deltas"; revisit when multiplayer subscribers arrive, alongside
+      the concurrency item in that audit's backlog below)
 - [x] Web play UI: chat with streaming narration (NFR-3) and a roll
       negotiation dialog; pool/position/effect shown, push/assist/devil's
       bargain/trade-off offered before rolling (FR-16). Chat with real
@@ -1221,6 +1225,213 @@ stay open as well; most of them are blocked on items here.
       revisit if either premise changes (a contributor whose host can't
       run `uv`/`pnpm` directly, or turnkey offline play becoming a stated
       goal). No code changes - `compose.yml` is unchanged.
+
+## Gap backlog (alignment audit, 2026-07-17)
+
+Second audit, run after most of the 2026-07-16 backlog above closed: five
+parallel read-only reviews (engine, AI layer, persistence and app, web
+client, ingestion and licensing) against SPECIFICATION.md, with the
+load-bearing claims re-verified against the code and the SRD before being
+recorded here. Baseline at audit time: `make check` passes in full (444
+server tests, 31 web tests, licensing grep clean, no schema drift).
+
+Checked and found sound, so a future audit need not re-trace them: engine
+determinism (injected RNG and clock, no bare `random`/`datetime` in engine
+logic); FR-10 routing (every mutation goes through engine operations, live
+and replay alike); replay fold completeness (every state-mutating event type
+folds, pure records correctly skipped); FR-13 retrieval genuinely wired into
+the live GM loop; the NFR-6 capability probe and fallback per connection;
+FR-25 `character_id` threading across all tools; Dockerfile COPY completeness
+against actual runtime imports; localhost binding and volumes; the C6
+private-module boundary (no leak path via recap export, OpenAPI, or logs);
+the committed packs' licensing (`srd_base` is SRD-derived only, the example
+pack original); FR-34 edge drill-down ordering; C1 credits reachable. Two
+claims an auditor raised were checked against the SRD and rejected: the roll
+dialog's push-for-dice/Devil's-Bargain mutual exclusion is correct ("you
+can't get dice for both, it's one or the other") and stacking push-for-dice
+with push-for-effect at 4 stress is legal ("each can be chosen once for a
+given action"), so neither is a gap. The `httpx2` dependency was checked
+against PyPI and is the legitimate Pydantic-stewarded continuation of
+`httpx` (trusted publishing, github.com/pydantic/httpx2), not a typosquat.
+
+Items are ordered by how much play each blocks, and scoped to hand to an
+implementing agent under the same rules as the 2026-07-16 backlog: read the
+named files and cited spec sections first, follow the established patterns
+(tools wrap engine functions, every new event type gets a replay fold case
+in `ai/replay.py` plus a `journal-summarize.ts` summary, engine tests cite
+the SRD), and run `make check` before finishing.
+
+- [ ] **Dead engine mechanics with no play path (FR-1, FR-5, spec section 5).**
+      Five SRD mechanics are implemented and unit-tested in the engine but
+      unreachable from any tool, sheet operation, or replay path - the same
+      class of gap as `earns_desperate_roll_xp` in the previous backlog.
+      (a) Trauma conditions: `mark_trauma` (`engine/operations.py`) is
+      test-only; on stress overflow the `triggered_trauma` flag is surfaced
+      but nothing ever records the chosen condition, so `TraumaTrack`
+      conditions and four-trauma retirement are dead. (b) Armor:
+      `ArmorTrack.use_armor`/`use_heavy_armor`/`use_special_armor`/`restored`
+      (`engine/consequences.py`) have no non-test callers - armor can never
+      be spent to reduce a consequence nor restored between scores. (c)
+      Stash: no operation anywhere mutates `Character.stash` or `Crew.stash`,
+      and `crew_profit_share` (`engine/advancement.py`, the SRD "Profits"
+      payout) is test-only. (d) Crew development: `develop_crew`
+      (`engine/operations.py`, FR-5's tier and hold changes) is test-only -
+      no tool, no event type, no replay fold, so Tier and Hold can never
+      change in play; `RepTrack.add_turf` and claim mutation are likewise
+      unreachable, so the turf rep-threshold rule never applies. (e) Load
+      level: `set_item_carried` counts carried items with no cap; the SRD's
+      light/normal/heavy load levels are neither stored nor enforced. Fix
+      each with the established shape: engine operation where missing, GM
+      tool and/or `SHEET_OPERATIONS` entry, event type, replay fold,
+      `journal-summarize.ts` summary, SRD-cited tests.
+- [ ] **Safety tools are not usable by the player (FR-17).** The spec's
+      X-card "rewinds/redirects the fiction without argument", but
+      `invoke_x_card` (`ai/tools.py`) only logs an event; no procedure or
+      system-prompt text mentions the X-card at all (`ai/system_prompt.py`,
+      `ai/procedures.py`); the WS protocol (`app/session_ws.py`) accepts no
+      player X-card message; and the web client has no control for it.
+      Lines and veils are stored and injected as a canon section, but the
+      prompt never instructs the GM to honour them (never depict a line,
+      fade a veil to black), and the client types `session_zero` without any
+      component rendering it. Fix: a client-initiated `x_card` WS message
+      (an engine-side path like `undo`, bypassing the GM agent) that rewinds
+      via `undo_to` and re-prompts the GM with a redirect instruction; an
+      X-card and lines/veils paragraph in the system prompt; an
+      always-visible X-card button in `/play`; render `state.session_zero`
+      in the table panel.
+- [ ] **Faction canon growth (FR-15) and faction downtime (FR-14).** There
+      is no way to introduce a faction mid-play: `CampaignCanon` has
+      `with_fact`/`with_location` but no `with_faction`, no
+      `add_canon_faction` tool exists, and `engine/entities.py`'s `Faction`
+      model is referenced by nothing in `ai/` or `state/` (only
+      `FactionStatus` is), so `update_faction_status` accepts ids that never
+      join canon. Faction clocks between scores are purely model-remembered:
+      `DOWNTIME_ACTIVITIES_PROCEDURE` instructs the maneuver but nothing
+      deterministic enumerates faction clocks, and the unused
+      `Faction.clock_ids` means the engine cannot. Fix:
+      `CampaignCanon.with_faction` plus an `add_canon_faction` tool, replay
+      fold, and canon-section rendering; then have the transition into
+      downtime surface each canon faction and its clocks back to the GM as
+      a structured, engine-enumerated reminder rather than a memory test.
+- [ ] **Referential integrity in canon tools (FR-12).** `update_relationship`
+      and `update_faction_status` (`ai/tools.py`) accept free-form entity
+      ids without checking the referenced entities exist, and `create_npc`
+      silently overwrites an existing NPC id where `create_character`
+      refuses duplicates. Refuse rather than guess, per CLAUDE.md.
+- [ ] **Campaign export/import (NFR-5, ADR-0005).** The promised portability
+      contract - "a canonical JSONL event-log export (plus JSON snapshots)
+      that round-trips through import; a test enforces the round-trip" -
+      exists only as the in-memory `EventLog.to_jsonl`/`from_jsonl` unit
+      round-trip. No endpoint or CLI exports a campaign's log and snapshots,
+      and nothing imports one back; the only campaign export is FR-20's
+      markdown recap, which is not round-trippable. Fix:
+      `GET /api/campaigns/{campaign_id}/export` (JSONL log plus base and
+      latest snapshots) and an import path that replays onto the base, with
+      a campaign-level round-trip test.
+- [ ] **Session WS concurrency and persistence invariants (FR-18, FR-30).**
+      (a) Two connections to one campaign corrupt state: each loads its own
+      `GameState`, `save_state`'s `sequence > max_sequence` append filter
+      silently drops the loser's events, and the snapshot upsert is
+      last-writer-wins. Serialise per campaign (an in-process per-campaign
+      `asyncio.Lock` or single-writer registry) and refuse a stale writer.
+      (b) Mid-turn tool events are broadcast before persistence - only
+      `narration_done` saves, so a disconnect after a shown roll loses it,
+      violating the invariant `session_ws.py` itself states; persist before
+      emitting each state-mutating tool event. (c) Campaign creation is
+      non-atomic twice over: the app.db index row commits before the
+      campaign file exists, and the base and latest snapshots are written
+      in two transactions - write both snapshots in one transaction and
+      register the index row last. (d) No fan-out to other subscribers of
+      the same campaign exists - fine single-player, stays Phase 7 work.
+      Optional alongside (c): `DELETE /api/campaigns/{campaign_id}` so an
+      orphaned index row is recoverable from the UI.
+- [ ] **Roll negotiation: decline path and offered bargain (FR-16).** The
+      dialog (`roll-negotiation-dialog.tsx`) cannot be declined: it is a
+      modal with no close button and a single "Roll the dice" action, so
+      once the GM proposes, the player must roll. Add a decline choice
+      carried through `roll_decision` that the agent loop feeds back to the
+      model as the player reconsidering, not a silent drop. The
+      `roll_proposed` payload also carries no GM-offered bargain text
+      (FR-11 "offers Devil's Bargains"), so the player must free-type the
+      price; thread an optional `devils_bargain` string through the
+      proposal. The dialog's pool/position/effect arithmetic has no tests -
+      add one covering push/trade/assist composition.
+- [ ] **Sheet parity with the official layout (G2, FR-28).** The interactive
+      sheet omits most of the sheet: the twelve action ratings, trauma,
+      armor uses, special abilities, vice and purveyor, stash, contacts,
+      heritage/background/look/alias, load level, and the healing clock are
+      neither shown nor editable (`character-sheet-panel.tsx` renders name,
+      playbook, stress, harm, XP, coin, load count, and item toggles). The
+      crew panel omits tier, hold, stash, upgrades, cohorts, crew special
+      abilities, and crew XP. Fix after the dead-mechanics item above lands
+      (it supplies the trauma/armor/stash/development operations): render
+      everything read-only at minimum, tickable where an operation exists.
+- [ ] **Sheet export (FR-8).** "Export: JSON always; human-readable markdown
+      sheet render" - neither is reachable from the UI: nothing downloads a
+      character or crew as JSON, and `render_markdown` is called only by
+      `ai/canon.py`. Add markdown endpoints for character and crew plus
+      export controls in the sheet and crew panels.
+- [ ] **Journal buckets (FR-32).** `journal-summarize.ts`'s `consequences`
+      bucket omits `xp_marked`, `crew_xp_marked`, `coin_adjusted`,
+      `crew_coin_adjusted`, and `item_carried_set`, and
+      `companion_roll_decision` is not in `rolls`, so all of them fall to
+      "other" and never appear under the filters FR-32 names.
+- [ ] **Licensing grep breadth (C3).** `FORBIDDEN_TERMS`
+      (`engine/pack_loader.py`, shared by `cli/licensing_grep.py`) is just
+      "Doskvol" and "Duskwall", case-sensitive - the other C3 classes
+      (assembled core playbook and crew-type data, named core-book NPCs)
+      pass both the grep and the runtime pack check. Extend the term list
+      and make matching case-insensitive, but verify every candidate term
+      against the SRD text, `packs/*.json`, and the test suite first: a
+      term the SRD itself uses, or an ordinary English word like "Hound",
+      needs a narrower pattern or a documented exclusion, not a blanket ban
+      that false-positives the committed SRD pack.
+- [ ] **Module lifecycle (FR-23, FR-24).** No module deletion exists
+      (endpoint or CLI), and a hand-deleted module file leaves its
+      `source='module:<id>'` chunks in `srd_chunks`, surfacing in GM
+      retrieval forever; re-saving a module without `source_text` leaves
+      the old chunks indexed, stale against the changed module. Fix:
+      `DELETE /api/ingestion/modules/{pack_id}` removing file and chunks;
+      on every save, delete the module's chunks first and re-insert only
+      when `source_text` is present; make `save_module`'s write atomic
+      (temp file plus `os.replace`).
+- [ ] **Ingestion robustness (FR-22).** `/extract-text` buffers the whole
+      upload with no size cap (a full-book PDF runs to tens of MB), an
+      encrypted PDF raises out of pypdf as a 500 rather than a clean 4xx,
+      and an image-only PDF returns 200 with empty text that the UI
+      silently forwards to module extraction. Add a size limit, wrap pypdf
+      failures into typed 4xx errors, flag empty extractions in the
+      response, and have `ingestion-page.tsx` surface the server's actual
+      error detail instead of its two generic messages.
+- [ ] **Module structured content is unusable in play (FR-9, FR-21, FR-22).**
+      Only module prose joins retrieval (FR-24); the structured content -
+      playbooks, crew types, items - of both saved modules and the
+      committed packs is never loaded into a campaign. The only runtime
+      pack consumer is `load_entanglements`; `_new_game_state`
+      (`app/campaigns.py`) hardcodes its starter playbook and crew strings,
+      so FR-22's "activated in a campaign" step has nothing behind it.
+      Left open rather than handed off this round: wiring template
+      selection into campaign creation (which packs and modules to offer,
+      how a template seeds `Character`/`Crew`) needs a small design first,
+      like the score target-location question in the previous backlog.
+- [ ] **Small quality items, batchable.** (a) NFR-4:
+      `ContextBudget.system_and_procedures` is declared but
+      `assemble_turn_context` never fits the system prompt against it -
+      measure it or document the section as fixed-static. (b) NFR-2:
+      `test_clock_tick_is_immutable`,
+      `test_tick_clamps_to_segments_when_overshooting`, and the two
+      never-below-zero-quality downtime tests carry no citation - mark them
+      as implementation-invariant tests or cite the rule they bound. (c)
+      The hand-typed WS snapshot shapes in `use-session-socket.ts` (a
+      documented ADR-0006 exception) have no drift guard - a server test
+      serialising a snapshot against a shared fixture would catch silent
+      divergence. (d) Web keys: harm entries and chat messages are keyed by
+      array index, and `district-map.tsx` keys by location name, so
+      duplicate names collide. (e) The recap endpoint's `load_state` does
+      not run campaign migrations first, unlike the WS path - harmless
+      today, a trap after the next campaign-schema migration. (f) The
+      pytest run emits an aiosqlite "Event loop is closed" teardown
+      warning - benign but worth a look while nearby.
 
 ## Phase 7: Multiplayer
 

@@ -55,3 +55,60 @@ describe('summarize companion_roll_decision', () => {
     expect(summary).toBe('pc-2 pushes for +1d')
   })
 })
+
+describe('summarize dead-mechanics and faction events', () => {
+  it('summarizes a trauma condition, flagging retirement', () => {
+    expect(
+      summarize(entry({ event_type: 'trauma_marked', payload: { condition: 'haunted', retired: false } })),
+    ).toBe('pc-2 took trauma: haunted')
+    expect(
+      summarize(entry({ event_type: 'trauma_marked', payload: { condition: 'cold', retired: true } })),
+    ).toBe('pc-2 took trauma: cold (retired)')
+  })
+
+  it('summarizes armor use and restoration', () => {
+    expect(summarize(entry({ event_type: 'armor_used', payload: { armor_type: 'heavy' } }))).toBe(
+      'pc-2 used heavy armor',
+    )
+    expect(summarize(entry({ event_type: 'armor_restored', payload: {} }))).toBe(
+      'pc-2 restored their armor',
+    )
+  })
+
+  it('summarizes stash changes and load level', () => {
+    expect(summarize(entry({ event_type: 'stash_adjusted', payload: { amount: 3 } }))).toBe(
+      'pc-2 stashed 3 stash',
+    )
+    expect(summarize(entry({ event_type: 'stash_adjusted', payload: { amount: -2 } }))).toBe(
+      'pc-2 removed 2 stash',
+    )
+    expect(summarize(entry({ event_type: 'load_level_set', payload: { level: 'light' } }))).toBe(
+      'pc-2 set load to light',
+    )
+  })
+
+  it('summarizes crew development, turf, and claims', () => {
+    expect(
+      summarize(entry({ event_type: 'crew_developed', payload: { tier: 1, hold: 'weak' } })),
+    ).toBe('Crew developed: Tier 1, weak hold')
+    expect(summarize(entry({ event_type: 'crew_turf_adjusted', payload: { amount: 1 } }))).toBe(
+      'Crew turf +1',
+    )
+    expect(
+      summarize(
+        entry({
+          event_type: 'claim_controlled_set',
+          payload: { claim_id: 'docks', controlled: true, name: 'The Docks', is_turf: true },
+        }),
+      ),
+    ).toBe('Claim seized: The Docks (turf)')
+  })
+
+  it('summarizes a faction joining canon', () => {
+    expect(
+      summarize(
+        entry({ event_type: 'canon_faction_added', payload: { name: 'The Red Circle', tier: 2 } }),
+      ),
+    ).toBe('Faction introduced: The Red Circle (Tier 2)')
+  })
+})

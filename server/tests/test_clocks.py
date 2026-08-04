@@ -16,6 +16,9 @@ def test_clock_ticks_up_and_reports_completion():
 
 
 def test_clock_tick_is_immutable():
+    # Implementation invariant, not an SRD rule: Clock.tick returns a new
+    # object so a sequence of clock events replays deterministically
+    # (FR-19/NFR-1); mutating in place would let live play and replay drift.
     clock = Clock(name="Alert", kind=ClockKind.DANGER, segments=4)
 
     clock.tick(1)
@@ -46,6 +49,9 @@ def test_emptying_an_already_empty_clock_raises():
 
 
 def test_tick_clamps_to_segments_when_overshooting():
+    # Implementation invariant, not an SRD rule: the SRD only says a clock
+    # is full when its last segment fills; overshoot has no meaning, so
+    # the engine bounds `filled` at `segments` rather than tracking excess.
     clock = Clock(name="Alert", kind=ClockKind.DANGER, segments=4, filled=3)
 
     assert clock.tick(3).filled == 4

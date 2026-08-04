@@ -128,6 +128,10 @@ class ArmorTrack(BaseModel):
             raise ArmorAlreadyUsedError("special armor is unavailable or already used")
         return self.model_copy(update={"special_armor_used": True})
 
+    @property
+    def any_used(self) -> bool:
+        return self.armor_used or self.heavy_armor_used or self.special_armor_used
+
     def restored(self) -> "ArmorTrack":
         return self.model_copy(
             update={"armor_used": False, "heavy_armor_used": False, "special_armor_used": False}

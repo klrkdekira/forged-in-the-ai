@@ -20,12 +20,82 @@ export interface paths {
         put?: never;
         /**
          * Create Campaign
-         * @description FR-18: registers the campaign in app.db's directory, then creates
-         *     its own campaign-<id>.db with a starting snapshot so a WS connection
-         *     can load it immediately.
+         * @description FR-18: creates the campaign-<id>.db with a starting snapshot first,
+         *     then registers it in app.db's directory - so a WS connection can
+         *     always load an id the picker lists (2c: never the other way round).
          */
         post: operations["create_campaign_api_campaigns_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/campaigns/{campaign_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Campaign
+         * @description NFR-5/ADR-0005: the portability contract as a downloadable JSON
+         *     bundle (`CampaignExport`) - `import_campaign` is the other half.
+         */
+        get: operations["export_campaign_api_campaigns__campaign_id__export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/campaigns/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Campaign
+         * @description NFR-5/ADR-0005: rebuilds a *new* campaign (its own fresh id, never
+         *     overwriting an existing one) from a previously exported bundle. The
+         *     log is authoritative (FR-19), so the imported state is reconstructed
+         *     by replaying `log_jsonl` onto `base_state` with the same `replay_state`
+         *     fold `undo_to` uses - not by trusting `latest_state` as-is, which keeps
+         *     a hand-edited or stale export honest against its own log.
+         */
+        post: operations["import_campaign_api_campaigns_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/campaigns/{campaign_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Campaign
+         * @description FR-18: removes the campaign's own db file (plus WAL-mode's -wal/-shm
+         *     siblings, ADR-0005) and its app.db index row, file first (2c's
+         *     file-then-index ordering, reversed for delete: a leftover index row
+         *     with no file is a recoverable orphan a second delete call clears; the
+         *     reverse would silently strand a file no picker could reach).
+         */
+        delete: operations["delete_campaign_api_campaigns__campaign_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -220,7 +290,11 @@ export interface paths {
         get: operations["get_module_endpoint_api_ingestion_modules__module_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Module Endpoint
+         * @description FR-23/FR-24: deletes a saved private module file and its retrieval chunks.
+         */
+        delete: operations["delete_module_endpoint_api_ingestion_modules__module_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -324,6 +398,56 @@ export interface components {
             /** File */
             file: string;
         };
+        /**
+         * CampaignCanon
+         * @description FR-36: an original setting, generated at session zero and grown
+         *     during play - never a core-book setting (C3). Persisted as
+         *     campaign-local content, not shipped with the product.
+         */
+        CampaignCanon: {
+            /** Setting Name */
+            setting_name: string;
+            /** Tone */
+            tone?: string | null;
+            /** Factions */
+            factions?: string[];
+            /** Locations */
+            locations?: string[];
+            /**
+             * Facts
+             * @description Established facts, in the order they entered play
+             */
+            facts?: string[];
+        };
+        /**
+         * CampaignExport
+         * @description NFR-5/ADR-0005: the promised portable artefact - a JSONL event log
+         *     (`EventLog.to_jsonl`, the authoritative source) plus the base and
+         *     latest JSON snapshots (the cache). `import_campaign` reconstructs a
+         *     fresh campaign from this alone by replaying `log_jsonl` onto
+         *     `base_state` (`ai/replay.py`, the same fold `undo_to` uses) - it does
+         *     not need this server's own database file, only what this model
+         *     carries, which is the portability guarantee NFR-5 asks for.
+         */
+        CampaignExport: {
+            /** Campaign Id */
+            campaign_id: string;
+            /** Name */
+            name: string;
+            /** Log Jsonl */
+            log_jsonl: string;
+            base_state: components["schemas"]["GameState"];
+            latest_state: components["schemas"]["GameState"];
+        };
+        /**
+         * CampaignPhase
+         * @description SRD: "The Game Structure" - "By default, the game is in free play...
+         *     the game shifts into the score phase... When the score is finished,
+         *     the game shifts into the downtime phase... the game returns to free
+         *     play and the cycle starts over again.
+         * @enum {string}
+         */
+        CampaignPhase: "free_play" | "score" | "downtime";
         /** CampaignSummary */
         CampaignSummary: {
             /** Id */
@@ -397,6 +521,8 @@ export interface components {
              * @default 0
              */
             load: number;
+            /** @default normal */
+            load_level: components["schemas"]["LoadLevel"];
             /** Items */
             items?: components["schemas"]["CharacterItem"][];
             /** Friend */
@@ -446,6 +572,31 @@ export interface components {
              */
             is_turf: boolean;
         };
+        /**
+         * Clock
+         * @description SRD: "Progress clocks". Immutable: `tick` returns a new Clock rather
+         *     than mutating, so a sequence of clock events replays deterministically.
+         */
+        Clock: {
+            /** Name */
+            name: string;
+            kind: components["schemas"]["ClockKind"];
+            /** Segments */
+            segments: number;
+            /**
+             * Filled
+             * @default 0
+             */
+            filled: number;
+        };
+        /**
+         * ClockKind
+         * @description SRD: "Progress clocks" - every flavour is the same segments-and-fill
+         *     structure; kind is a label for how the engine/GM uses it, not a
+         *     different data shape.
+         * @enum {string}
+         */
+        ClockKind: "danger" | "racing" | "linked" | "mission" | "tug_of_war" | "long_term_project" | "faction" | "healing";
         /**
          * Cohort
          * @description SRD: "Cohorts" - a gang or expert; up to two types, edges, and flaws.
@@ -534,6 +685,30 @@ export interface components {
             factions?: components["schemas"]["FactionSeed"][];
             /** Tables */
             tables?: components["schemas"]["ExtractedTable"][];
+        };
+        /**
+         * Controller
+         * @description FR-25: one seat - a human or an AI player agent (FR-35) - controlling
+         *     any number of PCs and cohorts. Solo play (single-player MVP) is one
+         *     human Controller whose character_ids covers the whole crew - not a
+         *     special case, just this with one seat. `kind` defaults to "human":
+         *     a character with no Controller entry at all is human-controlled too
+         *     (GameState.controllers only needs to name the exceptions, i.e. AI
+         *     companions).
+         */
+        Controller: {
+            /** Seat Id */
+            seat_id: string;
+            /**
+             * Kind
+             * @default human
+             * @enum {string}
+             */
+            kind: "human" | "ai";
+            /** Character Ids */
+            character_ids?: string[];
+            /** Cohort Ids */
+            cohort_ids?: string[];
         };
         /** CreateCampaignRequest */
         CreateCampaignRequest: {
@@ -655,6 +830,42 @@ export interface components {
             /** Entanglement */
             entanglement: string;
         };
+        /**
+         * Event
+         * @description FR-19/FR-31: an append-only, entity-tagged record of one state
+         *     change. `occurred_at` is supplied by the caller (an injected clock) -
+         *     the engine never calls datetime.now() itself (CLAUDE.md).
+         */
+        Event: {
+            /** Sequence */
+            sequence: number;
+            /** Entity Type */
+            entity_type: string;
+            /** Entity Id */
+            entity_id: string;
+            /** Event Type */
+            event_type: string;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+        };
+        /**
+         * EventLog
+         * @description SPECIFICATION.md §7 "Event-sourced state": append-only; snapshots
+         *     are caches, not sources of truth. Immutable: `append` returns a new
+         *     EventLog, so replaying the same sequence of appends is deterministic
+         *     (NFR-1) rather than depending on mutation order.
+         */
+        EventLog: {
+            /** Events */
+            events?: components["schemas"]["Event"][];
+        };
         /** ExtractModuleRequest */
         ExtractModuleRequest: {
             /** Text */
@@ -695,6 +906,32 @@ export interface components {
             char_count: number;
         };
         /**
+         * Faction
+         * @description SPECIFICATION.md §5: "Faction". Status with the crew is a
+         *     Relationship edge (FR-33), not a field here.
+         */
+        Faction: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Tier
+             * @default 0
+             */
+            tier: number;
+            /** @default strong */
+            hold: components["schemas"]["Hold"];
+            /** Clock Ids */
+            clock_ids?: string[];
+            /** Assets */
+            assets?: string[];
+            /** Notable Npc Ids */
+            notable_npc_ids?: string[];
+            /** Notes */
+            notes?: string | null;
+        };
+        /**
          * FactionSeed
          * @description FR-22: seed data for a faction a module's setting material
          *     describes - deliberately lighter than `engine.entities.Faction` (no
@@ -715,6 +952,25 @@ export interface components {
              */
             tier_hint?: number | null;
         };
+        /**
+         * FactionStatus
+         * @description SPECIFICATION.md §5: "Faction status with the crew (-3 to +3) as a
+         *     typed special case" of Relationship - a crew-to-faction edge with a
+         *     bounded integer status rather than the free-form kind/status above.
+         */
+        FactionStatus: {
+            /** Crew Id */
+            crew_id: string;
+            /** Faction Id */
+            faction_id: string;
+            /**
+             * Status
+             * @default 0
+             */
+            status: number;
+            /** History */
+            history?: number[];
+        };
         /** FinalizeModuleRequest */
         FinalizeModuleRequest: {
             /** Id */
@@ -727,6 +983,67 @@ export interface components {
             version: string;
             /** @description The reviewed/edited draft - whatever the user changed since /extract-module */
             draft: components["schemas"]["ModuleDraft"];
+        };
+        /**
+         * GameState
+         * @description Everything one tool call can read or change (FR-25: "solo play is
+         *     the whole crew under one seat" - one seat can control several PCs,
+         *     via `characters`, keyed by a caller-supplied character_id the same
+         *     way `clocks`/`npcs` are - not the character's own name).
+         */
+        GameState: {
+            /**
+             * Characters
+             * @description Keyed by a caller-supplied character_id
+             */
+            characters: {
+                [key: string]: components["schemas"]["Character"];
+            };
+            crew: components["schemas"]["Crew"];
+            session: components["schemas"]["Session"];
+            canon?: components["schemas"]["CampaignCanon"] | null;
+            session_zero?: components["schemas"]["SessionZeroConfig"] | null;
+            /**
+             * Controllers
+             * @description Keyed by seat_id; only AI seats need an entry (Controller.kind default 'human' - see engine.controller.is_ai_controlled)
+             */
+            controllers?: {
+                [key: string]: components["schemas"]["Controller"];
+            };
+            /** Clocks */
+            clocks?: {
+                [key: string]: components["schemas"]["Clock"];
+            };
+            /** Npcs */
+            npcs?: {
+                [key: string]: components["schemas"]["Npc"];
+            };
+            /** Scores */
+            scores?: {
+                [key: string]: components["schemas"]["Score"];
+            };
+            /**
+             * Factions
+             * @description Canon factions, keyed by faction_id (FR-15)
+             */
+            factions?: {
+                [key: string]: components["schemas"]["Faction"];
+            };
+            /**
+             * Faction Statuses
+             * @description Keyed by faction_id
+             */
+            faction_statuses?: {
+                [key: string]: components["schemas"]["FactionStatus"];
+            };
+            /**
+             * Relationships
+             * @description Keyed by '<subject_type>:<subject_id>:<object_type>:<object_id>'
+             */
+            relationships?: {
+                [key: string]: components["schemas"]["Relationship"];
+            };
+            log?: components["schemas"]["EventLog"];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -805,6 +1122,13 @@ export interface components {
             /** Tags */
             tags?: string[];
         };
+        /**
+         * LoadLevel
+         * @description SRD: "Loadout" - the load the player declares for a score; the cap
+         *     on how many items can be carried at once (`LOAD_LIMITS`).
+         * @enum {string}
+         */
+        LoadLevel: "light" | "normal" | "heavy";
         /**
          * MagnitudeLevel
          * @description One row (0-6) of the SRD "Magnitude" master table.
@@ -898,6 +1222,23 @@ export interface components {
             text: string;
         };
         /**
+         * Npc
+         * @description SPECIFICATION.md §5: "NPC / Location / Item: lightweight entities
+         *     with tags and the fiction established about them".
+         */
+        Npc: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Tags */
+            tags?: string[];
+            /** Faction Id */
+            faction_id?: string | null;
+            /** Notes */
+            notes?: string | null;
+        };
+        /**
          * PlaybookTemplate
          * @description FR-9: a playbook as content-pack data (name, starting dots, ability
          *     list, xp trigger, items, friends). C3/C4: a *real* Blades in the Dark
@@ -943,6 +1284,34 @@ export interface components {
             results: components["schemas"]["RollResult"][];
         };
         /**
+         * Relationship
+         * @description An edge between any two entities. `history` is a list of event
+         *     sequence numbers (engine.events.Event.sequence) - "every change
+         *     references the event that caused it".
+         */
+        Relationship: {
+            /** Subject Type */
+            subject_type: string;
+            /** Subject Id */
+            subject_id: string;
+            /** Object Type */
+            object_type: string;
+            /** Object Id */
+            object_id: string;
+            kind: components["schemas"]["RelationshipKind"];
+            /** Status */
+            status?: string | null;
+            /** History */
+            history?: number[];
+        };
+        /**
+         * RelationshipKind
+         * @description SPECIFICATION.md §5: "Relationship" - "a type (ally, rival, debt,
+         *     romance, vendetta)".
+         * @enum {string}
+         */
+        RelationshipKind: "ally" | "rival" | "debt" | "romance" | "vendetta";
+        /**
          * RepTrack
          * @description SRD: "Development" / "Turf" - 12 rep develops the crew, reduced by
          *     1 per turf held (turf caps at 6, so the floor is 6 rep).
@@ -986,6 +1355,57 @@ export interface components {
              * @description The module's normalised source text (FR-21) - indexed for GM retrieval (FR-24) alongside the SRD if given; the saved pack itself is unaffected either way
              */
             source_text?: string | null;
+        };
+        /**
+         * Score
+         * @description SPECIFICATION.md §5: "Score" - FR-4's score loop fields.
+         */
+        Score: {
+            /** Id */
+            id: string;
+            /** Target */
+            target: string;
+            /** Plan Type */
+            plan_type?: string | null;
+            /** Plan Detail */
+            plan_detail?: string | null;
+            /** Engagement Result */
+            engagement_result?: string | null;
+            /** Payoff */
+            payoff?: number | null;
+            /** Heat Gained */
+            heat_gained?: number | null;
+            /** Entanglement */
+            entanglement?: string | null;
+        };
+        /**
+         * Session
+         * @description SPECIFICATION.md §5: "Session/Campaign" - "current phase (free play
+         *     / score / downtime)".
+         */
+        Session: {
+            /** @default free_play */
+            phase: components["schemas"]["CampaignPhase"];
+        };
+        /**
+         * SessionZeroConfig
+         * @description FR-17: safety tools agreed before play starts. Not SRD content -
+         *     lines/veils/X-card are generic tabletop safety tools, not specific to
+         *     Blades in the Dark.
+         */
+        SessionZeroConfig: {
+            /**
+             * Lines
+             * @description Hard limits: never in the fiction
+             */
+            lines?: string[];
+            /**
+             * Veils
+             * @description Fade-to-black topics: implied, not detailed
+             */
+            veils?: string[];
+            /** Tone */
+            tone?: string | null;
         };
         /** SpecialAbility */
         SpecialAbility: {
@@ -1146,6 +1566,99 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["CampaignSummary"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_campaign_api_campaigns__campaign_id__export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                campaign_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_campaign_api_campaigns_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CampaignExport"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_campaign_api_campaigns__campaign_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                campaign_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -1411,6 +1924,35 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ContentPack"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_module_endpoint_api_ingestion_modules__module_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                module_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

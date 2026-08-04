@@ -12,7 +12,15 @@ def estimate_tokens(text: str) -> int:
 @dataclass
 class ContextBudget:
     """ADR-0003's context budget breakdown (tokens), sized for the 64k
-    floor (NFR-4). Total leaves headroom rather than summing to 64k."""
+    floor (NFR-4). Total leaves headroom rather than summing to 64k.
+
+    `system_and_procedures` is a fixed-static section: the system prompt
+    is built from a hand-curated set of procedure docs
+    (`ai/system_prompt.py`), not per-turn data, so `assemble_turn_context`
+    never trims it at runtime - truncating a procedure mid-sentence would
+    be worse than the overrun. Its size is instead enforced at test time
+    (`test_procedures.py` measures the largest prompt variant against
+    this budget), which fails the build if the procedure docs outgrow it."""
 
     system_and_procedures: int = 8_000
     canon: int = 10_000

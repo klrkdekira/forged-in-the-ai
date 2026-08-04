@@ -3,6 +3,7 @@ import type {
   CanonSnapshot,
   ClockSnapshot,
   CrewSnapshot,
+  SessionZeroSnapshot,
   SheetOperation,
 } from '@/hooks/use-session-socket'
 
@@ -125,6 +126,30 @@ export function TableViewPanel({
           </p>
         )}
       </div>
+
+      {sessionZero && (
+        <div className="flex flex-col gap-2 rounded-md border border-border/40 p-2 text-xs">
+          <span className="font-semibold text-muted-foreground">Safety Boundaries</span>
+          {sessionZero.lines.length > 0 && (
+            <div>
+              <span className="font-medium text-destructive">Lines: </span>
+              <span className="text-muted-foreground">{sessionZero.lines.join(', ')}</span>
+            </div>
+          )}
+          {sessionZero.veils.length > 0 && (
+            <div>
+              <span className="font-medium text-amber-500">Veils: </span>
+              <span className="text-muted-foreground">{sessionZero.veils.join(', ')}</span>
+            </div>
+          )}
+          {sessionZero.tone && (
+            <div>
+              <span className="font-medium text-foreground">Tone: </span>
+              <span className="italic text-muted-foreground">{sessionZero.tone}</span>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-col gap-3">
         <span className="text-xs font-semibold text-muted-foreground">Active clocks</span>

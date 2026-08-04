@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import httpx2 as httpx
@@ -114,13 +115,63 @@ def test_licensing_grep_fails_on_a_forbidden_term_outside_the_allowlist(
     assert "fixture.json" in result.output
 
 
-def test_licensing_grep_allows_the_term_in_an_allowlisted_doc(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_licensing_grep_allows_the_term_in_an_allowlisted_doc(tmp_path: Path, monkeypatch) -> None:
     forbidden_term = FORBIDDEN_TERMS[0]
     (tmp_path / "NOTICE.md").write_text(f"policy names {forbidden_term}", encoding="utf-8")
     monkeypatch.setattr(licensing_grep_module, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(licensing_grep_module, "tracked_files", lambda: ["NOTICE.md"])
+
+    result = CliRunner().invoke(cli, ["licensing-grep"])
+
+    assert result.exit_code == 0, result.output
+
+
+def test_licensing_grep_matches_the_forbidden_term_case_insensitively(
+    tmp_path: Path, monkeypatch
+) -> None:
+    forbidden_term = FORBIDDEN_TERMS[0].upper()
+    (tmp_path / "fixture.json").write_text(f"a tale of {forbidden_term}", encoding="utf-8")
+    monkeypatch.setattr(licensing_grep_module, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(licensing_grep_module, "tracked_files", lambda: ["fixture.json"])
+
+    result = CliRunner().invoke(cli, ["licensing-grep"])
+
+    assert result.exit_code != 0
+    assert "fixture.json" in result.output
+
+
+def test_licensing_grep_fails_on_a_pack_assembling_a_real_playbook(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # C3: a real playbook name only trips the check when *assembled* as
+    # pack data under packs/ - see engine/pack_loader.py's own comment on
+    # why bare mentions (e.g. this project's own test fixtures) don't.
+    (tmp_path / "packs").mkdir()
+    pack = {
+        "id": "example",
+        "name": "Example",
+        "description": "d",
+        "version": "1.0.0",
+        "playbooks": [{"id": "cutter", "name": "Cutter", "xp_trigger": "violence"}],
+    }
+    (tmp_path / "packs" / "fixture.json").write_text(json.dumps(pack), encoding="utf-8")
+    monkeypatch.setattr(licensing_grep_module, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(licensing_grep_module, "tracked_files", lambda: ["packs/fixture.json"])
+
+    result = CliRunner().invoke(cli, ["licensing-grep"])
+
+    assert result.exit_code != 0
+    assert "packs/fixture.json" in result.output
+
+
+def test_licensing_grep_allows_a_playbook_name_used_as_a_bare_string_outside_packs(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # The same word, unassembled and outside packs/ (e.g. a test fixture's
+    # Character.playbook value), is not a licensing risk.
+    (tmp_path / "fixture.py").write_text('Character(playbook="Cutter")', encoding="utf-8")
+    monkeypatch.setattr(licensing_grep_module, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(licensing_grep_module, "tracked_files", lambda: ["fixture.py"])
 
     result = CliRunner().invoke(cli, ["licensing-grep"])
 

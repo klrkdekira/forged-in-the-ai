@@ -145,15 +145,23 @@ export function RollNegotiationDialog({
             </label>
             {devilsBargainAccepted && (
               <div className="flex flex-col gap-1 pl-6">
-                <Label htmlFor="devils-bargain-text" className="text-xs text-muted-foreground">
-                  What's the price?
-                </Label>
-                <Input
-                  id="devils-bargain-text"
-                  value={devilsBargainText}
-                  onChange={(event) => setDevilsBargainText(event.target.value)}
-                  placeholder="e.g. tick the Heat clock"
-                />
+                {proposal.devils_bargain ? (
+                  <p className="text-xs italic text-amber-500 font-medium">
+                    GM offered price: {proposal.devils_bargain}
+                  </p>
+                ) : (
+                  <>
+                    <Label htmlFor="devils-bargain-text" className="text-xs text-muted-foreground">
+                      What's the price?
+                    </Label>
+                    <Input
+                      id="devils-bargain-text"
+                      value={devilsBargainText}
+                      onChange={(event) => setDevilsBargainText(event.target.value)}
+                      placeholder="e.g. tick the Heat clock"
+                    />
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -182,7 +190,14 @@ export function RollNegotiationDialog({
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex justify-between sm:justify-between">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onDecide({ push_dice: false, push_effect: false, declined: true })}
+          >
+            Decline / Reconsider
+          </Button>
           <Button onClick={handleSubmit}>Roll the dice</Button>
         </DialogFooter>
       </DialogContent>

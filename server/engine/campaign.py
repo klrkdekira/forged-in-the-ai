@@ -33,3 +33,10 @@ class CampaignCanon(BaseModel):
         """FR-15: the map grows as new locations are discovered during
         play, the same way facts do."""
         return self.model_copy(update={"locations": [*self.locations, location]})
+
+    def with_faction(self, faction: str) -> "CampaignCanon":
+        """FR-15: factions join canon mid-play the same way locations do.
+        This list holds the names; the structured entity (tier, clocks)
+        lives in `GameState.factions` (engine.entities.Faction), keyed by
+        faction_id like npcs."""
+        return self.model_copy(update={"factions": [*self.factions, faction]})

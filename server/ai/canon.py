@@ -71,6 +71,27 @@ def render_canon(state: GameState) -> list[CanonSection]:
         ]
         sections.append(CanonSection(title="Known NPCs", text="\n".join(npc_lines), priority=1))
 
+    if state.factions:
+        # FR-14/FR-15: canon factions with their ids (the handle every
+        # faction tool call needs), tier, and any linked clocks.
+        faction_lines = []
+        for faction_id, faction in state.factions.items():
+            line = f"- {faction_id}: {faction.name} (Tier {faction.tier})"
+            if faction.notes:
+                line += f" - {faction.notes}"
+            clock_notes = [
+                f"{state.clocks[clock_id].name} {state.clocks[clock_id].filled}"
+                f"/{state.clocks[clock_id].segments}"
+                for clock_id in faction.clock_ids
+                if clock_id in state.clocks
+            ]
+            if clock_notes:
+                line += f" [clocks: {', '.join(clock_notes)}]"
+            faction_lines.append(line)
+        sections.append(
+            CanonSection(title="Known factions", text="\n".join(faction_lines), priority=1)
+        )
+
     if state.faction_statuses:
         status_lines = [
             f"- {faction_id}: {status.status:+d}"

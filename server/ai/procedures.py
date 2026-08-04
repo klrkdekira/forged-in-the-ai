@@ -28,11 +28,11 @@ GM_ROLE = ProcedureDoc(
         "consequences follow, and whether a roll is needed and which kind. "
         "Players decide which of their advancement triggers actually "
         "happened.\n"
-        "World generation: when the fiction needs a new NPC, location, or "
-        "established fact, generate it and call the matching tool "
-        "(create_npc/add_canon_location/add_canon_fact) so it persists as "
-        "canon and the table's map keeps growing - don't just narrate it "
-        "and move on."
+        "World generation: when the fiction needs a new NPC, location, "
+        "faction, or established fact, generate it and call the matching "
+        "tool (create_npc/add_canon_location/add_canon_faction/"
+        "add_canon_fact) so it persists as canon and the table's map keeps "
+        "growing - don't just narrate it and move on."
     ),
 )
 
@@ -64,6 +64,22 @@ ACTION_ROLL_PROCEDURE = ProcedureDoc(
     ),
 )
 
+TRAUMA_AND_ARMOR_PROCEDURE = ProcedureDoc(
+    title="Trauma and armor",
+    srd_sections=["Trauma", "Trauma Conditions", "Armor"],
+    text=(
+        "When a tool result reports triggered_trauma, the PC is taken out "
+        "of the current conflict and returns later at zero stress. Ask the "
+        "player which trauma condition to circle (cold, haunted, obsessed, "
+        "paranoid, reckless, soft, unstable, or vicious) and call "
+        "mark_trauma to record their choice - conditions are permanent, "
+        "and the fourth retires the character. When a consequence lands, "
+        "the player may instead mark an armor box to reduce or avoid it "
+        "without a resistance roll - call use_armor when they do. Armor "
+        "restores automatically when the next score begins."
+    ),
+)
+
 SCORE_LOOP_PROCEDURE = ProcedureDoc(
     title="Score and downtime loop",
     srd_sections=[
@@ -73,6 +89,8 @@ SCORE_LOOP_PROCEDURE = ProcedureDoc(
         "Payoff",
         "Heat",
         "Entanglements",
+        "Development",
+        "Seizing a claim",
     ],
     text=(
         "Free play -> plan and detail chosen -> call create_score (the "
@@ -89,7 +107,11 @@ SCORE_LOOP_PROCEDURE = ProcedureDoc(
         "rather than only narrating it, so the sheet and journal reflect "
         "what happened. After each of those calls, also call update_score "
         "so the score entity itself records its own engagement result, "
-        "payoff, heat, and entanglement."
+        "payoff, heat, and entanglement. If the score seized or lost a "
+        "claim, call set_claim_controlled. If the payoff fills the crew's "
+        "rep tracker, call develop_crew - hold strengthens, or coin buys "
+        "the next Tier, and the engine pays each PC the profit share into "
+        "their stash."
     ),
 )
 
@@ -123,7 +145,9 @@ DOWNTIME_ACTIVITIES_PROCEDURE = ProcedureDoc(
         "advance faction project clocks and give each faction you're "
         "interested in a downtime maneuver of your own choosing - a "
         "fortune roll on their Tier if you're unsure how far to move a "
-        "clock."
+        "clock. The transition_phase call that opened downtime lists "
+        "every canon faction and its clocks in its result - work from "
+        "that list, not from memory."
     ),
 )
 
@@ -152,6 +176,7 @@ END_OF_SESSION_PROCEDURE = ProcedureDoc(
 PROCEDURES = [
     GM_ROLE,
     ACTION_ROLL_PROCEDURE,
+    TRAUMA_AND_ARMOR_PROCEDURE,
     SCORE_LOOP_PROCEDURE,
     DOWNTIME_ACTIVITIES_PROCEDURE,
     END_OF_SESSION_PROCEDURE,

@@ -8,10 +8,18 @@ import { summarize } from '@/lib/journal-summarize'
 // honest catch-all rather than silently hiding entries no one category
 // fits (npc/canon/phase/safety-tool notes).
 const TYPE_CATEGORIES = {
-  narration: ['player_message', 'narration'],
-  rolls: ['action_roll', 'fortune_roll', 'resistance_roll', 'engagement_roll'],
+  narration: ['player_message', 'narration', 'companion_message'],
+  rolls: [
+    'action_roll',
+    'fortune_roll',
+    'resistance_roll',
+    'engagement_roll',
+    'companion_roll_decision',
+  ],
   consequences: [
     'stress_marked',
+    'trauma_marked',
+    'armor_used',
     'harm_marked',
     'harm_healed',
     'faction_status_changed',
@@ -21,6 +29,11 @@ const TYPE_CATEGORIES = {
     'special_ability_advanced',
     'crew_special_ability_advanced',
     'crew_upgrades_advanced',
+    'xp_marked',
+    'crew_xp_marked',
+    'coin_adjusted',
+    'crew_coin_adjusted',
+    'item_carried_set',
   ],
   downtime: [
     'downtime_activity_rolled',
@@ -29,6 +42,10 @@ const TYPE_CATEGORIES = {
     'payoff',
     'heat_added',
     'entanglement_roll',
+    'crew_developed',
+    'crew_turf_adjusted',
+    'claim_controlled_set',
+    'stash_adjusted',
   ],
 } as const
 type TypeCategory = keyof typeof TYPE_CATEGORIES | 'other'

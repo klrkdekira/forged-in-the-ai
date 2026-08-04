@@ -293,6 +293,7 @@ async def test_agent_pauses_a_roll_action_for_the_players_decision():
         "position": "risky",
         "effect": "standard",
         "pool_size": 0,
+        "devils_bargain": None,
     }
 
     tool_event = await turn.asend({"push_dice": True, "trade": "worse_position_better_effect"})
@@ -311,6 +312,51 @@ async def test_agent_pauses_a_roll_action_for_the_players_decision():
         if event["event_type"] == "stress_marked"
     ]
     assert stress_events[-1]["payload"]["amount"] == 2  # push_dice cost
+
+
+@pytest.mark.anyio
+async def test_agent_handles_declined_roll_decision():
+    # FR-16: declining a proposed roll sends a result back to the LLM to reconsider.
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        calls.append(body)
+        if body.get("stream"):
+            return httpx.Response(
+                200,
+                text='data: {"choices":[{"delta":{"content":"Understood."}}]}\n\ndata: [DONE]\n\n',
+            )
+        if len(calls) == 1:
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [
+                        {
+                            "message": _tool_call_message(
+                                "roll_action",
+                                {"action": "prowl", "position": "risky", "effect": "standard"},
+                            )
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(
+            200, json={"choices": [{"message": {"role": "assistant", "content": "placeholder"}}]}
+        )
+
+    client = LLMClient(
+        base_url="http://fake-llm/v1", model="test-model", transport=httpx.MockTransport(handler)
+    )
+    agent = GmAgent(client, _executor())
+    turn = agent.handle_player_message(_state(), "I sneak past the guards.")
+
+    await anext(turn)  # roll_proposed
+    tool_event = await turn.asend({"declined": True})
+
+    assert tool_event.type == "tool_call"
+    assert tool_event.payload["result"]["declined"] is True
+    await client.aclose()
 
 
 @pytest.mark.anyio
@@ -730,11 +776,17 @@ async def test_agent_logs_a_companion_roleplay_line_after_narration():
     await client.aclose()
 
     companion_event = next(e for e in events if e.type == "companion_message")
-    assert companion_event.payload == {
+    # 2026-07-17 backlog item 2b: carries "state" too, so session_ws.py can
+    # persist a companion's colour line as soon as it happens, not only at
+    # the end of the turn - checked separately below rather than folded
+    # into this dict-equality, since it's the same big state dump as
+    # narration_done's own payload.
+    assert {k: v for k, v in companion_event.payload.items() if k != "state"} == {
         "character_id": "pc-2",
         "name": "Vex",
         "text": "Vex nods.",
     }
+    assert companion_event.payload["state"]["log"]["events"][-1]["event_type"] == "player_message"
 
     done_event = next(e for e in events if e.type == "narration_done")
     logged = done_event.payload["state"]["log"]["events"]

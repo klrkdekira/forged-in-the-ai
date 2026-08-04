@@ -13,6 +13,29 @@ class Attribute(StrEnum):
     RESOLVE = "resolve"
 
 
+class LoadLevel(StrEnum):
+    """SRD: "Loadout" - the load the player declares for a score; the cap
+    on how many items can be carried at once (`LOAD_LIMITS`)."""
+
+    LIGHT = "light"
+    NORMAL = "normal"
+    HEAVY = "heavy"
+
+
+# SRD: "Loadout" - "1-3 load: Light... 4/5 load: Normal... 6 load: Heavy."
+# The SRD's 7-9 "Encumbered" band is not a declarable level (it's the
+# overloaded state the caps exist to prevent), so it has no entry here.
+LOAD_LIMITS: dict[LoadLevel, int] = {
+    LoadLevel.LIGHT: 3,
+    LoadLevel.NORMAL: 5,
+    LoadLevel.HEAVY: 6,
+}
+
+# SRD: "Stash & Retirement" - the stash tracker tops out at 40 ("Stash 40:
+# Fine."), the best retirement outcome.
+MAX_STASH = 40
+
+
 class Action(StrEnum):
     """SRD: "Action Ratings" - the 12 actions, grouped under an attribute."""
 
@@ -99,6 +122,7 @@ class Character(BaseModel):
     coin: int = 0
     stash: int = 0
     load: int = 0
+    load_level: LoadLevel = LoadLevel.NORMAL
     items: list[CharacterItem] = Field(default_factory=list)
 
     friend: str | None = None

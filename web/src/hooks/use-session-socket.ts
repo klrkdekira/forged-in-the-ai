@@ -155,16 +155,22 @@ export interface GameStateSnapshot {
 export interface SheetOperation {
   name:
     | 'mark_stress'
+    | 'mark_trauma'
+    | 'use_armor'
     | 'apply_harm'
     | 'heal_character'
     | 'mark_xp'
     | 'adjust_coin'
+    | 'adjust_stash'
     | 'set_item_carried'
+    | 'set_load_level'
     | 'tick_clock'
     | 'add_crew_heat'
     | 'adjust_wanted_level'
     | 'adjust_crew_rep'
     | 'adjust_crew_coin'
+    | 'adjust_crew_turf'
+    | 'develop_crew'
   args: Record<string, unknown>
 }
 
@@ -177,6 +183,7 @@ export interface RollProposal {
   position: 'controlled' | 'risky' | 'desperate'
   effect: 'zero' | 'limited' | 'standard' | 'great' | 'extreme'
   pool_size: number
+  devils_bargain?: string | null
 }
 
 export interface RollDecision {
@@ -185,6 +192,7 @@ export interface RollDecision {
   devils_bargain?: string | null
   trade?: 'worse_position_better_effect' | 'better_position_worse_effect' | null
   assist_character_id?: string | null
+  declined?: boolean
 }
 
 // FR-19: after an undo, the visible chat needs to shrink to match the
@@ -217,6 +225,7 @@ export function messagesFromLog(events: JournalEntry[]): ChatMessage[] {
             devils_bargain: p.devils_bargain as string | null | undefined,
             trade: p.trade as RollDecision['trade'],
             assist_character_id: p.assist_character_id as string | null | undefined,
+            declined: p.declined as boolean | undefined,
           },
         }
       }
@@ -267,6 +276,7 @@ export function useSessionSocket(campaignId: string) {
             position: data.position,
             effect: data.effect,
             pool_size: data.pool_size,
+            devils_bargain: data.devils_bargain,
           })
           break
         case 'tool_call':
@@ -329,6 +339,7 @@ export function useSessionSocket(campaignId: string) {
           setMessages((prev) => [...prev, { kind: 'error', message: data.message }])
           break
         case 'undo_done':
+        case 'x_card_done':
           setState(data.state)
           setBusy(false)
           setPendingRoll(null)
@@ -359,6 +370,14 @@ export function useSessionSocket(campaignId: string) {
     socketRef.current?.send(JSON.stringify({ type: 'undo', sequence }))
   }, [])
 
+  const sendXCard = useCallback(
+    (note?: string, sequence?: number, text?: string) => {
+      setBusy(true)
+      socketRef.current?.send(JSON.stringify({ type: 'x_card', note, sequence, text }))
+    },
+    [],
+  )
+
   return {
     connected,
     busy,
@@ -369,5 +388,6 @@ export function useSessionSocket(campaignId: string) {
     sendRollDecision,
     sendSheetOperation,
     sendUndo,
+    sendXCard,
   }
 }
