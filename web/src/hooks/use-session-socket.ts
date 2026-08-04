@@ -82,6 +82,16 @@ export interface ClaimSnapshot {
   is_turf: boolean
 }
 
+export interface CohortSnapshot {
+  types: string[]
+  is_expert: boolean
+  quality: number
+  scale: number
+  edges: string[]
+  flaws: string[]
+  harm: { level: string }
+}
+
 export interface CrewSnapshot {
   name: string
   crew_type: string
@@ -94,6 +104,9 @@ export interface CrewSnapshot {
   coin: number
   stash: number
   xp: XpTrackSnapshot
+  upgrade_ids: string[]
+  special_ability_ids: string[]
+  cohorts: CohortSnapshot[]
   [key: string]: unknown
 }
 

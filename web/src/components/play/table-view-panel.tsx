@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
 import type {
   CanonSnapshot,
+  ControllerSnapshot,
   ClockSnapshot,
   CrewSnapshot,
   SessionZeroSnapshot,
@@ -14,12 +15,14 @@ import { TickBoxes } from './tick-boxes'
 export function TableViewPanel({
   clocks,
   crew,
+  controllers,
   canon,
   sessionZero,
   onOperate,
 }: {
   clocks: Record<string, ClockSnapshot>
   crew: CrewSnapshot
+  controllers: Record<string, ControllerSnapshot>
   canon: CanonSnapshot | null
   sessionZero: SessionZeroSnapshot | null
   onOperate: (operation: SheetOperation) => void
@@ -41,6 +44,20 @@ export function TableViewPanel({
           <span className="capitalize">{crew.hold} hold</span>
           <span>Vault stash {crew.stash}</span>
         </div>
+      </div>
+
+      <div className="rounded-md border border-border/40 bg-background/40 p-2.5">
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Controller seats
+        </span>
+        <ul className="mt-1 flex flex-col gap-1 text-xs text-foreground">
+          {Object.values(controllers).map((seat) => (
+            <li key={seat.seat_id}>
+              <span className="font-medium">{seat.seat_id}</span> ({seat.kind}):{' '}
+              {seat.character_ids.join(', ') || 'no characters'}
+            </li>
+          ))}
+        </ul>
       </div>
 
       {/* Heat Meter */}
@@ -158,6 +175,55 @@ export function TableViewPanel({
         <span className="text-xs font-medium text-muted-foreground">
           {crew.xp.marked}/{crew.xp.segments}
         </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-md border border-border/40 bg-background/40 p-2.5">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Upgrades
+          </span>
+          {crew.upgrade_ids.length > 0 ? (
+            <ul className="mt-1 flex flex-col gap-1 text-xs text-foreground">
+              {crew.upgrade_ids.map((upgrade) => (
+                <li key={upgrade}>{upgrade}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-1 text-xs text-muted-foreground">None</p>
+          )}
+        </div>
+        <div className="rounded-md border border-border/40 bg-background/40 p-2.5">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Special abilities
+          </span>
+          {crew.special_ability_ids.length > 0 ? (
+            <ul className="mt-1 flex flex-col gap-1 text-xs text-foreground">
+              {crew.special_ability_ids.map((ability) => (
+                <li key={ability}>{ability}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-1 text-xs text-muted-foreground">None</p>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-md border border-border/40 bg-background/40 p-2.5">
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Cohorts
+        </span>
+        {crew.cohorts.length > 0 ? (
+          <ul className="mt-1 flex flex-col gap-1 text-xs text-foreground">
+            {crew.cohorts.map((cohort, index) => (
+              <li key={`${cohort.types.join('-')}-${index}`}>
+                {cohort.is_expert ? 'Expert' : 'Gang'}: {cohort.types.join(', ') || 'untyped'} · harm{' '}
+                {cohort.harm.level}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-1 text-xs text-muted-foreground">None</p>
+        )}
       </div>
 
       {/* Active Clocks */}

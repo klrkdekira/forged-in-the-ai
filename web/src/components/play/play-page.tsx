@@ -119,7 +119,7 @@ export function PlayPage() {
               {state?.character.name ?? 'Play'}
               {Boolean(state?.session.phase) && (
                 <span className="text-xs font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
-                  {String(state.session.phase).replace('_', ' ')}
+                  {String(state?.session.phase).replace('_', ' ')}
                 </span>
               )}
             </h1>
@@ -320,6 +320,7 @@ export function PlayPage() {
                 <TableViewPanel
                   clocks={state.clocks}
                   crew={state.crew}
+                  controllers={state.controllers}
                   canon={state.canon}
                   sessionZero={state.session_zero}
                   onOperate={sendSheetOperation}
