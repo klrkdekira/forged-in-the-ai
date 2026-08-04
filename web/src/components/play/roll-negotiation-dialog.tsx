@@ -14,7 +14,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import type { CharacterSnapshot, RollDecision, RollProposal } from '@/hooks/use-session-socket'
-import { AnimatedDiceRoller } from './animated-dice-roller'
 
 const POSITIONS = ['controlled', 'risky', 'desperate'] as const
 const EFFECTS = ['zero', 'limited', 'standard', 'great', 'extreme'] as const
@@ -46,7 +45,6 @@ export function RollNegotiationDialog({
   const [devilsBargainText, setDevilsBargainText] = useState('')
   const [trade, setTrade] = useState<Trade>('none')
   const [assistCharacterId, setAssistCharacterId] = useState<string>('none')
-  const [showAnimation, setShowAnimation] = useState(false)
 
   const assistCandidates = Object.entries(characters).filter(
     ([characterId]) => characterId !== proposal.character_id,
@@ -76,30 +74,6 @@ export function RollNegotiationDialog({
       trade: trade === 'none' ? null : trade,
       assist_character_id: assisted ? assistCharacterId : null,
     })
-  }
-
-  function handleSubmit() {
-    setShowAnimation(true)
-  }
-
-  if (showAnimation) {
-    return (
-      <AnimatedDiceRoller
-        open={showAnimation}
-        onOpenChange={(open) => {
-          setShowAnimation(open)
-          if (!open) executeDecision()
-        }}
-        poolSize={proposal.pool_size + bonusDice}
-        actionName={proposal.action}
-        position={position}
-        effect={effect}
-        onComplete={() => {
-          // Auto submit after short display delay
-          setTimeout(executeDecision, 800)
-        }}
-      />
-    )
   }
 
   return (
@@ -218,7 +192,7 @@ export function RollNegotiationDialog({
           >
             Decline / Reconsider
           </Button>
-          <Button onClick={handleSubmit}>Roll the dice</Button>
+          <Button onClick={executeDecision}>Roll the dice</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -14,6 +14,8 @@ from state.module_store import (
     delete_module,
     list_modules,
     load_module,
+    module_path,
+    restore_module_bytes,
     save_module,
 )
 from state.srd_index import chunk_module_prose, delete_module_chunks, index_module_chunks
@@ -162,18 +164,29 @@ async def save_module_endpoint(
     this module's own source tag - the GM agent's live retrieval
     (`ai/agent.py`) then ranks it alongside the SRD on later turns."""
     try:
+        saved_path = module_path(settings.data_dir, body.pack.id)
+        previous_payload = saved_path.read_bytes() if saved_path.exists() else None
         save_module(settings.data_dir, body.pack)
     except ModuleIdError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
-    if body.source_text:
+    try:
         engine = make_engine(app_db_path(settings.data_dir))
         try:
             async with make_session_factory(engine)() as session:
-                chunks = chunk_module_prose(body.pack.id, body.source_text)
-                await index_module_chunks(session, body.pack.id, chunks)
+                if body.source_text is not None:
+                    chunks = chunk_module_prose(body.pack.id, body.source_text)
+                    await index_module_chunks(session, body.pack.id, chunks)
+                else:
+                    await delete_module_chunks(session, body.pack.id)
         finally:
             await engine.dispose()
+    except Exception:
+        if previous_payload is None:
+            delete_module(settings.data_dir, body.pack.id)
+        else:
+            restore_module_bytes(settings.data_dir, body.pack.id, previous_payload)
+        raise
 
     return body.pack
 
@@ -208,6 +221,8 @@ async def delete_module_endpoint(
 ) -> Response:
     """FR-23/FR-24: deletes a saved private module file and its retrieval chunks."""
     try:
+        saved_path = module_path(settings.data_dir, module_id)
+        previous_payload = saved_path.read_bytes() if saved_path.exists() else None
         deleted = delete_module(settings.data_dir, module_id)
     except ModuleIdError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
@@ -215,11 +230,16 @@ async def delete_module_endpoint(
     if not deleted:
         raise HTTPException(status_code=404, detail=f"unknown module {module_id!r}")
 
-    engine = make_engine(app_db_path(settings.data_dir))
     try:
-        async with make_session_factory(engine)() as session:
-            await delete_module_chunks(session, module_id)
-    finally:
-        await engine.dispose()
+        engine = make_engine(app_db_path(settings.data_dir))
+        try:
+            async with make_session_factory(engine)() as session:
+                await delete_module_chunks(session, module_id)
+        finally:
+            await engine.dispose()
+    except Exception:
+        if previous_payload is not None:
+            restore_module_bytes(settings.data_dir, module_id, previous_payload)
+        raise
 
     return Response(status_code=204)

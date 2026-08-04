@@ -45,7 +45,14 @@ export function CharacterSheetPanel({
 
   const actionRatings = character.action_ratings || {}
   const traumaConditions = character.trauma?.conditions || []
-  const armor = character.armor || { used: false, heavy_used: false, special_used: false }
+  const armor = character.armor || {
+    has_armor: false,
+    has_heavy_armor: false,
+    has_special_armor: false,
+    armor_used: false,
+    heavy_armor_used: false,
+    special_armor_used: false,
+  }
   const loadLevel = character.load_level || 'normal'
   const loadCap = LOAD_CAPACITIES[loadLevel]
   const carriedCount = character.items.filter((i) => i.carried).length
@@ -121,7 +128,7 @@ export function CharacterSheetPanel({
             })
           }
         />
-        {character.stress.marked >= 9 && (
+        {character.trauma_pending && (
           <div className="mt-2 flex items-center justify-between gap-2 bg-destructive/10 p-2 rounded border border-destructive/30">
             <span className="text-xs font-semibold text-destructive">Stress Overflow! Pick Trauma:</span>
             <select
@@ -154,7 +161,7 @@ export function CharacterSheetPanel({
                 {c}
               </span>
             ))}
-            {character.trauma?.retired && (
+            {traumaConditions.length >= 4 && (
               <span className="text-xs font-bold animate-pulse px-2 py-0.5 rounded bg-destructive text-destructive-foreground">
                 RETIRED
               </span>
@@ -184,7 +191,7 @@ export function CharacterSheetPanel({
         <div className="flex flex-wrap gap-4 text-xs">
           <label className="flex items-center gap-1.5 cursor-pointer">
             <Checkbox
-              checked={armor.used}
+              checked={armor.armor_used}
               onCheckedChange={() =>
                 onOperate({
                   name: 'use_armor',
@@ -196,7 +203,7 @@ export function CharacterSheetPanel({
           </label>
           <label className="flex items-center gap-1.5 cursor-pointer">
             <Checkbox
-              checked={armor.heavy_used}
+              checked={armor.heavy_armor_used}
               onCheckedChange={() =>
                 onOperate({
                   name: 'use_armor',
@@ -208,7 +215,7 @@ export function CharacterSheetPanel({
           </label>
           <label className="flex items-center gap-1.5 cursor-pointer">
             <Checkbox
-              checked={armor.special_used}
+              checked={armor.special_armor_used}
               onCheckedChange={() =>
                 onOperate({
                   name: 'use_armor',
@@ -319,6 +326,12 @@ export function CharacterSheetPanel({
         >
           Heal 1 level
         </Button>
+        <div className="mt-1 flex items-center justify-between rounded bg-muted/20 px-2 py-1 text-xs">
+          <span className="font-semibold">Healing</span>
+          <span className="text-muted-foreground">
+            {character.healing_clock.filled}/{character.healing_clock.segments}
+          </span>
+        </div>
       </div>
 
       {/* Playbook XP */}

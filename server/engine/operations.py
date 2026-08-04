@@ -104,6 +104,10 @@ def adjust_coin(character: Character, amount: int) -> Character:
         raise EngineError(
             f"character {character.name!r} has {character.coin} coin, cannot spend {-amount}"
         )
+    if new_coin > 4:
+        raise EngineError(
+            f"character {character.name!r} can hold at most 4 coin; spend or stash the excess"
+        )
     return character.model_copy(update={"coin": new_coin})
 
 
@@ -119,6 +123,16 @@ def adjust_stash(character: Character, amount: int) -> Character:
             f"character {character.name!r} has {character.stash} stash, cannot remove {-amount}"
         )
     return character.model_copy(update={"stash": min(MAX_STASH, new_stash)})
+
+
+def cash_out_stash(character: Character, stash_amount: int) -> Character:
+    """SRD: "Removing coin from your stash" - remove two stash for each
+    coin taken as cash. The conversion is deliberately atomic and refuses
+    odd amounts or a coin-capacity overflow."""
+    if stash_amount <= 0 or stash_amount % 2:
+        raise EngineError("stash cash-out must remove a positive even amount")
+    updated = adjust_stash(character, -stash_amount)
+    return adjust_coin(updated, stash_amount // 2)
 
 
 def set_load_level(character: Character, level: LoadLevel) -> Character:
@@ -192,6 +206,10 @@ def adjust_crew_coin(crew: Crew, amount: int) -> Crew:
     new_coin = crew.coin + amount
     if new_coin < 0:
         raise EngineError(f"crew {crew.name!r} has {crew.coin} coin, cannot spend {-amount}")
+    if new_coin > crew.coin_capacity:
+        raise EngineError(
+            f"crew {crew.name!r} can hold at most {crew.coin_capacity} coin in its vault"
+        )
     return crew.model_copy(update={"coin": new_coin})
 
 

@@ -37,7 +37,7 @@ def _mock_client(handler) -> LLMClient:
 
 
 def test_extract_text_endpoint_returns_normalised_text():
-    with TestClient(app) as client:
+    with TestClient(app, raise_server_exceptions=False) as client:
         response = client.post(
             "/api/ingestion/extract-text",
             files={"file": ("notes.txt", b"line one\r\n\r\n\r\nline two\r\n", "text/plain")},
@@ -237,6 +237,66 @@ async def test_save_module_endpoint_indexes_source_text_for_retrieval():
             await engine.dispose()
 
     assert any(hit.source == "module:my-hack" for hit in hits)
+
+
+@pytest.mark.anyio
+async def test_resaving_without_source_text_removes_old_retrieval_chunks():
+    with TestClient(app) as client:
+        first = _save_module_body(id="my-hack")
+        first["source_text"] = "A house rule about grappling hooks."
+        assert client.post("/api/ingestion/modules", json=first).status_code == 200
+
+        replacement = _save_module_body(id="my-hack", description="Updated")
+        assert client.post("/api/ingestion/modules", json=replacement).status_code == 200
+
+        engine = make_engine(app_db_path(get_settings().data_dir))
+        try:
+            async with make_session_factory(engine)() as session:
+                hits = await search_srd(session, "grappling")
+        finally:
+            await engine.dispose()
+
+    assert not any(hit.source == "module:my-hack" for hit in hits)
+
+
+def test_save_module_restores_previous_file_when_indexing_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with TestClient(app, raise_server_exceptions=False) as client:
+        original = _save_module_body(id="my-hack", description="Original")
+        assert client.post("/api/ingestion/modules", json=original).status_code == 200
+
+        async def fail_index(*args, **kwargs):
+            raise RuntimeError("index unavailable")
+
+        monkeypatch.setattr("app.ingestion.index_module_chunks", fail_index)
+        replacement = _save_module_body(id="my-hack", description="Replacement")
+        replacement["source_text"] = "New prose"
+        response = client.post("/api/ingestion/modules", json=replacement)
+        assert response.status_code == 500
+
+        loaded = client.get("/api/ingestion/modules/my-hack")
+
+    assert loaded.status_code == 200
+    assert loaded.json()["description"] == "Original"
+
+
+def test_delete_module_restores_file_when_chunk_cleanup_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with TestClient(app, raise_server_exceptions=False) as client:
+        assert client.post("/api/ingestion/modules", json=_save_module_body()).status_code == 200
+
+        async def fail_delete(*args, **kwargs):
+            raise RuntimeError("index unavailable")
+
+        monkeypatch.setattr("app.ingestion.delete_module_chunks", fail_delete)
+        response = client.delete("/api/ingestion/modules/my-hack")
+        assert response.status_code == 500
+
+        loaded = client.get("/api/ingestion/modules/my-hack")
+
+    assert loaded.status_code == 200
 
 
 @pytest.mark.anyio

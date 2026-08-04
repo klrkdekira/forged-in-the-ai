@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { useNavigate, useParams } from '@tanstack/react-router'
-import { Dices, Download, FolderCog, Trash2 } from 'lucide-react'
+import { Download, FolderCog, Trash2 } from 'lucide-react'
 
 import { apiClient } from '@/api/client'
 import { Button } from '@/components/ui/button'
@@ -18,7 +18,6 @@ import { useLastCampaignId } from '@/hooks/use-last-campaign-id'
 import type { ControllerSnapshot } from '@/hooks/use-session-socket'
 import { useSessionSocket } from '@/hooks/use-session-socket'
 
-import { AnimatedDiceRoller } from './animated-dice-roller'
 import { CharacterSheetPanel } from './character-sheet-panel'
 import { ChatMessageView } from './chat-message-view'
 import { JournalPanel } from './journal-panel'
@@ -62,7 +61,6 @@ export function PlayPage() {
   )
   const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null)
   const [xCardOpen, setXCardOpen] = useState(false)
-  const [diceRollerOpen, setDiceRollerOpen] = useState(false)
   const [manageCampaignOpen, setManageCampaignOpen] = useState(false)
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -119,9 +117,9 @@ export function PlayPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
               {state?.character.name ?? 'Play'}
-              {Boolean(state?.phase) && (
+              {Boolean(state?.session.phase) && (
                 <span className="text-xs font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
-                  {String(state?.phase).replace('_', ' ')}
+                  {String(state.session.phase).replace('_', ' ')}
                 </span>
               )}
             </h1>
@@ -154,16 +152,6 @@ export function PlayPage() {
           >
             <FolderCog className="size-4" />
             Campaign
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="border-primary/40 text-primary hover:bg-primary/10 flex items-center gap-1.5"
-            onClick={() => setDiceRollerOpen(true)}
-          >
-            <Dices className="size-4" />
-            Roll Dice
           </Button>
           <Button
             type="button"
@@ -373,8 +361,6 @@ export function PlayPage() {
         onInvoke={(note, text) => sendXCard(note, undefined, text)}
       />
 
-      <AnimatedDiceRoller open={diceRollerOpen} onOpenChange={setDiceRollerOpen} />
-
       {/* Manage Campaign Dialog */}
       <Dialog open={manageCampaignOpen} onOpenChange={setManageCampaignOpen}>
         <DialogContent className="sm:max-w-md">
@@ -399,6 +385,31 @@ export function PlayPage() {
               </div>
               <span className="text-xs text-muted-foreground font-normal">JSON format</span>
             </a>
+
+            <div className="grid grid-cols-2 gap-3">
+              <a
+                href={`/api/campaigns/${campaignId}/character/export`}
+                download
+                className="flex items-center justify-center gap-2 rounded-lg border border-border/60 bg-muted/20 p-3 text-sm font-medium hover:bg-muted/50"
+              >
+                <Download className="size-4 text-primary" /> Character JSON
+              </a>
+              <a
+                href={`/api/campaigns/${campaignId}/crew/export`}
+                download
+                className="flex items-center justify-center gap-2 rounded-lg border border-border/60 bg-muted/20 p-3 text-sm font-medium hover:bg-muted/50"
+              >
+                <Download className="size-4 text-primary" /> Crew JSON
+              </a>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <a className="text-center text-muted-foreground underline" href={`/api/campaigns/${campaignId}/character/export/markdown`} download>
+                Character Markdown
+              </a>
+              <a className="text-center text-muted-foreground underline" href={`/api/campaigns/${campaignId}/crew/export/markdown`} download>
+                Crew Markdown
+              </a>
+            </div>
 
             <div className="flex items-center justify-between p-3 rounded-lg border border-destructive/30 bg-destructive/5 hover:bg-destructive/10 transition-colors text-sm">
               <div className="flex items-center gap-2 text-destructive font-medium">

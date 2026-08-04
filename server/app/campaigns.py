@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
@@ -10,9 +11,10 @@ from ai.recap import render_recap
 from ai.replay import replay_state
 from ai.tools import GameState
 from app.settings import Settings, get_settings
-from engine.character import Character
+from engine.character import Character, CharacterItem
 from engine.crew import Crew
 from engine.events import EventLog
+from engine.pack_loader import PackLoadError, load_packs_dir
 from engine.session import Session
 from state.campaign_store import create_campaign as write_campaign_files
 from state.campaign_store import load_base_state, load_state, save_state
@@ -59,12 +61,50 @@ class CreateCampaignRequest(BaseModel):
         description="FR-8/G2: an imported crew sheet (an uploaded JSON file); a fixed starter "
         "is used if omitted",
     )
+    pack_id: str | None = Field(None, description="Committed content-pack id to seed the sheets")
+    playbook_id: str | None = Field(None, description="Template id within pack_id")
+    crew_type_id: str | None = Field(None, description="Template id within pack_id")
 
 
-def _new_game_state(character: Character | None = None, crew: Crew | None = None) -> GameState:
+def _new_game_state(
+    character: Character | None = None,
+    crew: Crew | None = None,
+    *,
+    pack_id: str | None = None,
+    playbook_id: str | None = None,
+    crew_type_id: str | None = None,
+    packs_dir: Path | None = None,
+) -> GameState:
     """FR-8: an imported character/crew sheet if the campaign picker's
     import step supplied one, else the FR-30/FR-36 MVP's fixed starter -
     a fallback now, not the only option."""
+    if pack_id:
+        if packs_dir is None:
+            raise ValueError("packs_dir is required when selecting a content pack")
+        try:
+            pack = next((item for item in load_packs_dir(packs_dir) if item.id == pack_id), None)
+        except PackLoadError as error:
+            raise ValueError(str(error)) from error
+        if pack is None:
+            raise ValueError(f"unknown content pack {pack_id!r}")
+        playbook = next((item for item in pack.playbooks if item.id == playbook_id), None)
+        crew_type = next((item for item in pack.crew_types if item.id == crew_type_id), None)
+        if playbook is None or crew_type is None:
+            raise ValueError("pack_id requires valid playbook_id and crew_type_id")
+        character = character or Character(
+            name="Scoundrel",
+            playbook=playbook.name,
+            action_ratings=playbook.starting_action_dots,
+            special_ability_ids=playbook.special_ability_ids,
+            items=[CharacterItem(item_id=item_id) for item_id in playbook.item_ids],
+        )
+        crew = crew or Crew(
+            name="The Crew",
+            crew_type=crew_type.name,
+            upgrade_ids=crew_type.starting_upgrade_ids,
+            special_ability_ids=crew_type.special_ability_ids,
+            claims=[{"id": name, "name": name} for name in crew_type.claim_names],
+        )
     return GameState(
         character=character or Character(name="Scoundrel", playbook="Original Playbook"),
         crew=crew or Crew(name="The Crew", crew_type="Original Crew Type"),
@@ -117,10 +157,18 @@ async def create_campaign(
     then registers it in app.db's directory - so a WS connection can
     always load an id the picker lists (2c: never the other way round)."""
     campaign_id = uuid.uuid4().hex
-    await write_campaign_files(
-        campaign_db_path(settings.data_dir, campaign_id),
-        _new_game_state(body.character, body.crew),
-    )
+    try:
+        initial_state = _new_game_state(
+            body.character,
+            body.crew,
+            pack_id=body.pack_id,
+            playbook_id=body.playbook_id,
+            crew_type_id=body.crew_type_id,
+            packs_dir=settings.packs_dir,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    await write_campaign_files(campaign_db_path(settings.data_dir, campaign_id), initial_state)
     return await _register_campaign_index(settings, campaign_id, body.name)
 
 
@@ -157,6 +205,71 @@ async def export_campaign(campaign_id: str, settings: Settings = Depends(get_set
     )
 
 
+@router.get("/{campaign_id}/character/export", response_model=None)
+async def export_character(
+    campaign_id: str, settings: Settings = Depends(get_settings)
+) -> Response:
+    """FR-8/NFR-5: download the current character sheet independently."""
+    state = await load_state(campaign_db_path(settings.data_dir, campaign_id))
+    if state is None:
+        raise HTTPException(status_code=404, detail=f"unknown campaign {campaign_id!r}")
+    return Response(
+        content=state.character.model_dump_json(indent=2),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{campaign_id}-character.json"'},
+    )
+
+
+@router.get("/{campaign_id}/character/export/markdown", response_model=None)
+async def export_character_markdown(
+    campaign_id: str, settings: Settings = Depends(get_settings)
+) -> Response:
+    state = await load_state(campaign_db_path(settings.data_dir, campaign_id))
+    if state is None:
+        raise HTTPException(status_code=404, detail=f"unknown campaign {campaign_id!r}")
+    character = state.character
+    content = (
+        f"# {character.name}\n\n"
+        f"- Playbook: {character.playbook}\n- Coin: {character.coin}\n- Stash: {character.stash}\n"
+    )
+    return Response(
+        content=content,
+        media_type="text/markdown",
+        headers={"Content-Disposition": f'attachment; filename="{campaign_id}-character.md"'},
+    )
+
+
+@router.get("/{campaign_id}/crew/export", response_model=None)
+async def export_crew(campaign_id: str, settings: Settings = Depends(get_settings)) -> Response:
+    """FR-8/NFR-5: download the current crew sheet independently."""
+    state = await load_state(campaign_db_path(settings.data_dir, campaign_id))
+    if state is None:
+        raise HTTPException(status_code=404, detail=f"unknown campaign {campaign_id!r}")
+    return Response(
+        content=state.crew.model_dump_json(indent=2),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{campaign_id}-crew.json"'},
+    )
+
+
+@router.get("/{campaign_id}/crew/export/markdown", response_model=None)
+async def export_crew_markdown(
+    campaign_id: str, settings: Settings = Depends(get_settings)
+) -> Response:
+    state = await load_state(campaign_db_path(settings.data_dir, campaign_id))
+    if state is None:
+        raise HTTPException(status_code=404, detail=f"unknown campaign {campaign_id!r}")
+    crew = state.crew
+    content = (
+        f"# {crew.name}\n\n"
+        f"- Crew type: {crew.crew_type}\n- Tier: {crew.tier}\n"
+        f"- Hold: {crew.hold.value}\n- Coin: {crew.coin}\n"
+    )
+    return Response(
+        content=content,
+        media_type="text/markdown",
+        headers={"Content-Disposition": f'attachment; filename="{campaign_id}-crew.md"'},
+    )
 @router.post("/import", response_model=CampaignSummary)
 async def import_campaign(
     body: CampaignExport, settings: Settings = Depends(get_settings)

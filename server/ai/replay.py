@@ -46,9 +46,11 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
     functions ToolExecutor calls live, so replay and live play can never
     disagree about what an event means (NFR-1).
 
-    Event types with no state to fold - action_roll, fortune_roll,
-    resistance_roll, engagement_roll, entanglement_roll, asset_acquired,
-    downtime_activity_rolled, vice_indulged (pure dice/roll records),
+    Event types with no mechanical result to fold - action_roll, fortune_roll,
+    resistance_roll, engagement_roll, entanglement_roll (pure dice/roll
+    records) - are silently skipped. Asset, vice, and downtime activity events
+    also fold the phase-scoped downtime allowance counters below, while their
+    activity-specific mechanical state is folded by subsequent events.
     player_message/narration (FR-31's turn log), x_card_invoked (a
     safety-tool note, not a mutation), companion_roll_decision (FR-35's
     own record of what an AI companion chose - the roll it led to is
@@ -68,6 +70,12 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
     session_zero = base.session_zero
     ordered = sorted(events, key=lambda e: e.sequence)
 
+    def replay_downtime_activity(character_id: str | None, track: str | None = None) -> None:
+        nonlocal session
+        if session.phase is not CampaignPhase.DOWNTIME or character_id not in characters:
+            return
+        session = session.begin_downtime_activity(character_id, track)
+
     for event in ordered:
         payload = event.payload
         if event.event_type == "character_created":
@@ -79,19 +87,37 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
                 character_ids=[event.entity_id],
             )
         elif event.event_type == "stress_marked":
-            characters[event.entity_id] = mark_stress(
+            character = mark_stress(
                 characters[event.entity_id], payload["amount"]
             ).character
+            characters[event.entity_id] = character.model_copy(
+                update={"trauma_pending": payload.get("triggered_trauma", False)}
+            )
         elif event.event_type == "harm_marked":
             characters[event.entity_id] = mark_harm(
                 characters[event.entity_id], payload["level"], payload["name"]
             ).character
         elif event.event_type == "harm_healed":
             characters[event.entity_id] = heal_character(characters[event.entity_id])
+        elif event.event_type == "healing_clock_ticked":
+            character = characters[event.entity_id]
+            characters[event.entity_id] = character.model_copy(
+                update={
+                    "healing_clock": character.healing_clock.tick(payload["amount"]),
+                }
+            )
+        elif event.event_type == "healing_clock_reset":
+            character = characters[event.entity_id]
+            characters[event.entity_id] = character.model_copy(
+                update={
+                    "healing_clock": character.healing_clock.model_copy(update={"filled": 0}),
+                }
+            )
         elif event.event_type == "trauma_marked":
-            characters[event.entity_id] = mark_trauma(
+            character = mark_trauma(
                 characters[event.entity_id], payload["condition"]
             )
+            characters[event.entity_id] = character.model_copy(update={"trauma_pending": False})
         elif event.event_type == "armor_used":
             characters[event.entity_id] = use_armor(
                 characters[event.entity_id], payload["armor_type"]
@@ -107,6 +133,8 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
                 characters[event.entity_id], LoadLevel(payload["level"])
             )
         elif event.event_type == "xp_marked":
+            if payload["amount"] > 0:
+                replay_downtime_activity(event.entity_id, payload["track"])
             if payload["track"] == "playbook":
                 characters[event.entity_id] = mark_playbook_xp(
                     characters[event.entity_id], payload["amount"]
@@ -140,8 +168,26 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
             clocks[event.entity_id] = clocks[event.entity_id].tick(payload["amount"])
         elif event.event_type == "phase_transitioned":
             session = session.transition_to(CampaignPhase(payload["phase"]))
+        elif event.event_type == "engagement_roll":
+            session = session.model_copy(update={"score_engagement_completed": True})
+        elif event.event_type == "action_roll":
+            session = session.model_copy(update={"score_action_completed": True})
+        elif event.event_type == "entanglement_roll":
+            session = session.model_copy(update={"score_entanglement_completed": True})
+        elif event.event_type == "asset_acquired":
+            replay_downtime_activity(payload.get("character_id"))
+        elif event.event_type == "vice_indulged":
+            replay_downtime_activity(event.entity_id)
+        elif event.event_type == "downtime_activity_rolled":
+            replay_downtime_activity(payload.get("character_id"))
         elif event.event_type == "npc_created":
             npcs[event.entity_id] = Npc.model_validate(payload)
+            faction_id = payload.get("faction_id")
+            if faction_id in factions:
+                faction = factions[faction_id]
+                factions[faction_id] = faction.model_copy(
+                    update={"notable_npc_ids": [*faction.notable_npc_ids, event.entity_id]}
+                )
         elif event.event_type == "score_created":
             scores[event.entity_id] = Score.model_validate(payload)
         elif event.event_type == "score_updated":
@@ -179,6 +225,8 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
             )
         elif event.event_type == "heat_added":
             crew = add_heat(crew, payload["amount"]).crew
+            if session.phase is CampaignPhase.DOWNTIME and session.score_payoff_completed:
+                session = session.model_copy(update={"score_heat_completed": True})
         elif event.event_type == "wanted_level_adjusted":
             crew = adjust_wanted_level(crew, payload["amount"])
         elif event.event_type == "crew_rep_adjusted":
@@ -206,6 +254,7 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
                     "coin": crew.coin + payload["coin"],
                 }
             )
+            session = session.model_copy(update={"score_payoff_completed": True})
         elif event.event_type == "flashback_taken":
             characters[event.entity_id] = flashback(
                 characters[event.entity_id], payload["stress_cost"]

@@ -2,6 +2,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
+from engine.clocks import Clock, ClockKind
 from engine.consequences import ArmorTrack, HarmTrack, StressTrack, TraumaTrack
 
 
@@ -112,7 +113,15 @@ class Character(BaseModel):
 
     stress: StressTrack = Field(default_factory=StressTrack)
     trauma: TraumaTrack = Field(default_factory=TraumaTrack)
+    trauma_pending: bool = Field(
+        default=False,
+        description="True when stress overflow requires the player to choose a trauma condition",
+    )
     harm: HarmTrack = Field(default_factory=HarmTrack)
+    healing_clock: Clock = Field(
+        default_factory=lambda: Clock(name="Healing", kind=ClockKind.HEALING, segments=4),
+        description='SRD: "Recover" - the character-owned four-segment healing clock',
+    )
     armor: ArmorTrack = Field(default_factory=ArmorTrack)
 
     vice: str | None = None

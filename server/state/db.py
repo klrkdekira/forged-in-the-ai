@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import NullPool
 
 
 def app_db_path(data_dir: Path) -> Path:
@@ -20,7 +21,10 @@ def campaign_db_path(data_dir: Path, campaign_id: str) -> Path:
 def make_engine(db_path: Path) -> AsyncEngine:
     """One SQLite file, WAL mode, async driver (ADR-0005)."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+    # A campaign operation is short-lived and engines are disposed after each
+    # operation. NullPool closes each aiosqlite connection with its session,
+    # avoiding worker threads surviving a TestClient event-loop shutdown.
+    engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}", poolclass=NullPool)
 
     @event.listens_for(engine.sync_engine, "connect")
     def _enable_wal(dbapi_connection, connection_record) -> None:

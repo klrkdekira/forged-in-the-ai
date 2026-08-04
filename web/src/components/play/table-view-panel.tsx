@@ -36,6 +36,11 @@ export function TableViewPanel({
             {crew.crew_type}
           </span>
         </div>
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span>Tier {crew.tier}</span>
+          <span className="capitalize">{crew.hold} hold</span>
+          <span>Vault stash {crew.stash}</span>
+        </div>
       </div>
 
       {/* Heat Meter */}
@@ -144,6 +149,15 @@ export function TableViewPanel({
             +
           </Button>
         </div>
+      </div>
+
+      <div className="flex items-center justify-between rounded-md border border-border/40 p-2.5 bg-background/40">
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          Crew XP
+        </span>
+        <span className="text-xs font-medium text-muted-foreground">
+          {crew.xp.marked}/{crew.xp.segments}
+        </span>
       </div>
 
       {/* Active Clocks */}

@@ -20,6 +20,7 @@ import {
   formValuesToDraft,
   type ModuleDraft,
 } from '@/lib/module-draft-form'
+import { apiErrorMessage } from '@/lib/api-error'
 
 // FR-21/FR-22/FR-23: upload a rulebook, extract a best-effort draft, let
 // the owner review and edit it (the server's ModuleDraft/ContentPack
@@ -75,7 +76,8 @@ export function IngestionPage() {
       setSourceText(data.text)
       setError(null)
     },
-    onError: () => setError('Could not extract text from that file.'),
+    onError: (mutationError) =>
+      setError(apiErrorMessage(mutationError, 'Could not extract text from that file.')),
   })
 
   const extractDraft = useMutation({
@@ -92,7 +94,10 @@ export function IngestionPage() {
       setPhase('reviewing')
       setError(null)
     },
-    onError: () => setError('Could not extract a draft - is an LLM backend configured?'),
+    onError: (mutationError) =>
+      setError(
+        apiErrorMessage(mutationError, 'Could not extract a draft - is an LLM backend configured?'),
+      ),
   })
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -232,7 +237,10 @@ function DraftReviewForm({
       if (saveError) throw saveError
     },
     onSuccess: onSaved,
-    onError: () => setError('Could not save the module - check the fields above for issues.'),
+    onError: (mutationError) =>
+      setError(
+        apiErrorMessage(mutationError, 'Could not save the module - check the fields above for issues.'),
+      ),
   })
 
   return (

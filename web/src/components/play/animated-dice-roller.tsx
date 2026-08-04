@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { AlertTriangle, CheckCircle2, Dices, RotateCcw, ShieldAlert, Trophy } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Dices, ShieldAlert, Trophy } from 'lucide-react'
 
 export interface DiceRollResult {
   dice: number[]
@@ -23,11 +23,7 @@ export interface DiceRollResult {
 interface AnimatedDiceRollerProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  result?: DiceRollResult
-  poolSize?: number
-  actionName?: string
-  position?: string
-  effect?: string
+  result: DiceRollResult
   onComplete?: () => void
 }
 
@@ -44,92 +40,42 @@ const ROTATIONS: Record<number, { x: number; y: number }> = {
 export function AnimatedDiceRoller({
   open,
   onOpenChange,
-  result: initialResult,
-  poolSize = 2,
-  actionName = 'Action Roll',
-  position,
-  effect,
+  result,
   onComplete,
 }: AnimatedDiceRollerProps) {
   const [rolling, setRolling] = useState(true)
-  const [currentResult, setCurrentResult] = useState<DiceRollResult | null>(null)
   const [rotations, setRotations] = useState<Array<{ x: number; y: number; z: number }>>([])
 
-  function generateRoll(size: number): DiceRollResult {
-    const dice: number[] = []
-    const count = Math.max(1, size)
-    for (let i = 0; i < count; i++) {
-      dice.push(Math.floor(Math.random() * 6) + 1)
-    }
-    // Zero pool / 1d fallback rule if pool is 0: roll 2d, pick lowest
-    const sorted = [...dice].sort((a, b) => b - a)
-    const highest = sorted[0]
-    const sixes = dice.filter((d) => d === 6).length
+  useEffect(() => {
+    if (!open) return
 
-    let band: 'critical' | 'success' | 'partial' | 'failure' = 'failure'
-    if (sixes >= 2) {
-      band = 'critical'
-    } else if (highest === 6) {
-      band = 'success'
-    } else if (highest === 4 || highest === 5) {
-      band = 'partial'
-    } else {
-      band = 'failure'
-    }
-
-    return {
-      dice,
-      highest,
-      band,
-      action: actionName,
-      position,
-      effect,
-    }
-  }
-
-  function startRollAnimation(rollRes: DiceRollResult) {
     setRolling(true)
-    // Initial random tumble rotations
-    const initialRot = rollRes.dice.map(() => ({
-      x: Math.floor(Math.random() * 360) + 720,
-      y: Math.floor(Math.random() * 360) + 720,
-      z: Math.floor(Math.random() * 360) + 360,
-    }))
-    setRotations(initialRot)
+    // Animation-only rotations are deterministic. The dice faces themselves
+    // are already the engine's logged result and must never be generated here.
+    setRotations(
+      result.dice.map((_, index) => ({
+        x: 720 + index * 67,
+        y: 720 + index * 113,
+        z: 360 + index * 41,
+      })),
+    )
 
-    setTimeout(() => {
-      // Final target rotations based on actual values
-      const finalRot = rollRes.dice.map((val) => {
+    const timer = setTimeout(() => {
+      const finalRot = result.dice.map((val) => {
         const base = ROTATIONS[val] || { x: 0, y: 0 }
-        return {
-          x: base.x + 1440, // 4 full turns
-          y: base.y + 1440,
-          z: 0,
-        }
+        return { x: base.x + 1440, y: base.y + 1440, z: 0 }
       })
       setRotations(finalRot)
       setRolling(false)
-      if (onComplete) onComplete()
+      onComplete?.()
     }, 1200)
-  }
 
-  useEffect(() => {
-    if (open) {
-      const res = initialResult || generateRoll(poolSize)
-      setCurrentResult(res)
-      startRollAnimation(res)
-    }
-  }, [open, initialResult, poolSize])
+    return () => clearTimeout(timer)
+  }, [open, result, onComplete])
 
-  function handleReroll() {
-    const res = generateRoll(poolSize)
-    setCurrentResult(res)
-    startRollAnimation(res)
-  }
+  if (!open) return null
 
-  if (!open || !currentResult) return null
-
-  const band = currentResult.band
+  const band = result.band
   const isCritical = band === 'critical'
   const isSuccess = band === 'success'
   const isPartial = band === 'partial'
@@ -140,12 +86,12 @@ export function AnimatedDiceRoller({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl capitalize">
             <Dices className="size-6 text-primary animate-spin" />
-            {currentResult.action || 'Action Roll'}
+            {result.action || 'Action Roll'}
           </DialogTitle>
           <DialogDescription>
-            {currentResult.dice.length}d Pool
-            {currentResult.position && ` · Position: ${currentResult.position}`}
-            {currentResult.effect && ` · Effect: ${currentResult.effect}`}
+            {result.dice.length}d Pool
+            {result.position && ` · Position: ${result.position}`}
+            {result.effect && ` · Effect: ${result.effect}`}
           </DialogDescription>
         </DialogHeader>
 
@@ -155,9 +101,9 @@ export function AnimatedDiceRoller({
             className="flex flex-wrap items-center justify-center gap-6 p-6 rounded-2xl bg-gradient-to-b from-muted/30 to-muted/10 border border-border/40 w-full min-h-[140px] relative overflow-hidden"
             style={{ perspective: '1000px' }}
           >
-            {currentResult.dice.map((val, idx) => {
+            {result.dice.map((val, idx) => {
               const rot = rotations[idx] || { x: 0, y: 0, z: 0 }
-              const isHighest = val === currentResult.highest
+              const isHighest = val === result.highest
               return (
                 <div
                   key={idx}
@@ -204,7 +150,7 @@ export function AnimatedDiceRoller({
                   : 'Failure / Bad Consequence'}
               </div>
               <p className="text-xs opacity-90 font-medium">
-                Highest Die: <strong className="text-sm font-extrabold">{currentResult.highest}</strong>
+                Highest Die: <strong className="text-sm font-extrabold">{result.highest}</strong>
                 {isCritical && ' (Double 6s!)'}
               </p>
             </div>
@@ -212,16 +158,7 @@ export function AnimatedDiceRoller({
         </div>
 
         <DialogFooter className="flex items-center justify-between sm:justify-between">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleReroll}
-            disabled={rolling}
-            className="flex items-center gap-1.5 text-xs"
-          >
-            <RotateCcw className="size-3.5" /> Re-roll
-          </Button>
+          <span />
           <Button type="button" size="sm" onClick={() => onOpenChange(false)}>
             Done
           </Button>

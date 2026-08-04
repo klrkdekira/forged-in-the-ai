@@ -6,9 +6,35 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from ai.llm_client import LLMClient
+from ai.tools import GameState
 from app.main import app
 from app.session_ws import get_llm_client
 from app.settings import get_settings
+from engine.character import Character
+from engine.crew import Crew
+from engine.session import Session
+
+
+def test_ws_snapshot_uses_serialised_game_state_field_names() -> None:
+    state = GameState(
+        character=Character(name="Test", playbook="Test Playbook"),
+        crew=Crew(name="Test Crew", crew_type="Test Type"),
+        session=Session(),
+    )
+    snapshot = json.loads(state.model_dump_json())
+    assert snapshot["session"]["phase"] == "free_play"
+    assert "phase" not in snapshot
+    assert snapshot["character"]["armor"]["armor_used"] is False
+    assert "used" not in snapshot["character"]["armor"]
+    assert "is_retired" not in snapshot["character"]["trauma"]
+    assert "healing_clock" in snapshot["character"]
+
+
+def test_ws_snapshot_schema_exposes_contract_fields() -> None:
+    schema = GameState.model_json_schema()
+    assert {"session", "characters", "crew"} <= set(schema["required"])
+    character_schema = schema["$defs"]["Character"]
+    assert "trauma_pending" in character_schema["properties"]
 
 
 def _tool_call_message(name: str, arguments: dict) -> dict:
@@ -307,6 +333,22 @@ def test_session_ws_persists_state_across_reconnects():
         with test_client.websocket_connect(f"/ws/session/{campaign_id}") as ws:
             resumed = ws.receive_json()
             assert resumed["state"]["character"]["stress"]["marked"] == 3
+
+
+def test_session_ws_refuses_a_second_live_connection():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("the LLM should never be called for a sheet operation")
+
+    app.dependency_overrides[get_llm_client] = lambda: _mock_client(handler)
+
+    with TestClient(app) as test_client:
+        campaign_id = _create_campaign(test_client)
+        with test_client.websocket_connect(f"/ws/session/{campaign_id}") as first:
+            first.receive_json()
+            with test_client.websocket_connect(f"/ws/session/{campaign_id}") as second:
+                with pytest.raises(WebSocketDisconnect) as error:
+                    second.receive_json()
+            assert error.value.code == 1008
 
 
 def test_session_ws_undoes_to_an_earlier_event_sequence():

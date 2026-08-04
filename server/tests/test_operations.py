@@ -140,13 +140,20 @@ def test_adjust_crew_coin_refuses_to_go_negative():
 
 
 def test_adjust_crew_coin_gains_and_spends():
-    crew = _crew(coin=2)
+    crew = _crew(coin=2, vault_level=1)
 
     crew = adjust_crew_coin(crew, 3)
     assert crew.coin == 5
 
     crew = adjust_crew_coin(crew, -4)
     assert crew.coin == 1
+
+
+def test_adjust_crew_coin_uses_vault_capacity():
+    with pytest.raises(EngineError, match="at most 4 coin"):
+        adjust_crew_coin(_crew(coin=4), 1)
+    expanded = _crew(coin=4).model_copy(update={"vault_level": 1})
+    assert adjust_crew_coin(expanded, 4).coin == 8
 
 
 def test_mark_crew_xp_clamps_to_the_track_segments():
@@ -239,6 +246,11 @@ def test_adjust_coin_refuses_to_go_negative():
 
     with pytest.raises(EngineError):
         adjust_coin(character, -2)
+
+
+def test_adjust_coin_refuses_to_exceed_four_coin_capacity():
+    with pytest.raises(EngineError, match="at most 4 coin"):
+        adjust_coin(_character(coin=4), 1)
 
 
 def test_set_item_carried_toggles_and_recomputes_load():

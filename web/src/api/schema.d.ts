@@ -498,7 +498,15 @@ export interface components {
             special_ability_ids?: string[];
             stress?: components["schemas"]["StressTrack"];
             trauma?: components["schemas"]["TraumaTrack"];
+            /**
+             * Trauma Pending
+             * @description True when stress overflow requires the player to choose a trauma condition
+             * @default false
+             */
+            trauma_pending: boolean;
             harm?: components["schemas"]["HarmTrack"];
+            /** @description SRD: "Recover" - the character-owned four-segment healing clock */
+            healing_clock?: components["schemas"]["Clock"];
             armor?: components["schemas"]["ArmorTrack"];
             /** Vice */
             vice?: string | null;
@@ -718,6 +726,21 @@ export interface components {
             character?: components["schemas"]["Character"] | null;
             /** @description FR-8/G2: an imported crew sheet (an uploaded JSON file); a fixed starter is used if omitted */
             crew?: components["schemas"]["Crew"] | null;
+            /**
+             * Pack Id
+             * @description Committed content-pack id to seed the sheets
+             */
+            pack_id?: string | null;
+            /**
+             * Playbook Id
+             * @description Template id within pack_id
+             */
+            playbook_id?: string | null;
+            /**
+             * Crew Type Id
+             * @description Template id within pack_id
+             */
+            crew_type_id?: string | null;
         };
         /**
          * Crew
@@ -750,6 +773,11 @@ export interface components {
              * @default 0
              */
             coin: number;
+            /**
+             * Vault Level
+             * @default 0
+             */
+            vault_level: number;
             /**
              * Stash
              * @default 0
@@ -1386,6 +1414,39 @@ export interface components {
         Session: {
             /** @default free_play */
             phase: components["schemas"]["CampaignPhase"];
+            /** Downtime Activity Counts */
+            downtime_activity_counts?: {
+                [key: string]: number;
+            };
+            /** Downtime Training Tracks */
+            downtime_training_tracks?: {
+                [key: string]: string[];
+            };
+            /**
+             * Score Engagement Completed
+             * @default false
+             */
+            score_engagement_completed: boolean;
+            /**
+             * Score Action Completed
+             * @default false
+             */
+            score_action_completed: boolean;
+            /**
+             * Score Heat Completed
+             * @default false
+             */
+            score_heat_completed: boolean;
+            /**
+             * Score Payoff Completed
+             * @default false
+             */
+            score_payoff_completed: boolean;
+            /**
+             * Score Entanglement Completed
+             * @default false
+             */
+            score_entanglement_completed: boolean;
         };
         /**
          * SessionZeroConfig

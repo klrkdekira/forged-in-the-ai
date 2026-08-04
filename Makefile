@@ -1,4 +1,4 @@
-.PHONY: lint test licensing-grep generate drift-check check check-all build dev fetch-srd extract-srd build-example-pack guided-entry index-srd dev-session
+.PHONY: lint test licensing-grep generate snapshot-schema drift-check check check-all build dev fetch-srd extract-srd build-example-pack guided-entry index-srd dev-session
 
 # Single entry point for the whole repo (CLAUDE.md); no hosted CI, so this
 # is what the owner runs by hand and what any future CI would call.
@@ -46,6 +46,9 @@ dev-session:
 generate:
 	cd server && uv run python -m app.export_openapi > openapi.json
 	cd web && pnpm run generate:api
+
+snapshot-schema:
+	cd server && uv run python -m app.export_snapshot_schema
 
 drift-check:
 	cd server && uv run python -m app.export_openapi > openapi.json

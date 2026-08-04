@@ -1261,6 +1261,61 @@ named files and cited spec sections first, follow the established patterns
 in `ai/replay.py` plus a `journal-summarize.ts` summary, engine tests cite
 the SRD), and run `make check` before finishing.
 
+Checked items below describe the original finding. Their implementation status
+was reconciled by the 2026-08-04 audit in `HANDOFF.md`; the historical finding
+text is retained to explain why the follow-up code exists.
+
+- [x] **Engine-only dice display (G4, FR-2, FR-6, FR-10).** Removed the
+  client-side random dice path from play and negotiation. The animated display
+  now accepts only an engine-produced, journaled result; replay remains
+  available for logged rolls.
+
+- [x] **Downtime activity allowances (FR-1, FR-4, FR-10, FR-12).** The session
+  now counts each character's downtime activities, requires an explicit coin or
+  rep payment after two free activities, and refuses repeated training tracks.
+  The counters reset on entry to downtime and replay folds them from the
+  activity events. Score ordering and completion state remain open in
+  `HANDOFF.md`.
+
+- [x] **Character-owned recovery clock (FR-1, FR-7).** Recovery now uses the
+  character's four-segment healing clock, logs and replays its progress, and
+  resets the clock after each healed harm level. The recover tool no longer
+  accepts an arbitrary global clock id.
+
+- [x] **Coin and vault capacity invariants (FR-7).** Character coin is capped
+  at four, while crew storage is capped at 4, 8, or 16 coin according to the
+  explicit vault level. Excess gains are refused until the player spends or
+  stashes them.
+
+- [x] **Stash cash-out conversion (FR-7, FR-28).** The sheet operation
+  `cash_out_stash` atomically removes an even stash amount and grants one coin
+  per two stash, refusing odd amounts, insufficient stash, and coin-capacity
+  overflow. Both mutations are logged and replayable.
+
+- [x] **WebSocket snapshot field alignment (FR-28, FR-30).** Corrected client
+  mappings for nested session phase, armour field names, absent derived trauma
+  retirement, and the character healing clock. Added a server serialisation
+  regression test; generated snapshot schema and trauma-choice flow remain
+  open.
+
+- [x] **Trauma-choice snapshot state (FR-1, FR-28).** Stress overflow now
+  persists an explicit `trauma_pending` flag until the player chooses a trauma
+  condition, and the client picker uses that flag. The reset stress value no
+  longer hides the required choice.
+
+- [x] **WebSocket snapshot schema exporter (FR-30, ADR-0006).** Added
+  `make snapshot-schema`, which emits the canonical Pydantic `GameState` JSON
+  Schema for contract review and drift tooling. A browser-level CharacterSheet
+  fixture covers trauma pending, armour, and healing fields.
+
+- [x] **Basic score procedure guards (FR-4, FR-10, FR-12).** Engagement is
+  restricted to the score phase and cannot repeat; payoff and entanglement are
+  restricted to downtime, cannot repeat, and entanglement requires payoff.
+  Score-phase action rolls now require engagement, downtime action rolls are
+  refused, downtime requires an action, and entanglement requires heat
+  processing. Persistence round-trip coverage now covers score flags and
+  downtime counters; broader migration coverage remains in `HANDOFF.md`.
+
 - [ ] **Dead engine mechanics with no play path (FR-1, FR-5, spec section 5).**
       Five SRD mechanics are implemented and unit-tested in the engine but
       unreachable from any tool, sheet operation, or replay path - the same
@@ -1284,7 +1339,7 @@ the SRD), and run `make check` before finishing.
       each with the established shape: engine operation where missing, GM
       tool and/or `SHEET_OPERATIONS` entry, event type, replay fold,
       `journal-summarize.ts` summary, SRD-cited tests.
-- [ ] **Safety tools are not usable by the player (FR-17).** The spec's
+- [x] **Safety tools are not usable by the player (FR-17).** The spec's
       X-card "rewinds/redirects the fiction without argument", but
       `invoke_x_card` (`ai/tools.py`) only logs an event; no procedure or
       system-prompt text mentions the X-card at all (`ai/system_prompt.py`,
@@ -1299,7 +1354,7 @@ the SRD), and run `make check` before finishing.
       X-card and lines/veils paragraph in the system prompt; an
       always-visible X-card button in `/play`; render `state.session_zero`
       in the table panel.
-- [ ] **Faction canon growth (FR-15) and faction downtime (FR-14).** There
+- [x] **Faction canon growth (FR-15) and faction downtime (FR-14).** There
       is no way to introduce a faction mid-play: `CampaignCanon` has
       `with_fact`/`with_location` but no `with_faction`, no
       `add_canon_faction` tool exists, and `engine/entities.py`'s `Faction`
@@ -1318,7 +1373,7 @@ the SRD), and run `make check` before finishing.
       ids without checking the referenced entities exist, and `create_npc`
       silently overwrites an existing NPC id where `create_character`
       refuses duplicates. Refuse rather than guess, per CLAUDE.md.
-- [ ] **Campaign export/import (NFR-5, ADR-0005).** The promised portability
+- [x] **Campaign export/import (NFR-5, ADR-0005).** The promised portability
       contract - "a canonical JSONL event-log export (plus JSON snapshots)
       that round-trips through import; a test enforces the round-trip" -
       exists only as the in-memory `EventLog.to_jsonl`/`from_jsonl` unit
@@ -1328,7 +1383,7 @@ the SRD), and run `make check` before finishing.
       `GET /api/campaigns/{campaign_id}/export` (JSONL log plus base and
       latest snapshots) and an import path that replays onto the base, with
       a campaign-level round-trip test.
-- [ ] **Session WS concurrency and persistence invariants (FR-18, FR-30).**
+- [x] **Session WS concurrency and persistence invariants (FR-18, FR-30).**
       (a) Two connections to one campaign corrupt state: each loads its own
       `GameState`, `save_state`'s `sequence > max_sequence` append filter
       silently drops the loser's events, and the snapshot upsert is
@@ -1345,7 +1400,7 @@ the SRD), and run `make check` before finishing.
       the same campaign exists - fine single-player, stays Phase 7 work.
       Optional alongside (c): `DELETE /api/campaigns/{campaign_id}` so an
       orphaned index row is recoverable from the UI.
-- [ ] **Roll negotiation: decline path and offered bargain (FR-16).** The
+- [x] **Roll negotiation: decline path and offered bargain (FR-16).** The
       dialog (`roll-negotiation-dialog.tsx`) cannot be declined: it is a
       modal with no close button and a single "Roll the dice" action, so
       once the GM proposes, the player must roll. Add a decline choice
@@ -1371,7 +1426,7 @@ the SRD), and run `make check` before finishing.
       character or crew as JSON, and `render_markdown` is called only by
       `ai/canon.py`. Add markdown endpoints for character and crew plus
       export controls in the sheet and crew panels.
-- [ ] **Journal buckets (FR-32).** `journal-summarize.ts`'s `consequences`
+- [x] **Journal buckets (FR-32).** `journal-summarize.ts`'s `consequences`
       bucket omits `xp_marked`, `crew_xp_marked`, `coin_adjusted`,
       `crew_coin_adjusted`, and `item_carried_set`, and
       `companion_roll_decision` is not in `rolls`, so all of them fall to
@@ -1403,17 +1458,11 @@ the SRD), and run `make check` before finishing.
       failures into typed 4xx errors, flag empty extractions in the
       response, and have `ingestion-page.tsx` surface the server's actual
       error detail instead of its two generic messages.
-- [ ] **Module structured content is unusable in play (FR-9, FR-21, FR-22).**
-      Only module prose joins retrieval (FR-24); the structured content -
-      playbooks, crew types, items - of both saved modules and the
-      committed packs is never loaded into a campaign. The only runtime
-      pack consumer is `load_entanglements`; `_new_game_state`
-      (`app/campaigns.py`) hardcodes its starter playbook and crew strings,
-      so FR-22's "activated in a campaign" step has nothing behind it.
-      Left open rather than handed off this round: wiring template
-      selection into campaign creation (which packs and modules to offer,
-      how a template seeds `Character`/`Crew`) needs a small design first,
-      like the score target-location question in the previous backlog.
+- [x] **Activate committed starter structured content in play (FR-9).**
+      Campaign creation now resolves a declared content-pack id and selected
+      playbook and crew templates, then seeds valid `Character` and `Crew`
+      entities. Imported sheets take precedence. Private module selection and
+      activation of factions and extracted tables remain open under FR-21/FR-22.
 - [ ] **Small quality items, batchable.** (a) NFR-4:
       `ContextBudget.system_and_procedures` is declared but
       `assemble_turn_context` never fits the system prompt against it -

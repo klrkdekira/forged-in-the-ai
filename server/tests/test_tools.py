@@ -21,6 +21,7 @@ from ai.tools import (
     AdvanceCrewUpgradesArgs,
     AdvanceSpecialAbilityArgs,
     ApplyHarmArgs,
+    CashOutStashArgs,
     CraftArgs,
     CreateCharacterArgs,
     CreateClockArgs,
@@ -83,6 +84,14 @@ def _state(character: Character | None = None) -> GameState:
         crew=Crew(name="Test Crew", crew_type="Test Type"),
         session=Session(),
     )
+
+
+def _downtime_state(state: GameState) -> GameState:
+    """Put a focused downtime-tool fixture through the real phase cycle."""
+    session = state.session.transition_to(CampaignPhase.SCORE).transition_to(
+        CampaignPhase.DOWNTIME
+    )
+    return state.model_copy(update={"session": session})
 
 
 def test_resolve_character_id_matches_by_name_or_alias():
@@ -191,8 +200,12 @@ def test_roll_action_args_still_accepts_the_effect_enum_directly():
 
 
 def test_roll_action_uses_the_character_action_rating_and_logs_it():
+    state = _executor().roll_engagement(
+        _state().model_copy(update={"session": Session().transition_to(CampaignPhase.SCORE)}),
+        RollEngagementArgs(pool_size=1),
+    ).state
     result = _executor().roll_action(
-        _state(),
+        state,
         RollActionArgs(action=Action.PROWL, position=Position.RISKY, effect=Effect.STANDARD),
     )
 
@@ -204,8 +217,12 @@ def test_roll_action_uses_the_character_action_rating_and_logs_it():
 def test_roll_action_marks_xp_automatically_on_a_desperate_roll():
     # SRD: "PC Advancement" - "When you make a desperate action roll, mark
     # 1 xp in the attribute for the action you rolled."
+    state = _executor().roll_engagement(
+        _state().model_copy(update={"session": Session().transition_to(CampaignPhase.SCORE)}),
+        RollEngagementArgs(pool_size=1),
+    ).state
     result = _executor().roll_action(
-        _state(),
+        state,
         RollActionArgs(action=Action.PROWL, position=Position.DESPERATE, effect=Effect.STANDARD),
     )
 
@@ -216,8 +233,12 @@ def test_roll_action_marks_xp_automatically_on_a_desperate_roll():
 
 
 def test_roll_action_does_not_mark_xp_on_a_non_desperate_roll():
+    state = _executor().roll_engagement(
+        _state().model_copy(update={"session": Session().transition_to(CampaignPhase.SCORE)}),
+        RollEngagementArgs(pool_size=1),
+    ).state
     result = _executor().roll_action(
-        _state(),
+        state,
         RollActionArgs(action=Action.PROWL, position=Position.RISKY, effect=Effect.STANDARD),
     )
 
@@ -273,6 +294,19 @@ def test_mark_stress_updates_the_character():
     assert not result.result["triggered_trauma"]
 
 
+def test_mark_stress_exposes_a_pending_trauma_choice_after_overflow():
+    character = Character(name="Test", playbook="Test Playbook", stress={"marked": 8})
+    result = _executor().mark_stress(_state(character), MarkStressArgs(amount=1))
+
+    assert result.result["triggered_trauma"]
+    assert result.state.character.stress.marked == 0
+    assert result.state.character.trauma_pending
+    chosen = _executor().mark_trauma(
+        result.state, MarkTraumaArgs(condition="haunted")
+    )
+    assert not chosen.state.character.trauma_pending
+
+
 def test_transition_phase_moves_the_session_forward():
     result = _executor().transition_phase(_state(), TransitionPhaseArgs(phase=CampaignPhase.SCORE))
 
@@ -294,6 +328,22 @@ def test_create_npc_adds_it_to_state():
 
     assert result.state.npcs["n1"].name == "Test NPC"
     assert result.state.log.events[-1].event_type == "npc_created"
+
+
+def test_create_npc_links_it_to_an_existing_faction():
+    result = _executor().create_npc(
+        _state_with_faction(), CreateNpcArgs(npc_id="n1", name="Test NPC", faction_id="f1")
+    )
+
+    assert result.state.npcs["n1"].faction_id == "f1"
+    assert result.state.factions["f1"].notable_npc_ids == ["n1"]
+
+
+def test_create_npc_refuses_an_unknown_faction_id():
+    with pytest.raises(EngineError, match="no canon faction"):
+        _executor().create_npc(
+            _state(), CreateNpcArgs(npc_id="n1", name="Test NPC", faction_id="missing")
+        )
 
 
 def test_create_score_adds_it_to_state():
@@ -664,8 +714,16 @@ def test_invoke_x_card_logs_an_event():
 def test_tool_calls_are_deterministic_for_the_same_seed():
     args = RollActionArgs(action=Action.PROWL, position=Position.RISKY, effect=Effect.STANDARD)
 
-    first = _executor(seed=9).roll_action(_state(), args)
-    second = _executor(seed=9).roll_action(_state(), args)
+    first_state = _executor(seed=9).roll_engagement(
+        _state().model_copy(update={"session": Session().transition_to(CampaignPhase.SCORE)}),
+        RollEngagementArgs(pool_size=1),
+    ).state
+    second_state = _executor(seed=9).roll_engagement(
+        _state().model_copy(update={"session": Session().transition_to(CampaignPhase.SCORE)}),
+        RollEngagementArgs(pool_size=1),
+    ).state
+    first = _executor(seed=9).roll_action(first_state, args)
+    second = _executor(seed=9).roll_action(second_state, args)
 
     assert first.result == second.result
 
@@ -769,16 +827,37 @@ def _state_with_crew_tier(tier: int) -> GameState:
 
 def test_roll_engagement_sets_a_starting_position():
     # SRD: "Engagement Roll" - a fortune roll setting the crew's position.
-    result = _executor().roll_engagement(_state(), RollEngagementArgs(pool_size=1))
+    result = _executor().roll_engagement(
+        _state().model_copy(update={"session": Session().transition_to(CampaignPhase.SCORE)}),
+        RollEngagementArgs(pool_size=1),
+    )
 
     assert result.state.log.events[-1].event_type == "engagement_roll"
     assert result.state.log.events[-1].entity_type == "score"
     assert "position" in result.result
 
 
+def test_score_procedure_refuses_repeated_engagement_and_unordered_entanglement():
+    # SRD: "Engagement Roll" and "Entanglements" - one engagement starts the
+    # score, and entanglements are resolved after payoff during downtime.
+    executor = _executor(entanglements=_ENTANGLEMENTS)
+    score_state = _state().model_copy(
+        update={"session": Session().transition_to(CampaignPhase.SCORE)}
+    )
+    rolled = executor.roll_engagement(score_state, RollEngagementArgs(pool_size=1)).state
+    with pytest.raises(EngineError, match="already been rolled"):
+        executor.roll_engagement(rolled, RollEngagementArgs(pool_size=1))
+
+    downtime = rolled.model_copy(
+        update={"session": rolled.session.transition_to(CampaignPhase.DOWNTIME)}
+    )
+    with pytest.raises(EngineError, match="resolve payoff"):
+        executor.roll_entanglement(downtime, RollEntanglementArgs())
+
+
 def test_resolve_payoff_applies_rep_and_coin_to_the_crew():
     # SRD: "Payoff" - 2 rep, +-1 per Tier difference from the target.
-    state = _state_with_crew_tier(1)
+    state = _downtime_state(_state_with_crew_tier(1))
 
     result = _executor().resolve_payoff(state, ResolvePayoffArgs(target_tier=2, coin=4))
 
@@ -789,7 +868,7 @@ def test_resolve_payoff_applies_rep_and_coin_to_the_crew():
 
 
 def test_resolve_payoff_is_zero_rep_when_kept_quiet():
-    state = _state_with_crew_tier(1)
+    state = _downtime_state(_state_with_crew_tier(1))
 
     result = _executor().resolve_payoff(state, ResolvePayoffArgs(target_tier=2, coin=0, quiet=True))
 
@@ -858,13 +937,15 @@ def test_adjust_crew_coin_refuses_to_go_negative():
 
 def test_roll_entanglement_refuses_without_a_table_loaded():
     with pytest.raises(EngineError, match="no entanglement table"):
-        _executor().roll_entanglement(_state_with_crew_tier(1), RollEntanglementArgs())
+        _executor().roll_entanglement(
+            _downtime_state(_state_with_crew_tier(1)), RollEntanglementArgs()
+        )
 
 
 def test_roll_entanglement_uses_the_crews_wanted_level_and_heat():
     # SRD: "Entanglements" - heat band picks the column, wanted-level dice
     # pick the row.
-    state = _state_with_crew_tier(1).model_copy(
+    state = _downtime_state(_state_with_crew_tier(1)).model_copy(
         update={
             "crew": Crew(
                 name="Test Crew", crew_type="Test Type", tier=1, wanted_level=1, heat={"heat": 4}
@@ -872,6 +953,8 @@ def test_roll_entanglement_uses_the_crews_wanted_level_and_heat():
         }
     )
 
+    state = _executor().resolve_payoff(state, ResolvePayoffArgs(target_tier=1)).state
+    state = _executor().add_crew_heat(state, AddCrewHeatArgs(amount=1)).state
     result = _executor(entanglements=_ENTANGLEMENTS).roll_entanglement(
         state, RollEntanglementArgs()
     )
@@ -881,7 +964,9 @@ def test_roll_entanglement_uses_the_crews_wanted_level_and_heat():
 
 
 def test_acquire_asset_rolls_the_crews_tier():
-    result = _executor().acquire_asset(_state_with_crew_tier(2), AcquireAssetArgs())
+    result = _executor().acquire_asset(
+        _downtime_state(_state_with_crew_tier(2)), AcquireAssetArgs()
+    )
 
     assert result.state.log.events[-1].event_type == "asset_acquired"
     assert "quality" in result.result
@@ -895,7 +980,7 @@ def test_indulge_vice_clears_stress_and_logs_it():
         stress={"marked": 2},
     )
 
-    result = _executor().indulge_vice(_state(character), IndulgeViceArgs())
+    result = _executor().indulge_vice(_downtime_state(_state(character)), IndulgeViceArgs())
 
     assert result.state.log.events[-2].event_type == "vice_indulged"
     assert result.state.log.events[-1].event_type == "stress_marked"
@@ -917,7 +1002,9 @@ def _state_for_craft(tier: int, tinker: int, coin: int = 0, upgrade_ids: tuple =
 
 def test_craft_logs_a_downtime_activity_with_quality():
     # SRD: "Crafting"/"CRAFTING ROLL".
-    result = _executor().craft(_state_for_craft(tier=1, tinker=2), CraftArgs())
+    result = _executor().craft(
+        _downtime_state(_state_for_craft(tier=1, tinker=2)), CraftArgs()
+    )
 
     event = result.state.log.events[-1]
     assert event.event_type == "downtime_activity_rolled"
@@ -927,9 +1014,11 @@ def test_craft_logs_a_downtime_activity_with_quality():
 
 def test_craft_adds_one_for_the_workshop_upgrade():
     # SRD: "CRAFTING ROLL" - "+1 quality for Workshop crew upgrade."
-    without_workshop = _executor(seed=9).craft(_state_for_craft(tier=1, tinker=2), CraftArgs())
+    without_workshop = _executor(seed=9).craft(
+        _downtime_state(_state_for_craft(tier=1, tinker=2)), CraftArgs()
+    )
     with_workshop = _executor(seed=9).craft(
-        _state_for_craft(tier=1, tinker=2, upgrade_ids=("workshop",)), CraftArgs()
+        _downtime_state(_state_for_craft(tier=1, tinker=2, upgrade_ids=("workshop",))), CraftArgs()
     )
 
     assert with_workshop.result["quality"] == without_workshop.result["quality"] + 1
@@ -938,10 +1027,10 @@ def test_craft_adds_one_for_the_workshop_upgrade():
 def test_craft_spends_coin_and_raises_quality():
     # SRD: "Crafting" - "spend coin 1-for-1 to increase the final quality level."
     no_spend = _executor(seed=9).craft(
-        _state_for_craft(tier=1, tinker=2, coin=3), CraftArgs(coin_spent=0)
+        _downtime_state(_state_for_craft(tier=1, tinker=2, coin=3)), CraftArgs(coin_spent=0)
     )
     spend = _executor(seed=9).craft(
-        _state_for_craft(tier=1, tinker=2, coin=3), CraftArgs(coin_spent=2)
+        _downtime_state(_state_for_craft(tier=1, tinker=2, coin=3)), CraftArgs(coin_spent=2)
     )
 
     assert spend.result["quality"] == no_spend.result["quality"] + 2
@@ -951,11 +1040,13 @@ def test_craft_spends_coin_and_raises_quality():
 
 def test_craft_refuses_when_coin_spent_exceeds_available_coin():
     with pytest.raises(EngineError):
-        _executor().craft(_state_for_craft(tier=1, tinker=2, coin=1), CraftArgs(coin_spent=2))
+        _executor().craft(
+            _downtime_state(_state_for_craft(tier=1, tinker=2, coin=1)), CraftArgs(coin_spent=2)
+        )
 
 
 def test_reduce_heat_clears_heat_by_the_downtime_ticks_table():
-    state = _state_with_crew_tier(1).model_copy(
+    state = _downtime_state(_state_with_crew_tier(1)).model_copy(
         update={"crew": Crew(name="Test Crew", crew_type="Test Type", tier=1, heat={"heat": 5})}
     )
 
@@ -968,16 +1059,13 @@ def test_reduce_heat_clears_heat_by_the_downtime_ticks_table():
 
 def test_recover_ticks_the_healing_clock():
     executor = _executor()
-    state = executor.create_clock(
-        _state(),
-        CreateClockArgs(clock_id="heal-1", name="Healing", kind=ClockKind.HEALING, segments=8),
-    ).state
+    state = _downtime_state(_state())
 
-    result = executor.recover(state, RecoverArgs(clock_id="heal-1", pool_size=2))
+    result = executor.recover(state, RecoverArgs(pool_size=2))
 
     assert result.state.log.events[-2].event_type == "downtime_activity_rolled"
-    assert result.state.log.events[-1].event_type == "clock_ticked"
-    assert result.state.clocks["heal-1"].filled == result.result["ticks"]
+    assert result.state.log.events[-1].event_type == "healing_clock_ticked"
+    assert result.state.character.healing_clock.filled == result.result["ticks"]
     assert not result.result["healed"]
 
 
@@ -988,26 +1076,55 @@ def test_recover_heals_once_the_clock_fills():
         harm={"entries": [{"level": 2, "name": "Twisted Ankle"}]},
     )
     executor = _executor(seed=9)
-    state = executor.create_clock(
-        _state(character),
-        CreateClockArgs(clock_id="heal-1", name="Healing", kind=ClockKind.HEALING, segments=1),
-    ).state
+    character = character.model_copy(
+        update={"healing_clock": character.healing_clock.model_copy(update={"segments": 1})}
+    )
+    state = _downtime_state(_state(character))
 
-    result = executor.recover(state, RecoverArgs(clock_id="heal-1", pool_size=1))
+    result = executor.recover(state, RecoverArgs(pool_size=1))
 
     assert result.result["healed"]
     assert result.state.character.harm.entries[0].level == 1
+    assert result.state.character.healing_clock.filled == 0
 
 
-def test_recover_refuses_an_unknown_clock():
-    with pytest.raises(EngineError, match="no clock"):
-        _executor().recover(_state(), RecoverArgs(clock_id="nope", pool_size=1))
+def test_recover_uses_the_character_owned_healing_clock():
+    result = _executor(seed=9).recover(_downtime_state(_state()), RecoverArgs(pool_size=1))
+    assert result.state.character.healing_clock.kind is ClockKind.HEALING
+
+
+def test_downtime_allows_two_free_activities_then_requires_payment():
+    # SRD: "Downtime Activities" - each PC gets two free activities; each
+    # additional activity costs 1 coin or 1 rep.
+    state = _downtime_state(_state_for_craft(tier=1, tinker=2, coin=1))
+    executor = _executor(seed=9)
+    first = executor.craft(state, CraftArgs()).state
+    second = executor.craft(first, CraftArgs()).state
+
+    with pytest.raises(EngineError, match="two free downtime activities"):
+        executor.craft(second, CraftArgs())
+
+    third = executor.craft(second, CraftArgs(extra_cost="coin"))
+    assert third.state.character.coin == 0
+    assert third.state.session.downtime_activity_counts["pc-1"] == 3
+
+
+def test_downtime_training_track_can_only_be_used_once():
+    # SRD: "Training" - train one attribute or playbook track once per downtime.
+    state = _downtime_state(_state())
+    executor = _executor()
+    executor.mark_xp(state, MarkXpArgs(track="playbook", amount=1))
+    with pytest.raises(EngineError, match="already trained"):
+        executor.mark_xp(
+            executor.mark_xp(state, MarkXpArgs(track="playbook", amount=1)).state,
+            MarkXpArgs(track="playbook", amount=1),
+        )
 
 
 def test_long_term_project_ticks_the_projects_clock():
     executor = _executor()
     state = executor.create_clock(
-        _state(),
+        _downtime_state(_state()),
         CreateClockArgs(
             clock_id="vault", name="Crack the Vault", kind=ClockKind.LONG_TERM_PROJECT, segments=8
         ),
@@ -1200,6 +1317,11 @@ def test_transition_into_downtime_enumerates_canon_factions_and_their_clocks():
     state = executor.update_faction_status(
         state, UpdateFactionStatusArgs(faction_id="red-circle", delta=-1)
     ).state
+    state = executor.roll_engagement(state, RollEngagementArgs(pool_size=1)).state
+    state = executor.roll_action(
+        state,
+        RollActionArgs(action=Action.PROWL, position=Position.RISKY, effect=Effect.STANDARD),
+    ).state
 
     result = executor.transition_phase(state, TransitionPhaseArgs(phase=CampaignPhase.DOWNTIME))
 
@@ -1237,6 +1359,31 @@ def test_adjust_stash_updates_the_character_and_logs_it():
 def test_adjust_stash_refuses_to_go_negative():
     with pytest.raises(EngineError, match="cannot remove"):
         _executor().adjust_stash(_state(), AdjustStashArgs(amount=-1))
+
+
+def test_cash_out_stash_converts_two_stash_to_one_coin():
+    character = Character(name="Test", playbook="Test Playbook", stash=4)
+    result = _executor().cash_out_stash(
+        _state(character), CashOutStashArgs(stash_amount=2)
+    )
+    assert result.result == {"stash": 2, "coin": 1}
+    assert [event.event_type for event in result.state.log.events[-2:]] == [
+        "stash_adjusted",
+        "coin_adjusted",
+    ]
+
+
+def test_cash_out_stash_refuses_odd_amount_or_coin_overflow():
+    with pytest.raises(EngineError, match="positive even"):
+        _executor().cash_out_stash(
+            _state(Character(name="Test", playbook="Test Playbook", stash=3)),
+            CashOutStashArgs(stash_amount=1),
+        )
+    with pytest.raises(EngineError, match="at most 4 coin"):
+        _executor().cash_out_stash(
+            _state(Character(name="Test", playbook="Test Playbook", stash=2, coin=4)),
+            CashOutStashArgs(stash_amount=2),
+        )
 
 
 def test_set_load_level_records_the_declared_load():

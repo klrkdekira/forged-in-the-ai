@@ -37,6 +37,7 @@ router = APIRouter()
 # set of campaigns one process serves; a bounded cache would only matter
 # at a scale this single-player server doesn't operate at.
 _campaign_locks: dict[str, asyncio.Lock] = {}
+_active_campaigns: set[str] = set()
 
 
 def _campaign_lock(db_path: Path) -> asyncio.Lock:
@@ -112,10 +113,15 @@ async def session_ws(
     state change comes from a tool call (FR-12); the client only ever
     sends player messages."""
     await websocket.accept()
-    # 2026-07-17 backlog item 2a: held for the whole connection - see the
-    # module comment on `_campaign_locks`. State is loaded only after the
-    # lock is acquired, so a connection that waited behind another one
-    # sees whatever that connection last persisted, not a stale copy.
+    # Single-player semantics are explicit: a second client is refused
+    # immediately instead of being accepted and waiting behind a lock for an
+    # unbounded connection lifetime. The set check and insert are atomic on
+    # this event loop because there is no await between them.
+    campaign_key = str(db_path)
+    if campaign_key in _active_campaigns:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="campaign is in use")
+        return
+    _active_campaigns.add(campaign_key)
     async with _campaign_lock(db_path):
         executor = ToolExecutor(
             rng=random.Random(),
@@ -239,7 +245,8 @@ async def session_ws(
                             else {}
                         )
         except WebSocketDisconnect:
-            pass
+            _active_campaigns.discard(campaign_key)
         finally:
             await client.aclose()
             await retrieval_engine.dispose()
+            _active_campaigns.discard(campaign_key)

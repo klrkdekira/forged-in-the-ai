@@ -24,14 +24,16 @@ export interface CharacterItemSnapshot {
 }
 
 export interface ArmorSnapshot {
-  used: boolean
-  heavy_used: boolean
-  special_used: boolean
+  has_armor: boolean
+  has_heavy_armor: boolean
+  has_special_armor: boolean
+  armor_used: boolean
+  heavy_armor_used: boolean
+  special_armor_used: boolean
 }
 
 export interface TraumaSnapshot {
   conditions: string[]
-  retired: boolean
 }
 
 // FR-28: the character-sheet fields the interactive panel renders. Not
@@ -51,11 +53,13 @@ export interface CharacterSnapshot {
   special_ability_ids?: string[]
   stress: { marked: number }
   trauma?: TraumaSnapshot
+  trauma_pending: boolean
   harm: { entries: HarmEntrySnapshot[] }
   armor?: ArmorSnapshot
   vice?: string | null
   vice_detail?: string | null
   vice_purveyor?: string | null
+  healing_clock: ClockSnapshot
   coin: number
   stash?: number
   load: number
@@ -81,11 +85,15 @@ export interface ClaimSnapshot {
 export interface CrewSnapshot {
   name: string
   crew_type: string
+  tier: number
+  hold: 'weak' | 'strong'
   claims: ClaimSnapshot[]
   heat: { heat: number }
   wanted_level: number
   rep: { rep: number; turf: number; threshold: number }
   coin: number
+  stash: number
+  xp: XpTrackSnapshot
   [key: string]: unknown
 }
 
@@ -166,7 +174,7 @@ export interface ControllerSnapshot {
 }
 
 export interface GameStateSnapshot {
-  phase?: string
+  session: { phase: string; [key: string]: unknown }
   character: CharacterSnapshot
   characters: Record<string, CharacterSnapshot>
   crew: CrewSnapshot
@@ -192,6 +200,7 @@ export interface SheetOperation {
     | 'mark_xp'
     | 'adjust_coin'
     | 'adjust_stash'
+    | 'cash_out_stash'
     | 'set_item_carried'
     | 'set_load_level'
     | 'tick_clock'

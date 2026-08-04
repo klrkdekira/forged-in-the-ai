@@ -5,6 +5,7 @@ from ai.tools import GameState
 from engine.campaign import CampaignCanon
 from engine.character import Action, Attribute, Character
 from engine.crew import Crew
+from engine.entities import Faction
 from engine.session import CampaignPhase, Session
 
 AT = datetime(2026, 1, 1, tzinfo=UTC)
@@ -16,6 +17,23 @@ def _base_state() -> GameState:
         crew=Crew(name="The Fifth Foxglove", crew_type="Assassins"),
         session=Session(),
     )
+
+
+def test_replay_state_links_a_created_npc_to_its_faction():
+    base = _base_state().model_copy(
+        update={"factions": {"f1": Faction(id="f1", name="The Circle")}}
+    )
+    log = base.log.append(
+        "npc",
+        "n1",
+        "npc_created",
+        {"id": "n1", "name": "Informant", "tags": [], "faction_id": "f1", "notes": None},
+        AT,
+    )
+
+    replayed = replay_state(base, log.events)
+
+    assert replayed.factions["f1"].notable_npc_ids == ["n1"]
 
 
 def test_replay_state_folds_stress_and_harm_onto_the_base_character():
@@ -380,6 +398,26 @@ def test_replay_state_skips_downtime_and_score_roll_records():
 
     assert replayed.crew == base.crew
     assert len(replayed.log.events) == 1
+
+
+def test_replay_state_folds_downtime_activity_allowances():
+    # SRD: "Downtime Activities" - replay must preserve the two-free-
+    # activity counter used to refuse an unpaid third activity.
+    base = _base_state()
+    log = base.log
+    log = log.append("session", "current", "phase_transitioned", {"phase": "score"}, AT)
+    log = log.append("session", "current", "phase_transitioned", {"phase": "downtime"}, AT)
+    log = log.append(
+        "character",
+        "pc-1",
+        "downtime_activity_rolled",
+        {"activity": "craft", "character_id": "pc-1"},
+        AT,
+    )
+
+    replayed = replay_state(base, log.events)
+
+    assert replayed.session.downtime_activity_counts == {"pc-1": 1}
 
 
 def test_replay_state_skips_companion_roll_decision_records():

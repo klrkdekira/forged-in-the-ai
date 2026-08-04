@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from ai.replay import replay_state
 from ai.tools import GameState
 from engine.character import Character
 from engine.crew import Crew
@@ -104,3 +105,42 @@ async def test_undo_to_zero_reverts_to_the_campaigns_base_state(tmp_path: Path) 
     undone = await undo_to(db_path, sequence=0)
 
     assert undone == state
+
+
+@pytest.mark.anyio
+async def test_procedure_state_round_trips_and_replays_from_persistence(tmp_path: Path) -> None:
+    # FR-19/NFR-1: score and downtime procedure state must survive the cached
+    # snapshot and be reconstructable from the authoritative event log.
+    db_path = campaign_db_path(tmp_path, "procedure")
+    base = _starter_state()
+    await create_campaign(db_path, base)
+
+    at = datetime(2026, 1, 1, tzinfo=UTC)
+    log = base.log
+    log = log.append("session", "current", "phase_transitioned", {"phase": "score"}, at)
+    log = log.append("score", "current", "engagement_roll", {}, at)
+    log = log.append("character", "pc-1", "action_roll", {}, at)
+    log = log.append("session", "current", "phase_transitioned", {"phase": "downtime"}, at)
+    log = log.append(
+        "crew", "The Crew", "payoff", {"rep": 2, "coin": 1}, at
+    )
+    log = log.append("crew", "The Crew", "heat_added", {"amount": 2}, at)
+    log = log.append("crew", "The Crew", "entanglement_roll", {}, at)
+    log = log.append(
+        "character",
+        "pc-1",
+        "downtime_activity_rolled",
+        {"character_id": "pc-1", "activity": "recover"},
+        at,
+    )
+    state = replay_state(base, log.events)
+    await save_state(db_path, state)
+
+    loaded = await load_state(db_path)
+    assert loaded is not None
+    assert loaded.session.score_action_completed
+    assert loaded.session.score_heat_completed
+
+    replayed = await undo_to(db_path, sequence=log.events[-1].sequence)
+    assert replayed.session.score_entanglement_completed
+    assert replayed.session.downtime_activity_counts == {"pc-1": 1}

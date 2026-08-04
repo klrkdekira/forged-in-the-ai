@@ -33,6 +33,7 @@ from engine.operations import (
     adjust_crew_turf,
     adjust_stash,
     adjust_wanted_level,
+    cash_out_stash,
     develop_crew,
     flashback,
     heal_character,
@@ -350,6 +351,9 @@ class MarkXpArgs(BaseModel):
     character_id: str | None = Field(
         None, description="Which PC marks XP; only needed once more than one PC exists"
     )
+    extra_cost: Literal["coin", "rep"] | None = Field(
+        None, description="For a third or later downtime activity, pay 1 coin or 1 rep"
+    )
     reason: str | None = Field(
         None,
         description="Why: e.g. an end-of-session xp trigger, or 'desperate roll' - kept for "
@@ -390,6 +394,15 @@ class AdjustStashArgs(BaseModel):
     amount: int = Field(..., description="Positive to add stash, negative to remove it")
     character_id: str | None = Field(
         None, description="Which PC's stash; only needed once more than one PC exists"
+    )
+
+
+class CashOutStashArgs(BaseModel):
+    stash_amount: int = Field(
+        ..., description="Positive even stash amount; each 2 stash gives 1 coin"
+    )
+    character_id: str | None = Field(
+        None, description="Which PC cashes out stash; only needed once more than one PC exists"
     )
 
 
@@ -454,36 +467,38 @@ class RollEntanglementArgs(BaseModel):
     the crew's current wanted level and heat."""
 
 
-class AcquireAssetArgs(BaseModel):
+class DowntimeActivityArgs(BaseModel):
+    """Shared player choice for a downtime activity."""
+
+    character_id: str | None = Field(
+        None, description="Which PC takes this activity; required with multiple PCs"
+    )
+    extra_cost: Literal["coin", "rep"] | None = Field(
+        None, description="Pay 1 coin or 1 rep when taking a third or later activity"
+    )
+
+
+class AcquireAssetArgs(DowntimeActivityArgs):
     """SRD: "Acquire Asset" - no fields; rolls the crew's Tier."""
 
 
-class IndulgeViceArgs(BaseModel):
-    character_id: str | None = Field(
-        None, description="Which PC indulges; only needed once more than one PC exists"
-    )
+class IndulgeViceArgs(DowntimeActivityArgs):
+    """SRD: "Vice" - clear stress and resolve overindulgence."""
 
 
-class CraftArgs(BaseModel):
+class CraftArgs(DowntimeActivityArgs):
     coin_spent: int = Field(0, description="Coin spent 1-for-1 to raise the result's quality level")
-    character_id: str | None = Field(
-        None, description="Which PC crafts; only needed once more than one PC exists"
-    )
 
 
-class ReduceHeatArgs(BaseModel):
+class ReduceHeatArgs(DowntimeActivityArgs):
     pool_size: int = Field(..., description="Dice pool for the action rolled to reduce heat")
 
 
-class RecoverArgs(BaseModel):
-    clock_id: str = Field(..., description="The character's healing clock")
+class RecoverArgs(DowntimeActivityArgs):
     pool_size: int = Field(..., description="Dice pool for the action rolled to get treatment")
-    character_id: str | None = Field(
-        None, description="Which PC recovers; only needed once more than one PC exists"
-    )
 
 
-class LongTermProjectArgs(BaseModel):
+class LongTermProjectArgs(DowntimeActivityArgs):
     clock_id: str = Field(..., description="The long-term project's clock")
     pool_size: int = Field(..., description="Dice pool for the action rolled to work the project")
 
@@ -571,6 +586,34 @@ class ToolExecutor:
             raise EngineError("character_id is required once a session has more than one character")
         return next(iter(state.characters))
 
+    def _start_downtime_activity(
+        self,
+        state: GameState,
+        character_id: str,
+        extra_cost: Literal["coin", "rep"] | None,
+        track: str | None = None,
+    ) -> GameState:
+        """Apply the engine's two-free-activities rule and optional third-
+        activity payment before a downtime roll is made."""
+        if state.session.phase is not CampaignPhase.DOWNTIME:
+            raise EngineError("downtime activities are only available during downtime")
+        used = state.session.downtime_activity_counts.get(character_id, 0)
+        if used >= 2 and extra_cost is None:
+            raise EngineError(
+                f"{character_id!r} has used two free downtime activities; pay 1 coin or 1 rep"
+            )
+        session = state.session.begin_downtime_activity(character_id, track)
+        state = state.model_copy(update={"session": session})
+        if used < 2:
+            return state
+        if extra_cost == "coin":
+            return self.adjust_coin(
+                state, AdjustCoinArgs(amount=-1, character_id=character_id)
+            ).state
+        if state.crew.rep.rep < 1:
+            raise EngineError("crew has no rep to pay for an extra downtime activity")
+        return self.adjust_crew_rep(state, AdjustCrewRepArgs(amount=-1)).state
+
     def create_character(self, state: GameState, args: CreateCharacterArgs) -> ToolCallResult:
         """FR-25/FR-35: the only way a second PC comes into existence for
         now - session zero, or a crewmate introduced mid-campaign. Also
@@ -617,6 +660,13 @@ class ToolExecutor:
         from the LLM's own tool-call arguments (`tool_definitions()` only
         ever introspects `RollActionArgs`, so the model never sees these as
         choices it makes)."""
+        if state.session.phase is CampaignPhase.DOWNTIME:
+            raise EngineError("action rolls cannot be made during downtime")
+        if (
+            state.session.phase is CampaignPhase.SCORE
+            and not state.session.score_engagement_completed
+        ):
+            raise EngineError("roll engagement before making an action roll")
         character_id = self.resolve_character_id(state, args.character_id)
         pool_size = state.characters[character_id].action_ratings.get(args.action, 0) + bonus_dice
         roll = action_roll(pool_size, args.position, args.effect, self._rng)
@@ -630,7 +680,12 @@ class ToolExecutor:
         if assisted_by:
             payload["assisted_by"] = assisted_by
         log = state.log.append("character", character_id, "action_roll", payload, self._clock())
-        state = state.model_copy(update={"log": log})
+        state = state.model_copy(
+            update={
+                "session": state.session.model_copy(update={"score_action_completed": True}),
+                "log": log,
+            }
+        )
         if earns_desperate_roll_xp(args.position is Position.DESPERATE):
             # SRD: "PC Advancement" - "When you make a desperate action
             # roll, mark 1 xp in the attribute for the action you rolled."
@@ -739,6 +794,9 @@ class ToolExecutor:
     def mark_stress(self, state: GameState, args: MarkStressArgs) -> ToolCallResult:
         character_id = self.resolve_character_id(state, args.character_id)
         mutation = mark_stress(state.characters[character_id], args.amount)
+        character = mutation.character.model_copy(
+            update={"trauma_pending": mutation.triggered_trauma}
+        )
         log = state.log.append(
             "character",
             character_id,
@@ -746,7 +804,7 @@ class ToolExecutor:
             {"amount": args.amount, "triggered_trauma": mutation.triggered_trauma},
             self._clock(),
         )
-        characters = {**state.characters, character_id: mutation.character}
+        characters = {**state.characters, character_id: character}
         state = state.model_copy(update={"characters": characters, "log": log})
         return ToolCallResult(state=state, result={"triggered_trauma": mutation.triggered_trauma})
 
@@ -759,6 +817,7 @@ class ToolExecutor:
         not a further mutation."""
         character_id = self.resolve_character_id(state, args.character_id)
         character = mark_trauma(state.characters[character_id], args.condition)
+        character = character.model_copy(update={"trauma_pending": False})
         log = state.log.append(
             "character",
             character_id,
@@ -821,6 +880,8 @@ class ToolExecutor:
         automatic xp, and the end-of-session trigger review) - the same
         method either way."""
         character_id = self.resolve_character_id(state, args.character_id)
+        if state.session.phase is CampaignPhase.DOWNTIME and args.amount > 0:
+            state = self._start_downtime_activity(state, character_id, args.extra_cost, args.track)
         base = state.characters[character_id]
         if args.track == "playbook":
             character = mark_playbook_xp(base, args.amount)
@@ -921,19 +982,58 @@ class ToolExecutor:
             result={"stash": character.stash},
         )
 
+    def cash_out_stash(self, state: GameState, args: CashOutStashArgs) -> ToolCallResult:
+        """SRD: "Removing coin from your stash" - two stash converts to
+        one coin, through one atomic sheet operation."""
+        character_id = self.resolve_character_id(state, args.character_id)
+        character = cash_out_stash(state.characters[character_id], args.stash_amount)
+        log = state.log.append(
+            "character",
+            character_id,
+            "stash_adjusted",
+            {"amount": -args.stash_amount},
+            self._clock(),
+        )
+        log = log.append(
+            "character",
+            character_id,
+            "coin_adjusted",
+            {"amount": args.stash_amount // 2},
+            self._clock(),
+        )
+        return ToolCallResult(
+            state=state.model_copy(
+                update={
+                    "characters": {**state.characters, character_id: character},
+                    "log": log,
+                }
+            ),
+            result={"stash": character.stash, "coin": character.coin},
+        )
+
     def roll_engagement(self, state: GameState, args: RollEngagementArgs) -> ToolCallResult:
         """SRD: "Engagement Roll" - sets the crew's starting position for the score."""
+        if state.session.phase is not CampaignPhase.SCORE:
+            raise EngineError("engagement can only be rolled during the score phase")
+        if state.session.score_engagement_completed:
+            raise EngineError("engagement has already been rolled for this score")
         roll = engagement_roll(args.pool_size, self._rng)
         log = state.log.append(
             "score", "current", "engagement_roll", roll.model_dump(mode="json"), self._clock()
         )
+        session = state.session.model_copy(update={"score_engagement_completed": True})
         return ToolCallResult(
-            state=state.model_copy(update={"log": log}), result=roll.model_dump(mode="json")
+            state=state.model_copy(update={"session": session, "log": log}),
+            result=roll.model_dump(mode="json"),
         )
 
     def resolve_payoff(self, state: GameState, args: ResolvePayoffArgs) -> ToolCallResult:
         """SRD: "Payoff" - rep (+-1 per Tier difference from the target, zero if kept quiet)
         plus whatever coin the score earned."""
+        if state.session.phase is not CampaignPhase.DOWNTIME:
+            raise EngineError("payoff can only be resolved during downtime")
+        if state.session.score_payoff_completed:
+            raise EngineError("payoff has already been resolved for this score")
         rep = payoff_rep(state.crew.tier, args.target_tier, args.quiet)
         crew = state.crew.model_copy(
             update={"rep": state.crew.rep.add_rep(rep), "coin": state.crew.coin + args.coin}
@@ -945,8 +1045,9 @@ class ToolExecutor:
             {"rep": rep, "coin": args.coin, "target_tier": args.target_tier, "quiet": args.quiet},
             self._clock(),
         )
+        session = state.session.model_copy(update={"score_payoff_completed": True})
         return ToolCallResult(
-            state=state.model_copy(update={"crew": crew, "log": log}),
+            state=state.model_copy(update={"session": session, "crew": crew, "log": log}),
             result={"rep": rep, "coin": args.coin},
         )
 
@@ -956,8 +1057,14 @@ class ToolExecutor:
         log = state.log.append(
             "crew", mutation.crew.name, "heat_added", {"amount": args.amount}, self._clock()
         )
+        session = state.session
+        if (
+            state.session.phase is CampaignPhase.DOWNTIME
+            and state.session.score_payoff_completed
+        ):
+            session = state.session.model_copy(update={"score_heat_completed": True})
         return ToolCallResult(
-            state=state.model_copy(update={"crew": mutation.crew, "log": log}),
+            state=state.model_copy(update={"session": session, "crew": mutation.crew, "log": log}),
             result={
                 "heat": mutation.crew.heat.heat,
                 "wanted_level": mutation.crew.wanted_level,
@@ -1067,6 +1174,14 @@ class ToolExecutor:
         """SRD: "Entanglements" - heat band picks the column, wanted-level dice pick the row."""
         if not self._entanglements:
             raise EngineError("no entanglement table loaded for this session")
+        if state.session.phase is not CampaignPhase.DOWNTIME:
+            raise EngineError("entanglement can only be rolled during downtime")
+        if not state.session.score_payoff_completed:
+            raise EngineError("resolve payoff before rolling entanglement")
+        if not state.session.score_heat_completed:
+            raise EngineError("process score heat before rolling entanglement")
+        if state.session.score_entanglement_completed:
+            raise EngineError("entanglement has already been rolled for this score")
         roll = entanglement_roll(
             state.crew.wanted_level, state.crew.heat.heat, self._entanglements, self._rng
         )
@@ -1077,15 +1192,23 @@ class ToolExecutor:
             roll.model_dump(mode="json"),
             self._clock(),
         )
+        session = state.session.model_copy(update={"score_entanglement_completed": True})
         return ToolCallResult(
-            state=state.model_copy(update={"log": log}), result=roll.model_dump(mode="json")
+            state=state.model_copy(update={"session": session, "log": log}),
+            result=roll.model_dump(mode="json"),
         )
 
     def acquire_asset(self, state: GameState, args: AcquireAssetArgs) -> ToolCallResult:
         """SRD: "Acquire Asset" - roll the crew's Tier; the result sets the asset's quality."""
+        character_id = self.resolve_character_id(state, args.character_id)
+        state = self._start_downtime_activity(state, character_id, args.extra_cost)
         roll = acquire_asset_roll(state.crew.tier, self._rng)
         log = state.log.append(
-            "crew", state.crew.name, "asset_acquired", roll.model_dump(mode="json"), self._clock()
+            "crew",
+            state.crew.name,
+            "asset_acquired",
+            {**roll.model_dump(mode="json"), "character_id": character_id},
+            self._clock(),
         )
         return ToolCallResult(
             state=state.model_copy(update={"log": log}), result=roll.model_dump(mode="json")
@@ -1095,11 +1218,16 @@ class ToolExecutor:
         """SRD: "Vice" - clear stress equal to the highest die of a pool sized by the
         character's lowest attribute; clearing more than was marked overindulges."""
         character_id = self.resolve_character_id(state, args.character_id)
+        state = self._start_downtime_activity(state, character_id, args.extra_cost)
         character = state.characters[character_id]
         lowest = min(character.attribute_rating(attribute) for attribute in Attribute)
         roll = indulge_vice_roll(lowest, character.stress.marked, self._rng)
         log = state.log.append(
-            "character", character_id, "vice_indulged", roll.model_dump(mode="json"), self._clock()
+            "character",
+            character_id,
+            "vice_indulged",
+            roll.model_dump(mode="json"),
+            self._clock(),
         )
         state = state.model_copy(update={"log": log})
         state = self.mark_stress(
@@ -1113,6 +1241,7 @@ class ToolExecutor:
         (`"workshop"`, the SRD base pack's own id for it), and +1 per coin
         spent."""
         character_id = self.resolve_character_id(state, args.character_id)
+        state = self._start_downtime_activity(state, character_id, args.extra_cost)
         character = state.characters[character_id]
         tinker_rating = character.action_ratings.get(Action.TINKER, 0)
         has_workshop = "workshop" in state.crew.upgrade_ids
@@ -1129,6 +1258,7 @@ class ToolExecutor:
             "downtime_activity_rolled",
             {
                 "activity": "craft",
+                "character_id": character_id,
                 "pool_size": tinker_rating,
                 "band": roll.band.value,
                 "quality": roll.quality,
@@ -1145,6 +1275,8 @@ class ToolExecutor:
 
     def reduce_heat(self, state: GameState, args: ReduceHeatArgs) -> ToolCallResult:
         """SRD: "Reduce Heat" - roll your action; the result clears that much heat."""
+        character_id = self.resolve_character_id(state, args.character_id)
+        state = self._start_downtime_activity(state, character_id, args.extra_cost)
         roll = fortune_roll(args.pool_size, self._rng)
         ticks = downtime_ticks(roll.band)
         log = state.log.append(
@@ -1153,6 +1285,7 @@ class ToolExecutor:
             "downtime_activity_rolled",
             {
                 "activity": "reduce_heat",
+                "character_id": character_id,
                 "pool_size": args.pool_size,
                 "band": roll.band.value,
                 "amount": ticks,
@@ -1167,8 +1300,7 @@ class ToolExecutor:
         """SRD: "Recover" - tick the healing clock like a long-term project; filling it
         heals one level of harm."""
         character_id = self.resolve_character_id(state, args.character_id)
-        if args.clock_id not in state.clocks:
-            raise EngineError(f"no clock {args.clock_id!r} in this session")
+        state = self._start_downtime_activity(state, character_id, args.extra_cost)
         roll = fortune_roll(args.pool_size, self._rng)
         ticks = downtime_ticks(roll.band)
         log = state.log.append(
@@ -1177,6 +1309,7 @@ class ToolExecutor:
             "downtime_activity_rolled",
             {
                 "activity": "recover",
+                "character_id": character_id,
                 "pool_size": args.pool_size,
                 "band": roll.band.value,
                 "amount": ticks,
@@ -1184,10 +1317,46 @@ class ToolExecutor:
             self._clock(),
         )
         state = state.model_copy(update={"log": log})
-        state = self.tick_clock(state, TickClockArgs(clock_id=args.clock_id, amount=ticks)).state
+        character = state.characters[character_id]
+        healing_clock = character.healing_clock.tick(ticks)
+        clock_log = state.log.append(
+            "character",
+            character_id,
+            "healing_clock_ticked",
+            {"amount": ticks},
+            self._clock(),
+        )
+        state = state.model_copy(
+            update={
+                "characters": {
+                    **state.characters,
+                    character_id: character.model_copy(update={"healing_clock": healing_clock}),
+                },
+                "log": clock_log,
+            }
+        )
         healed = False
-        if state.clocks[args.clock_id].is_complete:
+        if healing_clock.is_complete:
             state = self.heal_character(state, HealCharacterArgs(character_id=character_id)).state
+            character = state.characters[character_id]
+            reset_log = state.log.append(
+                "character", character_id, "healing_clock_reset", {}, self._clock()
+            )
+            state = state.model_copy(
+                update={
+                    "characters": {
+                    **state.characters,
+                    character_id: character.model_copy(
+                            update={
+                                "healing_clock": character.healing_clock.model_copy(
+                                    update={"filled": 0}
+                                )
+                            }
+                        ),
+                    },
+                    "log": reset_log,
+                }
+            )
             healed = True
         return ToolCallResult(
             state=state, result={"band": roll.band.value, "ticks": ticks, "healed": healed}
@@ -1195,6 +1364,8 @@ class ToolExecutor:
 
     def long_term_project(self, state: GameState, args: LongTermProjectArgs) -> ToolCallResult:
         """SRD: "Long-Term Project" - roll your action; the result ticks that many segments."""
+        character_id = self.resolve_character_id(state, args.character_id)
+        state = self._start_downtime_activity(state, character_id, args.extra_cost)
         if args.clock_id not in state.clocks:
             raise EngineError(f"no clock {args.clock_id!r} in this session")
         roll = fortune_roll(args.pool_size, self._rng)
@@ -1205,6 +1376,7 @@ class ToolExecutor:
             "downtime_activity_rolled",
             {
                 "activity": "long_term_project",
+                "character_id": character_id,
                 "pool_size": args.pool_size,
                 "band": roll.band.value,
                 "amount": ticks,
@@ -1326,6 +1498,8 @@ class ToolExecutor:
         the moment the downtime procedure tells the GM to move factions,
         without re-injecting the list into every turn's context."""
         session = state.session.transition_to(args.phase)
+        if args.phase is CampaignPhase.DOWNTIME and not state.session.score_action_completed:
+            raise EngineError("make an action roll before entering downtime")
         log = state.log.append(
             "session", "current", "phase_transitioned", {"phase": args.phase.value}, self._clock()
         )
@@ -1416,13 +1590,24 @@ class ToolExecutor:
         a free-form state edit in disguise."""
         if args.npc_id in state.npcs:
             raise EngineError(f"npc {args.npc_id!r} already exists in this session")
+        if args.faction_id is not None and args.faction_id not in state.factions:
+            raise EngineError(f"no canon faction {args.faction_id!r} in this session")
         npc = Npc(id=args.npc_id, name=args.name, tags=args.tags, faction_id=args.faction_id)
         log = state.log.append(
             "npc", args.npc_id, "npc_created", npc.model_dump(mode="json"), self._clock()
         )
         npcs = {**state.npcs, args.npc_id: npc}
+        factions = state.factions
+        if args.faction_id is not None:
+            faction = state.factions[args.faction_id]
+            factions = {
+                **factions,
+                args.faction_id: faction.model_copy(
+                    update={"notable_npc_ids": [*faction.notable_npc_ids, args.npc_id]}
+                ),
+            }
         return ToolCallResult(
-            state=state.model_copy(update={"npcs": npcs, "log": log}),
+            state=state.model_copy(update={"npcs": npcs, "factions": factions, "log": log}),
             result=npc.model_dump(mode="json"),
         )
 
@@ -1815,6 +2000,7 @@ SHEET_OPERATIONS: dict[str, type[BaseModel]] = {
     "mark_xp": MarkXpArgs,
     "adjust_coin": AdjustCoinArgs,
     "adjust_stash": AdjustStashArgs,
+    "cash_out_stash": CashOutStashArgs,
     "set_item_carried": SetItemCarriedArgs,
     "set_load_level": SetLoadLevelArgs,
     "tick_clock": TickClockArgs,

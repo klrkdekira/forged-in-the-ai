@@ -39,6 +39,7 @@ class Crew(BaseModel):
     wanted_level: int = 0
 
     coin: int = 0
+    vault_level: int = Field(default=0, ge=0, le=2)
     stash: int = 0
 
     claims: list[Claim] = Field(default_factory=list)
@@ -47,6 +48,12 @@ class Crew(BaseModel):
     special_ability_ids: list[str] = Field(default_factory=list)
 
     xp: XpTrack = Field(default_factory=XpTrack)
+
+    @property
+    def coin_capacity(self) -> int:
+        """SRD: "Coin and Stash" - lair storage is 4, 8 with one vault
+        upgrade, and 16 with the second."""
+        return 4 * (2**self.vault_level)
 
 
 def render_markdown(crew: Crew) -> str:

@@ -14,7 +14,7 @@ from engine.controller import Controller
 from engine.crew import Crew
 from engine.packs import EntanglementEntry
 from engine.rolls import Effect
-from engine.session import Session
+from engine.session import CampaignPhase, Session
 from state.db import app_db_path, make_engine, make_session_factory
 from state.migrations import run_app_migrations
 from state.srd_index import chunk_srd, index_srd_chunks
@@ -1019,10 +1019,6 @@ async def test_agent_runs_a_full_score_and_downtime_loop_through_tools():
                 [
                     (
                         "create_clock",
-                        {"clock_id": "heal-1", "name": "Healing", "kind": "healing", "segments": 8},
-                    ),
-                    (
-                        "create_clock",
                         {
                             "clock_id": "vault",
                             "name": "Crack the Vault",
@@ -1032,10 +1028,13 @@ async def test_agent_runs_a_full_score_and_downtime_loop_through_tools():
                     ),
                     ("acquire_asset", {}),
                     ("indulge_vice", {}),
-                    ("recover", {"clock_id": "heal-1", "pool_size": 2}),
-                    ("reduce_heat", {"pool_size": 2}),
-                    ("long_term_project", {"clock_id": "vault", "pool_size": 2}),
-                    ("mark_xp", {"track": "playbook", "amount": 1}),
+                    ("recover", {"pool_size": 2, "extra_cost": "coin"}),
+                    ("reduce_heat", {"pool_size": 2, "extra_cost": "coin"}),
+                    (
+                        "long_term_project",
+                        {"clock_id": "vault", "pool_size": 2, "extra_cost": "coin"},
+                    ),
+                    ("mark_xp", {"track": "playbook", "amount": 1, "extra_cost": "coin"}),
                 ]
             )
         else:
@@ -1048,7 +1047,7 @@ async def test_agent_runs_a_full_score_and_downtime_loop_through_tools():
     agent = GmAgent(client, _executor_with_entanglements())
     state = GameState(
         character=Character(
-            name="Test", playbook="Test Playbook", action_ratings={Action.PROWL: 2}
+            name="Test", playbook="Test Playbook", action_ratings={Action.PROWL: 2}, coin=4
         ),
         crew=Crew(name="Test Crew", crew_type="Test Type", tier=1),
         session=Session(),
@@ -1098,7 +1097,6 @@ async def test_agent_runs_a_full_score_and_downtime_loop_through_tools():
     await client.aclose()
     state = _final_state(events)
     assert _tool_names(events) == [
-        "create_clock",
         "create_clock",
         "acquire_asset",
         "indulge_vice",
@@ -1216,7 +1214,14 @@ async def test_agent_tool_call_event_captures_every_event_a_chained_tool_logs():
     )
     agent = GmAgent(client, _executor())
 
-    events = [event async for event in agent.handle_player_message(_state(), "Lay low.")]
+    state = _state().model_copy(
+        update={
+            "session": Session()
+            .transition_to(CampaignPhase.SCORE)
+            .transition_to(CampaignPhase.DOWNTIME)
+        }
+    )
+    events = [event async for event in agent.handle_player_message(state, "Lay low.")]
     await client.aclose()
 
     tool_event = next(e for e in events if e.type == "tool_call")

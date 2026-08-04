@@ -66,6 +66,56 @@ def test_create_campaign_without_an_import_uses_the_fixed_starter(tmp_path: Path
     assert loaded.crew.name == "The Crew"
 
 
+def test_create_campaign_can_seed_sheets_from_a_committed_content_pack(tmp_path: Path) -> None:
+    packs_dir = Path(__file__).parents[2] / "packs"
+    settings = get_settings()
+    # The API uses the configured directory. Keep this test hermetic while
+    # still exercising the committed example pack and its stable pack id.
+    settings.packs_dir = packs_dir
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/campaigns",
+            json={
+                "name": "Pack Game",
+                "pack_id": "example",
+                "playbook_id": "wayfarer",
+                "crew_type_id": "couriers",
+            },
+        )
+
+    assert response.status_code == 200
+    loaded = asyncio.run(load_state(campaign_db_path(tmp_path, response.json()["id"])))
+    assert loaded.character.playbook == "Wayfarer"
+    assert loaded.character.action_ratings["survey"] == 1
+    assert {item.item_id for item in loaded.character.items} == {
+        "travelers_cloak",
+        "worn_map",
+        "signal_whistle",
+    }
+    assert loaded.crew.crew_type == "Couriers"
+    assert loaded.crew.upgrade_ids == ["way_stations"]
+
+
+def test_create_campaign_rejects_an_unknown_content_pack() -> None:
+    settings = get_settings()
+    settings.packs_dir = Path(__file__).parents[2] / "packs"
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/campaigns",
+            json={
+                "name": "Invalid Pack",
+                "pack_id": "missing",
+                "playbook_id": "wayfarer",
+                "crew_type_id": "couriers",
+            },
+        )
+
+    assert response.status_code == 422
+    assert "unknown content pack" in response.json()["detail"]
+
+
 def test_list_campaigns_returns_every_created_campaign() -> None:
     with TestClient(app) as client:
         first = client.post("/api/campaigns", json={"name": "First"}).json()
@@ -130,6 +180,29 @@ def test_export_campaign_returns_the_log_and_both_snapshots(tmp_path: Path) -> N
     # creation - only the latest one does.
     assert body["base_state"]["characters"]["pc-1"]["stress"]["marked"] == 0
     assert body["latest_state"]["characters"]["pc-1"]["stress"]["marked"] == 2
+
+
+def test_export_character_and_crew_sheets_returns_current_json(tmp_path: Path) -> None:
+    with TestClient(app) as client:
+        campaign = client.post("/api/campaigns", json={"name": "Sheets"}).json()
+        character_response = client.get(f"/api/campaigns/{campaign['id']}/character/export")
+        crew_response = client.get(f"/api/campaigns/{campaign['id']}/crew/export")
+        character_markdown = client.get(
+            f"/api/campaigns/{campaign['id']}/character/export/markdown"
+        )
+        crew_markdown = client.get(f"/api/campaigns/{campaign['id']}/crew/export/markdown")
+
+    assert character_response.status_code == 200
+    assert character_response.headers["content-type"].startswith("application/json")
+    assert character_response.json()["name"] == "Scoundrel"
+    assert character_response.headers["content-disposition"].endswith("-character.json\"")
+    assert crew_response.status_code == 200
+    assert crew_response.json()["name"] == "The Crew"
+    assert crew_response.headers["content-disposition"].endswith("-crew.json\"")
+    assert character_markdown.status_code == 200
+    assert "# Scoundrel" in character_markdown.text
+    assert crew_markdown.status_code == 200
+    assert "# The Crew" in crew_markdown.text
 
 
 def test_export_campaign_404s_for_an_unknown_campaign() -> None:
