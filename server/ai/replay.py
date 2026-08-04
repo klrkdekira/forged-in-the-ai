@@ -87,12 +87,18 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
                 character_ids=[event.entity_id],
             )
         elif event.event_type == "controller_assigned":
-            character_id = payload["character_id"]
+            entity_type = payload.get("entity_type", "character")
+            entity_id = payload.get("entity_id", payload.get("character_id"))
             for seat_id, seat in list(controllers.items()):
                 controllers[seat_id] = seat.model_copy(
                     update={
                         "character_ids": [
-                            cid for cid in seat.character_ids if cid != character_id
+                            cid for cid in seat.character_ids
+                            if not (entity_type == "character" and cid == entity_id)
+                        ],
+                        "cohort_ids": [
+                            cid for cid in seat.cohort_ids
+                            if not (entity_type == "cohort" and cid == entity_id)
                         ]
                     }
                 )
@@ -101,7 +107,10 @@ def replay_state(base: GameState, events: list[Event]) -> GameState:
             controllers[seat_id] = seat.model_copy(
                 update={
                     "kind": payload["kind"],
-                    "character_ids": [*seat.character_ids, character_id],
+                    "character_ids": [*seat.character_ids, entity_id]
+                    if entity_type == "character" else seat.character_ids,
+                    "cohort_ids": [*seat.cohort_ids, entity_id]
+                    if entity_type == "cohort" else seat.cohort_ids,
                 }
             )
         elif event.event_type == "stress_marked":

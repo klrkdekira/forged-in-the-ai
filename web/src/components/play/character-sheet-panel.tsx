@@ -334,6 +334,22 @@ export function CharacterSheetPanel({
         </div>
       </div>
 
+      {/* Special Abilities */}
+      {character.special_ability_ids && character.special_ability_ids.length > 0 && (
+        <div className="flex flex-col gap-1 rounded-md border border-border/40 p-2.5 bg-background/40">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Special Abilities
+          </span>
+          <ul className="flex flex-col gap-1 text-xs">
+            {character.special_ability_ids.map((ability) => (
+              <li key={ability} className="rounded bg-muted/20 px-2 py-1 text-foreground">
+                {ability}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Playbook XP */}
       <div className="flex flex-col gap-1 rounded-md border border-border/40 p-2.5 bg-background/40">
         <div className="flex items-center justify-between">

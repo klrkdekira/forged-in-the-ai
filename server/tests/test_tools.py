@@ -64,7 +64,7 @@ from ai.tools import (
 from engine.campaign import CampaignCanon
 from engine.character import Action, Attribute, Character, CharacterItem
 from engine.clocks import ClockKind
-from engine.crew import Crew
+from engine.crew import Cohort, Crew
 from engine.errors import EngineError
 from engine.packs import EntanglementEntry
 from engine.relationships import RelationshipKind
@@ -435,6 +435,38 @@ def test_assign_controller_refuses_an_unknown_character():
     with pytest.raises(EngineError, match="unknown character"):
         _executor().assign_controller(
             _state(), AssignControllerArgs(seat_id="seat:player-2", character_id="missing")
+        )
+
+
+def test_assign_controller_moves_a_cohort_without_double_assignment():
+    state = _state().model_copy(
+        update={"crew": Crew(name="Test Crew", crew_type="Test Type", cohorts=[Cohort()])}
+    )
+    result = _executor().assign_controller(
+        state,
+        AssignControllerArgs(
+            seat_id="seat:crew",
+            entity_type="cohort",
+            cohort_id="cohort-1",
+            kind="human",
+        ),
+    )
+
+    assert result.state.controllers["seat:crew"].cohort_ids == ["cohort-1"]
+    assert all(
+        "cohort-1" not in seat.cohort_ids
+        for seat_id, seat in result.state.controllers.items()
+        if seat_id != "seat:crew"
+    )
+
+
+def test_assign_controller_refuses_an_unknown_cohort():
+    with pytest.raises(EngineError, match="unknown cohort"):
+        _executor().assign_controller(
+            _state(),
+            AssignControllerArgs(
+                seat_id="seat:crew", entity_type="cohort", cohort_id="missing"
+            ),
         )
 
 

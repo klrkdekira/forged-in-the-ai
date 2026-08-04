@@ -4,8 +4,10 @@ from engine.controller import (
     Controller,
     ControllerError,
     assert_controls,
+    assert_controls_cohort,
     assert_no_double_assignment,
     is_ai_controlled,
+    is_ai_controlled_cohort,
     solo_controller,
 )
 
@@ -17,6 +19,7 @@ def test_solo_controller_covers_the_whole_crew():
     assert controller.controls("pc-1")
     assert controller.controls("pc-2")
     assert not controller.controls("pc-3")
+    assert controller.controls_cohort("cohort-1")
 
 
 def test_assert_controls_passes_for_the_owning_seat():
@@ -35,6 +38,19 @@ def test_assert_controls_refuses_an_unowned_character():
 def test_assert_controls_refuses_an_unknown_seat():
     with pytest.raises(ControllerError):
         assert_controls([], "seat-1", "pc-1")
+
+
+def test_assert_controls_cohort_passes_for_the_owning_seat():
+    assert_controls_cohort(
+        [Controller(seat_id="seat-1", cohort_ids=["cohort-1"])], "seat-1", "cohort-1"
+    )
+
+
+def test_assert_controls_cohort_refuses_an_unowned_cohort():
+    with pytest.raises(ControllerError):
+        assert_controls_cohort(
+            [Controller(seat_id="seat-1", cohort_ids=["cohort-1"])], "seat-1", "cohort-2"
+        )
 
 
 def test_assert_no_double_assignment_passes_for_disjoint_seats():
@@ -76,3 +92,12 @@ def test_is_ai_controlled_false_for_a_human_seat():
 
 def test_is_ai_controlled_false_when_the_character_has_no_seat_at_all():
     assert not is_ai_controlled({}, "pc-1")
+
+
+def test_is_ai_controlled_cohort_uses_the_seat_kind():
+    controllers = {
+        "seat:crew": Controller(seat_id="seat:crew", kind="ai", cohort_ids=["cohort-1"])
+    }
+
+    assert is_ai_controlled_cohort(controllers, "cohort-1")
+    assert not is_ai_controlled_cohort(controllers, "cohort-2")

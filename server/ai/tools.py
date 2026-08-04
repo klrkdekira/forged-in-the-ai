@@ -282,7 +282,9 @@ class CreateCharacterArgs(BaseModel):
 
 class AssignControllerArgs(BaseModel):
     seat_id: str = Field(..., description="Stable controller seat identifier")
+    entity_type: Literal["character", "cohort"] = "character"
     character_id: str | None = Field(None, description="PC to assign to the seat")
+    cohort_id: str | None = Field(None, description="Cohort to assign to the seat")
     kind: Literal["human", "ai"] = "human"
 
 
@@ -652,28 +654,49 @@ class ToolExecutor:
         )
 
     def assign_controller(self, state: GameState, args: AssignControllerArgs) -> ToolCallResult:
-        """FR-25/FR-26: assign one existing PC to exactly one controller seat."""
-        if args.character_id is None or args.character_id not in state.characters:
-            raise EngineError(f"unknown character {args.character_id!r}")
+        """FR-25/FR-26: assign one existing PC or cohort to one seat."""
+        entity_id = args.character_id if args.entity_type == "character" else args.cohort_id
+        if args.entity_type == "character" and (
+            entity_id is None or entity_id not in state.characters
+        ):
+            raise EngineError(f"unknown character {entity_id!r}")
+        if args.entity_type == "cohort" and (
+            entity_id is None or not any(c.cohort_id == entity_id for c in state.crew.cohorts)
+        ):
+            raise EngineError(f"unknown cohort {entity_id!r}")
         controllers = {
             seat_id: seat.model_copy(
                 update={
-                    "character_ids": [
-                        cid for cid in seat.character_ids if cid != args.character_id
-                    ]
+                    "character_ids": [cid for cid in seat.character_ids if not (
+                        args.entity_type == "character" and cid == entity_id
+                    )],
+                    "cohort_ids": [cid for cid in seat.cohort_ids if not (
+                        args.entity_type == "cohort" and cid == entity_id
+                    )],
                 }
             )
             for seat_id, seat in state.controllers.items()
         }
         seat = controllers.get(args.seat_id, Controller(seat_id=args.seat_id, kind=args.kind))
         controllers[args.seat_id] = seat.model_copy(
-            update={"kind": args.kind, "character_ids": [*seat.character_ids, args.character_id]}
+            update={
+                "kind": args.kind,
+                "character_ids": [*seat.character_ids, entity_id]
+                if args.entity_type == "character" else seat.character_ids,
+                "cohort_ids": [*seat.cohort_ids, entity_id]
+                if args.entity_type == "cohort" else seat.cohort_ids,
+            }
         )
         log = state.log.append(
             "controller",
             args.seat_id,
             "controller_assigned",
-            {"seat_id": args.seat_id, "character_id": args.character_id, "kind": args.kind},
+            {
+                "seat_id": args.seat_id,
+                "entity_type": args.entity_type,
+                "entity_id": entity_id,
+                "kind": args.kind,
+            },
             self._clock(),
         )
         return ToolCallResult(

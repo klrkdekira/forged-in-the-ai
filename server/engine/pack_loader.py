@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -43,6 +44,35 @@ FORBIDDEN_CREW_TYPE_NAMES = frozenset(
     {"assassins", "bravos", "cult", "hawkers", "shadows", "smugglers"}
 )
 
+# C3: committed packs contain structured rules and original seed data, not
+# core-book presentation assets or named-NPC collections. These are exact
+# JSON keys, not a text search, so ordinary prose may still mention a map or
+# an NPC in a private module and SRD-derived tables remain valid.
+FORBIDDEN_PACK_ROOT_KEYS = frozenset(
+    {
+        "art",
+        "artwork",
+        "claim_map",
+        "claim_maps",
+        "image",
+        "images",
+        "map",
+        "maps",
+        "named_npc",
+        "named_npcs",
+        "npc_names",
+        "official_sheet_pdf",
+        "official_sheet_pdfs",
+        "pdf",
+        "pdfs",
+        "sheet_pdf",
+        "sheet_pdfs",
+    }
+)
+FORBIDDEN_PACK_FILE_STEMS = frozenset(
+    {"art", "artwork", "claim-map", "claim-maps", "map", "maps", "sheet", "sheets"}
+)
+
 
 class PackLoadError(Exception):
     """A content pack file is missing, not valid JSON, doesn't match the
@@ -61,6 +91,7 @@ def load_pack(path: Path, *, private: bool = False) -> ContentPack:
 
     if not private:
         _check_licensing_firewall(raw, path)
+        _check_pack_structure(raw, path)
 
     try:
         pack = ContentPack.model_validate_json(raw)
@@ -92,6 +123,24 @@ def _check_licensing_firewall(raw_text: str, path: Path) -> None:
     if hits:
         raise PackLoadError(
             f"{path} contains forbidden core-book content ({', '.join(hits)}); see NOTICE.md"
+        )
+
+
+def _check_pack_structure(raw_text: str, path: Path) -> None:
+    """Reject distribution-bound pack shapes that can carry prohibited assets."""
+    if path.stem.lower() in FORBIDDEN_PACK_FILE_STEMS:
+        raise PackLoadError(f"{path} has a prohibited committed-pack asset name; see NOTICE.md")
+    try:
+        raw = json.loads(raw_text)
+    except json.JSONDecodeError:
+        return
+    if not isinstance(raw, dict):
+        return
+    keys = sorted(set(raw) & FORBIDDEN_PACK_ROOT_KEYS)
+    if keys:
+        joined = ", ".join(keys)
+        raise PackLoadError(
+            f"{path} contains prohibited committed-pack field(s): {joined}; see NOTICE.md"
         )
 
 

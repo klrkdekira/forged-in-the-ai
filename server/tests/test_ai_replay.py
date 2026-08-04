@@ -4,7 +4,7 @@ from ai.replay import replay_state
 from ai.tools import GameState
 from engine.campaign import CampaignCanon
 from engine.character import Action, Attribute, Character
-from engine.crew import Crew
+from engine.crew import Cohort, Crew
 from engine.entities import Faction
 from engine.session import CampaignPhase, Session
 
@@ -102,6 +102,34 @@ def test_replay_state_folds_controller_reassignment():
     replayed = replay_state(base, log.events)
 
     assert replayed.controllers["seat:player-2"].character_ids == ["pc-1"]
+
+
+def test_replay_state_folds_cohort_controller_reassignment():
+    base = _base_state().model_copy(
+        update={
+            "crew": Crew(
+                name="The Fifth Foxglove",
+                crew_type="Assassins",
+                cohorts=[Cohort()],
+            )
+        }
+    )
+    log = base.log.append(
+        "controller",
+        "seat:crew",
+        "controller_assigned",
+        {
+            "seat_id": "seat:crew",
+            "entity_type": "cohort",
+            "entity_id": "cohort-1",
+            "kind": "human",
+        },
+        AT,
+    )
+
+    replayed = replay_state(base, log.events)
+
+    assert replayed.controllers["seat:crew"].cohort_ids == ["cohort-1"]
 
 
 def test_replay_state_folds_clock_creation_and_ticks():

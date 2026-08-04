@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field, model_validator
 
 from engine.character import XpTrack
 from engine.crew_mechanics import CohortHarmTrack, HeatTrack, Hold, RepTrack
@@ -7,6 +7,7 @@ from engine.crew_mechanics import CohortHarmTrack, HeatTrack, Hold, RepTrack
 class Cohort(BaseModel):
     """SRD: "Cohorts" - a gang or expert; up to two types, edges, and flaws."""
 
+    cohort_id: str = Field(default="cohort-1", description="Stable id within the crew")
     types: list[str] = Field(default_factory=list, description="Up to two, e.g. 'Thugs'")
     is_expert: bool = False
     quality: int = 0
@@ -49,6 +50,21 @@ class Crew(BaseModel):
 
     xp: XpTrack = Field(default_factory=XpTrack)
 
+    @model_validator(mode="after")
+    def ensure_cohort_ids(self) -> "Crew":
+        """Give legacy and hand-entered cohorts deterministic unique ids."""
+        used: set[str] = set()
+        cohorts: list[Cohort] = []
+        for index, cohort in enumerate(self.cohorts, start=1):
+            cohort_id = cohort.cohort_id
+            if cohort_id in used:
+                cohort_id = f"cohort-{index}"
+            used.add(cohort_id)
+            cohorts.append(cohort.model_copy(update={"cohort_id": cohort_id}))
+        self.cohorts = cohorts
+        return self
+
+    @computed_field
     @property
     def coin_capacity(self) -> int:
         """SRD: "Coin and Stash" - lair storage is 4, 8 with one vault

@@ -90,9 +90,13 @@ pinned pnpm version.
   now includes its healing clock and enforces four-coin capacity. The crew
   model now represents vault level and enforces 4/8/16 coin capacity. Stash
   conversion is now atomic and sheet-exposed. The crew table displays tier,
-  hold, stash, crew XP, upgrades, special abilities, and cohorts. Controller
-  assignment remains open. Reconcile the schema with the specification before
-  adding more code.
+  hold, stash, crew XP, upgrades, special abilities, and cohorts. The character
+  panel now also displays stored special ability references, and the cohort
+  snapshot includes its stable controller-facing id. Crew vault level and
+  computed coin capacity are now serialised and shown beside current coin and
+  stash. Controller assignment remains open for vehicles and spotlight
+  management. Reconcile the schema with the specification before adding more
+  code.
 
 - [x] **Repair the live WebSocket snapshot contract (FR-28, FR-30,
   ADR-0006).** The hand-written client types do not match `GameState` JSON.
@@ -104,11 +108,12 @@ pinned pnpm version.
   CharacterSheet fixture covers trauma pending, armour, and healing fields.
 
 - [ ] **Bind every controllable entity to a controller (FR-25, FR-26).** A
-  typed `assign_controller` engine operation now moves existing PCs between
-  human or AI seats without double assignment, with replay coverage, and the
-  table view displays the active seat mapping. Cohort assignment, vehicles, and
-  spotlight management remain open. Keep simultaneous human play in Phase 7,
-  but continue enforcing the controller invariant now.
+  typed `assign_controller` engine operation now moves existing PCs and
+  cohorts between human or AI seats without double assignment, with replay
+  coverage, stable cohort ids, symmetric PC/cohort seat lookup helpers, and
+  the table view displaying both mappings.
+  Vehicles and spotlight management remain open. Keep simultaneous human play
+  in Phase 7, but continue enforcing the controller invariant now.
 
 ### Priority 2: make content and persistence operationally complete
 
@@ -156,12 +161,12 @@ pinned pnpm version.
 
 - [ ] **Broaden the licensing firewall carefully (C3, C4).** Matching is now
   case-insensitive and committed packs are checked narrowly for assembled core
-  playbook and crew-type names. Committed `packs/` files now reject binary and
-  unsupported extensions, while the automated check still has no coverage for
-  named core-book NPCs, maps, art, or official sheet PDFs beyond two setting
-  spellings and the pack assembly check. Add narrowly verified filename and
-  structure rules without blocking legitimate SRD text or ordinary English
-  fixture names.
+  playbook and crew-type names. Committed `packs/` files reject binary and
+  unsupported extensions, prohibited asset filenames, and exact structured
+  fields for maps, art, named-NPC collections, and official sheets/PDFs.
+  Private packs remain exempt. Broader content review and any further narrowly
+  verified rules remain open without blocking legitimate SRD text or ordinary
+  English fixture names.
 
 - [x] **Type WebSocket client messages.** Discriminated Pydantic envelopes now
   validate player messages, sheet operations, undo, X-card, and roll decisions.

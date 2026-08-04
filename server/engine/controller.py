@@ -27,6 +27,9 @@ class Controller(BaseModel):
     def controls(self, character_id: str) -> bool:
         return character_id in self.character_ids
 
+    def controls_cohort(self, cohort_id: str) -> bool:
+        return cohort_id in self.cohort_ids
+
 
 def is_ai_controlled(controllers: dict[str, Controller], character_id: str) -> bool:
     """FR-35: whether an AI player agent, not a human, decides for this
@@ -34,6 +37,14 @@ def is_ai_controlled(controllers: dict[str, Controller], character_id: str) -> b
     reassigning a seat never means editing every PC it controls."""
     return any(
         controller.kind == "ai" and controller.controls(character_id)
+        for controller in controllers.values()
+    )
+
+
+def is_ai_controlled_cohort(controllers: dict[str, Controller], cohort_id: str) -> bool:
+    """Whether an AI player seat controls a cohort."""
+    return any(
+        controller.kind == "ai" and controller.controls_cohort(cohort_id)
         for controller in controllers.values()
     )
 
@@ -52,14 +63,30 @@ def assert_controls(controllers: list[Controller], seat_id: str, character_id: s
         raise ControllerError(f"seat {seat_id!r} does not control character {character_id!r}")
 
 
+def assert_controls_cohort(controllers: list[Controller], seat_id: str, cohort_id: str) -> None:
+    """Refuses a cohort action from a seat that does not control it."""
+    seat = next((controller for controller in controllers if controller.seat_id == seat_id), None)
+    if seat is None or not seat.controls_cohort(cohort_id):
+        raise ControllerError(f"seat {seat_id!r} does not control cohort {cohort_id!r}")
+
+
 def assert_no_double_assignment(controllers: list[Controller]) -> None:
-    """Refuses a controller layout where two seats claim the same PC."""
-    seen: dict[str, str] = {}
+    """Refuses a controller layout where two seats claim an entity."""
+    seen: dict[tuple[str, str], str] = {}
     for controller in controllers:
         for character_id in controller.character_ids:
-            if character_id in seen and seen[character_id] != controller.seat_id:
+            key = ("character", character_id)
+            if key in seen and seen[key] != controller.seat_id:
                 raise ControllerError(
                     f"character {character_id!r} is assigned to both "
-                    f"{seen[character_id]!r} and {controller.seat_id!r}"
+                    f"{seen[key]!r} and {controller.seat_id!r}"
                 )
-            seen[character_id] = controller.seat_id
+            seen[key] = controller.seat_id
+        for cohort_id in controller.cohort_ids:
+            key = ("cohort", cohort_id)
+            if key in seen and seen[key] != controller.seat_id:
+                raise ControllerError(
+                    f"cohort {cohort_id!r} is assigned to both "
+                    f"{seen[key]!r} and {controller.seat_id!r}"
+                )
+            seen[key] = controller.seat_id

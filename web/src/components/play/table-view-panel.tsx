@@ -42,7 +42,8 @@ export function TableViewPanel({
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <span>Tier {crew.tier}</span>
           <span className="capitalize">{crew.hold} hold</span>
-          <span>Vault stash {crew.stash}</span>
+            <span>Vault {crew.vault_level} ({crew.coin_capacity} coin)</span>
+            <span>Stash {crew.stash}</span>
         </div>
       </div>
 
@@ -54,7 +55,7 @@ export function TableViewPanel({
           {Object.values(controllers).map((seat) => (
             <li key={seat.seat_id}>
               <span className="font-medium">{seat.seat_id}</span> ({seat.kind}):{' '}
-              {seat.character_ids.join(', ') || 'no characters'}
+              {[...seat.character_ids, ...seat.cohort_ids.map((id) => `${id} (cohort)`)].join(', ') || 'no entities'}
             </li>
           ))}
         </ul>
@@ -156,7 +157,9 @@ export function TableViewPanel({
           >
             -
           </Button>
-          <span className="w-6 text-center font-bold text-foreground">{crew.coin}</span>
+          <span className="w-20 text-center font-bold text-foreground">
+            {crew.coin}/{crew.coin_capacity}
+          </span>
           <Button
             type="button"
             variant="outline"
@@ -215,8 +218,8 @@ export function TableViewPanel({
         {crew.cohorts.length > 0 ? (
           <ul className="mt-1 flex flex-col gap-1 text-xs text-foreground">
             {crew.cohorts.map((cohort, index) => (
-              <li key={`${cohort.types.join('-')}-${index}`}>
-                {cohort.is_expert ? 'Expert' : 'Gang'}: {cohort.types.join(', ') || 'untyped'} · harm{' '}
+              <li key={cohort.cohort_id || `${cohort.types.join('-')}-${index}`}>
+                <span className="font-medium">{cohort.cohort_id}</span> · {cohort.is_expert ? 'Expert' : 'Gang'}: {cohort.types.join(', ') || 'untyped'} · harm{' '}
                 {cohort.harm.level}
               </li>
             ))}

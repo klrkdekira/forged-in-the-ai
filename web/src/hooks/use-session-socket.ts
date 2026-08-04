@@ -83,6 +83,7 @@ export interface ClaimSnapshot {
 }
 
 export interface CohortSnapshot {
+  cohort_id: string
   types: string[]
   is_expert: boolean
   quality: number
@@ -102,6 +103,8 @@ export interface CrewSnapshot {
   wanted_level: number
   rep: { rep: number; turf: number; threshold: number }
   coin: number
+  vault_level: number
+  coin_capacity: number
   stash: number
   xp: XpTrackSnapshot
   upgrade_ids: string[]

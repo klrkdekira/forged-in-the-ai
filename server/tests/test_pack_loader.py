@@ -66,6 +66,28 @@ def test_licensing_grep_rejects_non_text_assets_under_committed_packs() -> None:
     assert "unsupported committed-pack file extension" in hits[0]
 
 
+def test_load_pack_rejects_a_committed_map_field(tmp_path: Path) -> None:
+    pack_path = _write_pack(tmp_path / "map_data.json", maps=[{"name": "original"}])
+
+    with pytest.raises(PackLoadError, match="prohibited committed-pack field"):
+        load_pack(pack_path)
+
+
+def test_load_pack_rejects_a_committed_art_asset_name(tmp_path: Path) -> None:
+    pack_path = _write_pack(tmp_path / "art.json")
+
+    with pytest.raises(PackLoadError, match="prohibited committed-pack asset name"):
+        load_pack(pack_path)
+
+
+def test_private_pack_may_use_a_map_field(tmp_path: Path) -> None:
+    pack_path = _write_pack(tmp_path / "map_data.json", maps=[{"name": "private"}])
+
+    pack = load_pack(pack_path, private=True)
+
+    assert pack.id == "example"
+
+
 def test_load_pack_rejects_a_real_playbook_name(tmp_path: Path) -> None:
     pack_path = _write_pack(
         tmp_path / "real_playbook.json",

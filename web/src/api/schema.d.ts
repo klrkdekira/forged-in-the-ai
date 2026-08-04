@@ -685,6 +685,12 @@ export interface components {
          */
         Cohort: {
             /**
+             * Cohort Id
+             * @description Stable id within the crew
+             * @default cohort-1
+             */
+            cohort_id: string;
+            /**
              * Types
              * @description Up to two, e.g. 'Thugs'
              */
