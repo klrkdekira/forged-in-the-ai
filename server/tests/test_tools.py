@@ -85,6 +85,23 @@ def _state(character: Character | None = None) -> GameState:
     )
 
 
+def test_resolve_character_id_matches_by_name_or_alias():
+    state = GameState(
+        characters={
+            "pc-1": Character(name="Corvo Attano", alias="The Blade", playbook="Cutter"),
+            "pc-2": Character(name="Valeria", alias="Ghost", playbook="Lurk"),
+        },
+        crew=Crew(name="Test Crew", crew_type="Test Type"),
+        session=Session(),
+    )
+    executor = _executor()
+    assert executor.resolve_character_id(state, "pc-1") == "pc-1"
+    assert executor.resolve_character_id(state, "Corvo Attano") == "pc-1"
+    assert executor.resolve_character_id(state, "corvo attano") == "pc-1"
+    assert executor.resolve_character_id(state, "The Blade") == "pc-1"
+    assert executor.resolve_character_id(state, "ghost") == "pc-2"
+
+
 def _executor(seed: int = 1, entanglements: list[EntanglementEntry] | None = None) -> ToolExecutor:
     return ToolExecutor(
         rng=random.Random(seed), clock=lambda: AT, entanglements=entanglements or []

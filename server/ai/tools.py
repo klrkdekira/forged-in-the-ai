@@ -557,9 +557,16 @@ class ToolExecutor:
         unspecified `character_id` is only unambiguous while there's
         exactly one PC."""
         if character_id is not None:
-            if character_id not in state.characters:
-                raise EngineError(f"no character {character_id!r} in this session")
-            return character_id
+            if character_id in state.characters:
+                return character_id
+            for cid, char in state.characters.items():
+                if (
+                    character_id.lower() == char.name.lower()
+                    or (char.alias and character_id.lower() == char.alias.lower())
+                    or _slug(character_id) == _slug(char.name)
+                ):
+                    return cid
+            raise EngineError(f"no character {character_id!r} in this session")
         if len(state.characters) != 1:
             raise EngineError("character_id is required once a session has more than one character")
         return next(iter(state.characters))
