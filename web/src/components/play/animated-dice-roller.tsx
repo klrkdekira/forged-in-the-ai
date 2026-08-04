@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { AlertTriangle, CheckCircle2, Dices, RotateCcw, ShieldAlert, Sparkles, Trophy } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Dices, RotateCcw, ShieldAlert, Trophy } from 'lucide-react'
 
 export interface DiceRollResult {
   dice: number[]
@@ -237,7 +237,7 @@ function DieCube({ value, isHighest }: { value: number; isHighest: boolean }) {
     : 'border border-border/60 shadow-md'
 
   return (
-    <div className="relative w-full h-full" style={{ transformStyle: 'preserve-3d' }}>
+    <div className="relative w-full h-full" style={{ transformStyle: 'preserve-3d' }} aria-label={`Die showing ${value}`}>
       {/* Front: 1 */}
       <div
         className={`absolute inset-0 rounded-xl bg-card flex items-center justify-center ${borderStyle}`}

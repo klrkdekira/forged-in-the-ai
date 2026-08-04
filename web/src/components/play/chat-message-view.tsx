@@ -87,7 +87,7 @@ export function ChatMessageView({
             <div className="flex items-center gap-1.5 font-bold capitalize text-foreground text-sm">
               <Dices className="size-4 text-primary" />
               {actionName}
-              {p.position && (
+              {Boolean(p.position) && (
                 <span className="text-[0.65rem] font-semibold uppercase px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
                   {String(p.position)} / {String(p.effect)}
                 </span>

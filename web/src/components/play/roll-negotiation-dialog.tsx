@@ -15,7 +15,6 @@ import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import type { CharacterSnapshot, RollDecision, RollProposal } from '@/hooks/use-session-socket'
 import { AnimatedDiceRoller } from './animated-dice-roller'
-import { Dices } from 'lucide-react'
 
 const POSITIONS = ['controlled', 'risky', 'desperate'] as const
 const EFFECTS = ['zero', 'limited', 'standard', 'great', 'extreme'] as const
